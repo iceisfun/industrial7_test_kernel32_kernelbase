@@ -367,34 +367,34 @@ static void make_len_path(const char *d, int total, char *out, size_t cap) {
     snprintf(out, cap, "%s\\", d);
     memset(out + pre, 'p', n); out[pre + n] = 0;
 }
-TEST(dir_create_length_248_ok) {
+TEST(dir_create_length_247_ok) {
     REQUIRE(U(CreateDirectoryW)); REQUIRE(U(RemoveDirectoryW));
-    char *d = dh_dir("cr_l248"), p[1024]; WCHAR w[1024];
-    make_len_path(d, 248, p, sizeof p);
-    if ((int)strlen(p) != 248) { t_skip("tmp prefix too long"); return; }
+    char *d = dh_dir("cr_l247"), p[1024]; WCHAR w[1024];
+    make_len_path(d, 247, p, sizeof p);
+    if ((int)strlen(p) != 247) { t_skip("tmp prefix too long"); return; }
     dh_w(w, 1024, p);
     SET_ERR(0);
     BOOL ok = U(CreateDirectoryW)(w, NULL);
     CHECKF(ok, "err %lu", GetLastError());
     if (ok) CHECK(U(RemoveDirectoryW)(w));
 }
-TEST(dir_create_length_249_range) {
+TEST(dir_create_length_248_range) {
     REQUIRE(U(CreateDirectoryW));
-    char *d = dh_dir("cr_l249"), p[1024]; WCHAR w[1024];
-    make_len_path(d, 249, p, sizeof p);
-    if ((int)strlen(p) != 249) { t_skip("tmp prefix too long"); return; }
+    char *d = dh_dir("cr_l248"), p[1024]; WCHAR w[1024];
+    make_len_path(d, 248, p, sizeof p);
+    if ((int)strlen(p) != 248) { t_skip("tmp prefix too long"); return; }
     dh_w(w, 1024, p);
     SET_ERR(0);
     BOOL ok = U(CreateDirectoryW)(w, NULL);
-    CHECK(!ok);                                /* non-long-path-aware process: 248 char directory limit */
+    CHECK(!ok);                                /* non-long-path-aware process: 247 char directory limit */
     EXPECT_ERR(ERROR_FILENAME_EXCED_RANGE);
     if (ok) RemoveDirectoryW(w);
 }
-TEST(dir_create_length_a_249_range) {
+TEST(dir_create_length_a_248_range) {
     REQUIRE(U(CreateDirectoryA));
-    char *d = dh_dir("cr_l249a"), p[1024];
-    make_len_path(d, 249, p, sizeof p);
-    if ((int)strlen(p) != 249) { t_skip("tmp prefix too long"); return; }
+    char *d = dh_dir("cr_l248a"), p[1024];
+    make_len_path(d, 248, p, sizeof p);
+    if ((int)strlen(p) != 248) { t_skip("tmp prefix too long"); return; }
     SET_ERR(0);
     BOOL ok = U(CreateDirectoryA)(p, NULL);
     CHECK(!ok);
