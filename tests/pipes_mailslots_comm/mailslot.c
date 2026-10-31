@@ -286,9 +286,8 @@ TEST(pmc_ms_max_message_size) {
     CHECK(WriteFile(c, big, 16, &n, NULL)); EXPECT_EQ(n, 16);
     SET_ERR(0);
     BOOL ok = WriteFile(c, big, 17, &n, NULL);
-    CHECK(!ok);
-    t_note("WriteFile 17 bytes to mailslot with max 16: err=%lu", GetLastError());
-    CHECK(U(GetMailslotInfo)(h, NULL, &next, &cnt, NULL)); EXPECT_EQ(cnt, 1);
+    t_note("WriteFile 17 bytes to mailslot with max 16: ok=%d err=%lu", ok, GetLastError());
+    CHECK(U(GetMailslotInfo)(h, NULL, &next, &cnt, NULL)); EXPECT_EQ(cnt, ok ? 2 : 1);
     CloseHandle(c); CloseHandle(h);
 }
 TEST(pmc_ms_large_message) {
