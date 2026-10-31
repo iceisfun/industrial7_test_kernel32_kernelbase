@@ -1,0 +1,3 @@
+LIBRARY k32m_imp.dll
+EXPORTS
+  ml_via_dep @1

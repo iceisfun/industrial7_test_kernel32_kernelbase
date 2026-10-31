@@ -1,0 +1,13 @@
+LIBRARY k32m_a.dll
+EXPORTS
+  ml_proc_attach @1 DATA
+  ml_thread_attach @2 DATA
+  ml_thread_detach @3 DATA
+  ml_value @4 DATA
+  ml_add @5
+  ml_ord7 @7
+  MlCase = ml_case @9
+  ml_noname @11 NONAME
+  ml_fwd_pid = kernel32.GetCurrentProcessId @13
+  ml_fwd_nt = ntdll.RtlGetVersion @14
+  ml_fwd_bad = nosuchdll_k32t.NoSuchFunc @15
