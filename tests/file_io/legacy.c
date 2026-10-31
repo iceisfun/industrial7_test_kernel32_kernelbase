@@ -389,7 +389,8 @@ TEST(fio_openfile_delete_in_use) {
     OFSTRUCT o; ofs_fill(&o);
     HFILE r = U(OpenFile)(p, &o, OF_DELETE);
     EXPECT_EQ(r, HFILE_ERROR);
-    EXPECT_EQ(o.nErrCode, ERROR_FILE_NOT_FOUND);       /* OF_DELETE reports not-found for any failure */
+    /* OpenFile ends with nErrCode = GetLastError(), which overwrites the preset 2: DeleteFileA's sharing violation. */
+    EXPECT_EQ(o.nErrCode, ERROR_SHARING_VIOLATION);
     CHECK(exists(p));
     CLOSE(h); rmfile(p);
 }

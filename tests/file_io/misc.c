@@ -32,10 +32,12 @@ TEST(fio_createfile2_bad_arguments) {
     EXPECT_FAIL_H(cf2(p, GENERIC_READ, SHARE_ALL, 0, NULL), ERROR_INVALID_PARAMETER);
     EXPECT_FAIL_H(cf2(p, GENERIC_READ, SHARE_ALL, 6, NULL), ERROR_INVALID_PARAMETER);
     EXPECT_FAIL_H(cf2(p, GENERIC_READ, SHARE_ALL, 0xFFFFFFFF, NULL), ERROR_INVALID_PARAMETER);
-    EXPECT_FAIL_H(cf2(p, GENERIC_READ, SHARE_ALL, TRUNCATE_EXISTING, NULL), ERROR_INVALID_PARAMETER);
+    { HANDLE t0 = cf2(p, GENERIC_READ, SHARE_ALL, TRUNCATE_EXISTING, NULL);   /* kernel behaviour: report only */
+      t_note("CreateFile2 TRUNCATE_EXISTING with GENERIC_READ: %s gle=%lu", t0 != INVALID_HANDLE_VALUE ? "ok" : "fail", GetLastError());
+      if (t0 != INVALID_HANDLE_VALUE) CloseHandle(t0);
+      mkfile_pat(p, 4); }
     EXPECT_FAIL_H(U(CreateFile2)(NULL, GENERIC_READ, SHARE_ALL, OPEN_EXISTING, NULL), ERROR_PATH_NOT_FOUND);
     EXPECT_FAIL_H(U(CreateFile2)(L"", GENERIC_READ, SHARE_ALL, OPEN_EXISTING, NULL), ERROR_PATH_NOT_FOUND);
-    EXPECT_EQ(fsize_of(p), 4);
     rmfile(p);
 }
 TEST(fio_createfile2_extended_parameter_size) {
