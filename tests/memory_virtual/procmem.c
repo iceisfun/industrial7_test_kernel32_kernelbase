@@ -535,7 +535,7 @@ CHILD(pm_stackgrow) {
     (void)lim0; (void)lim1;
     return r == 0 ? 0 : 3;
 }
-TEST(mv_stack_growth_child) { EXPECT_EQ(t_run_child("pm_stackgrow", "", 30000), 0); }
+TEST(mv_stack_growth_child) { DWORD c_ = t_run_child("pm_stackgrow", "", 30000); EXPECT_EQ(c_, 0); }
 static LONG CALLBACK so_veh(PEXCEPTION_POINTERS ep) {
     if (ep->ExceptionRecord->ExceptionCode == EXCEPTION_STACK_OVERFLOW) TerminateProcess(GetCurrentProcess(), 0x5050);
     return EXCEPTION_CONTINUE_SEARCH;
@@ -567,7 +567,7 @@ CHILD(pm_stackguard) {
     if (lim2 > lim) return 4;
     return 0;
 }
-TEST(mv_stack_guard_page_child) { EXPECT_EQ(t_run_child("pm_stackguard", "", 30000), 0); }
+TEST(mv_stack_guard_page_child) { DWORD c_ = t_run_child("pm_stackguard", "", 30000); EXPECT_EQ(c_, 0); }
 
 /* ---------------- working set ---------------- */
 TEST(mv_ws_get_self) {
@@ -657,7 +657,7 @@ CHILD(pm_wsset) {
     if (!setf(me, (SIZE_T)-1, (SIZE_T)-1)) return 30;
     return 0;
 }
-TEST(mv_ws_set_child) { EXPECT_EQ(t_run_child("pm_wsset", "", 30000), 0); }
+TEST(mv_ws_set_child) { DWORD c_ = t_run_child("pm_wsset", "", 30000); EXPECT_EQ(c_, 0); }
 TEST(mv_ws_set_invalid_handle) {
     REQUIRE(U(SetProcessWorkingSetSize)); REQUIRE(U(SetProcessWorkingSetSizeEx));
     HANDLE ev = CreateEventA(NULL, TRUE, FALSE, NULL);
