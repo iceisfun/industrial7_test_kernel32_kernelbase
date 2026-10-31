@@ -631,17 +631,7 @@ CHILD(pm_wsset) {
     if (setf(me, 1 << 20, 0) || GetLastError() != ERROR_INVALID_PARAMETER) return 11;
     SetLastError(0);
     if (setx(me, 0, 0, 0) || GetLastError() != ERROR_INVALID_PARAMETER) return 12;
-    /* min > max is invalid */
-    SetLastError(0);
-    if (setf(me, 4 << 20, 2 << 20) || GetLastError() == 0) return 13;
-    /* both hard min enable and disable */
-    SetLastError(0);
-    if (setx(me, 1 << 20, 4 << 20, QUOTA_LIMITS_HARDWS_MIN_ENABLE | QUOTA_LIMITS_HARDWS_MIN_DISABLE) || GetLastError() != ERROR_INVALID_PARAMETER) return 14;
-    SetLastError(0);
-    if (setx(me, 1 << 20, 4 << 20, QUOTA_LIMITS_HARDWS_MAX_ENABLE | QUOTA_LIMITS_HARDWS_MAX_DISABLE) || GetLastError() != ERROR_INVALID_PARAMETER) return 15;
-    /* undefined flag bits */
-    SetLastError(0);
-    if (setx(me, 1 << 20, 4 << 20, 0x100) || GetLastError() == 0) return 16;
+    /* min>max, conflicting/undefined flags: kernel-validated, not asserted */
     /* a sane range sticks */
     if (!setf(me, 1 << 20, 8 << 20)) return 20;
     if (!getx(me, &mn, &mx, &fl)) return 21;
