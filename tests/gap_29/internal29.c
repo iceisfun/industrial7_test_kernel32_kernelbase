@@ -124,7 +124,7 @@ TEST(gap29_uaw_lstrcmp_alias_identity) {
   FARPROC c = t_proc_k32("uaw_lstrcmpiW"), d = t_proc_k32("lstrcmpiW");
   REQUIRE(a); REQUIRE(b); REQUIRE(c); REQUIRE(d);
   if (t_is_wine()) { t_note("alias identity not enforced on wine"); return; }
-  CHECK(a == b);   /* same RVA, ordinals 1626 vs 1608 in the Win10 image */
+  CHECK(a == b);   /* same RVA in the Win10 image (kernel32 decomp: uaw_lstrcmpW/lstrcmpW share 0x1bf00, uaw_lstrcmpiW/lstrcmpiW share 0x18330) */
   CHECK(c == d);
   CHECK(a != c);
 }
