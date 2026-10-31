@@ -1,5 +1,6 @@
 /* GetEnvironmentVariable / SetEnvironmentVariable (A and W). */
 #include "t.h"
+#include "k.h"
 
 #define ENOTFOUND 203
 #define SENTINEL_ERR 0x5A5A5A

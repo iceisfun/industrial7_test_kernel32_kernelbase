@@ -1,6 +1,7 @@
 /* GetEnvironmentStrings*, FreeEnvironmentStrings*, ExpandEnvironmentStrings*, SetEnvironmentStringsW,
  * environment inheritance by child processes. */
 #include "t.h"
+#include "k.h"
 
 /* ---------- block helpers ---------- */
 typedef struct { int count; int hidden; int bad; size_t wchars; } blk_info;
