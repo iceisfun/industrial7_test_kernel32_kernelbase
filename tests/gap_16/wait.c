@@ -95,7 +95,7 @@ TEST(gap16_wmo_waitall_completes_when_last_signaled) {
     WaitForSingleObject(t, 3000); CloseHandle(t); CloseHandle(h[0]); CloseHandle(h[1]);
 }
 TEST(gap16_wmo_closed_handle) {
-    NEED; HANDLE h[3] = { ev(1, 1), closed_h(), ev(1, 1) }; HANDLE bad = h[1];
+    NEED; HANDLE h[3]; h[0] = ev(1, 1); h[2] = ev(1, 1); h[1] = closed_h(); HANDLE bad = h[1];   /* closed last so its value is not recycled */
     SET_ERR(0); WEQ(WMO(3, h, FALSE, 0, FALSE), WAIT_FAILED); EXPECT_ERR(ERROR_INVALID_HANDLE);
     SET_ERR(0); WEQ(WMO(3, h, TRUE, 0, FALSE), WAIT_FAILED); EXPECT_ERR(ERROR_INVALID_HANDLE);
     SET_ERR(0); WEQ(WMO(1, &bad, FALSE, 0, FALSE), WAIT_FAILED); EXPECT_ERR(ERROR_INVALID_HANDLE);
