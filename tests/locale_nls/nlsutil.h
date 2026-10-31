@@ -63,6 +63,16 @@ static const DWORD FIXED_LCIDS[] = {
 
 typedef BOOL (CALLBACK *K_GEONAMEPROC)(PWSTR, LPARAM);
 UDECL(BOOL, EnumSystemGeoNames, (GEOCLASS, K_GEONAMEPROC, LPARAM));
+/* Entry points that older mingw headers do not declare. */
+typedef BOOL (CALLBACK *K_CALEXEX_PROC)(LPWSTR, CALID, LPWSTR, LPARAM);
+typedef BOOL (CALLBACK *K_TIMEEX_PROC)(LPWSTR, LPARAM);
+typedef BOOL (CALLBACK *K_DATEEXEX_PROC)(LPWSTR, CALID, LPARAM);
+UDECL(int, GetCalendarInfoEx, (LPCWSTR, CALID, LPCWSTR, CALTYPE, LPWSTR, int, LPDWORD));
+UDECL(BOOL, EnumCalendarInfoExEx, (K_CALEXEX_PROC, LPCWSTR, CALID, LPCWSTR, CALTYPE, LPARAM));
+UDECL(BOOL, EnumTimeFormatsEx, (K_TIMEEX_PROC, LPCWSTR, DWORD, LPARAM));
+UDECL(BOOL, EnumDateFormatsExEx, (K_DATEEXEX_PROC, LPCWSTR, DWORD, LPARAM));
+UDECL(int, GetGeoInfoExK, (PWSTR, DWORD, PWSTR, int));
+
 static int nls_isascii(const WCHAR *s) { for (; *s; s++) if (*s > 0x7f) return 0; return 1; }
 
 /* GetLocaleInfoEx wrapper. Returns the API result; out is always NUL-terminated on failure. */
