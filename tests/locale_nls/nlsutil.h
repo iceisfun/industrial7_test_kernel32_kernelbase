@@ -61,6 +61,8 @@ static const DWORD FIXED_LCIDS[] = {
     0x0409, 0x0407, 0x040C, 0x0411, 0x0804, 0x0401, 0x041F, 0x040D, 0x041E, 0x0439, 0x0412, 0x0419, 0x0416
 };
 
+typedef BOOL (CALLBACK *K_GEONAMEPROC)(PWSTR, LPARAM);
+UDECL(BOOL, EnumSystemGeoNames, (GEOCLASS, K_GEONAMEPROC, LPARAM));
 static int nls_isascii(const WCHAR *s) { for (; *s; s++) if (*s > 0x7f) return 0; return 1; }
 
 /* GetLocaleInfoEx wrapper. Returns the API result; out is always NUL-terminated on failure. */
