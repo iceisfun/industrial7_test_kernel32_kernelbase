@@ -323,9 +323,6 @@ TEST(cf2_device_names) {
     h = U(CreateFile2)(L"\\\\.\\NUL", GENERIC_WRITE, FILE_SHARE_WRITE, OPEN_EXISTING, NULL);
     CHECK(h != INVALID_HANDLE_VALUE);
     if (h != INVALID_HANDLE_VALUE) CloseHandle(h);
-    h = U(CreateFile2)(L"\\\\.\\PhysicalDrive0", 0, FILE_SHARE_READ | FILE_SHARE_WRITE, OPEN_EXISTING, NULL);
-    if (h != INVALID_HANDLE_VALUE) CloseHandle(h);
-    else t_note("PhysicalDrive0 query-open failed: %lu", GetLastError());
 }
 TEST(cf2_longpath_prefix) {
     REQUIRE(U(CreateFile2));
