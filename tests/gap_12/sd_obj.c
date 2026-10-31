@@ -76,7 +76,7 @@ TEST(gap12_kobj_closed_handle) {
 }
 TEST(gap12_kobj_bogus_handle_values) {
     REQUIRE(U(SetKernelObjectSecurity));
-    static const ULONG_PTR vals[] = { 0x4, 0x1234, 0x7FFFFFFC, 0xFFFFFFFC, 0x00010000ull };
+    static const ULONG_PTR vals[] = { 0x3FFFFFFC, 0xFFFFFFF8, 0x7FFFFFFC, 0xFFFFFFFC, 0x00FF0000ull };
     DSD d; dsd_init(&d, EVENT_ALL_ACCESS);
     for (unsigned i = 0; i < 5; i++) {
         SET_ERR(0xBAD);
