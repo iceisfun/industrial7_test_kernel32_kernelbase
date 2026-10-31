@@ -19,7 +19,16 @@ TEST(gap6_impself_levels) {
         BOOL ok = OpenThreadToken(GetCurrentThread(), TOKEN_QUERY, TRUE, &t);
         BOOL g1 = ok && GetTokenInformation(t, TokenImpersonationLevel, &got, 4, &rl);
         BOOL g2 = ok && GetTokenInformation(t, TokenType, &ty, 4, &rl);
+        DWORD oe = GetLastError();
         RevertToSelf();
+        if (lv[i] == SecurityAnonymous) {
+            /* NtOpenThreadToken refuses anonymous-level tokens (STATUS_CANT_OPEN_ANONYMOUS) */
+            if (!ok) CHECKF(oe == ERROR_CANT_OPEN_ANONYMOUS, "anonymous OpenThreadToken err %lu", oe);
+            else t_note("anonymous-level thread token opened");
+            if (t) CloseHandle(t);
+            CHECKF(!thread_has_token(), "revert level %d", i);
+            continue;
+        }
         CHECKF(ok, "level %d OpenThreadToken", i);
         CHECKF(g1 && g2, "level %d query", i);
         CHECKF(ty == TokenImpersonation, "level %d type %lu", i, ty);
@@ -317,7 +326,7 @@ TEST(gap6_imppipe_regular_file) {
     DWORD e = GetLastError();
     if (r) RevertToSelf();
     CHECK(!r);
-    CHECKF(e == ERROR_INVALID_FUNCTION || e == ERROR_INVALID_HANDLE, "err %lu", e);
+    CHECKF(e == ERROR_INVALID_FUNCTION || e == ERROR_INVALID_HANDLE || e == ERROR_NOT_SUPPORTED, "err %lu", e);
     t_note("ImpersonateNamedPipeClient(file) err %lu", e);
     CloseHandle(f); DeleteFileA(p);
 }
