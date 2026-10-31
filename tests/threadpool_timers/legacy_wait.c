@@ -206,7 +206,7 @@ TEST(tp_rw_semaphore_object) {
     CHECK(tp_wait_count(&c.n, 3, 5000));  /* each fire consumes one count */
     Sleep(100);
     EXPECT_EQ(c.n, 3);
-    EXPECT_EQ(WaitForSingleObject(sem, 0), WAIT_TIMEOUT);
+    { DWORD wr_ = WaitForSingleObject(sem, 0); EXPECT_EQ(wr_, WAIT_TIMEOUT); }
     U(UnregisterWaitEx)(h, INVALID_HANDLE_VALUE);
     CloseHandle(sem); tp_ctx_free(&c);
 }
