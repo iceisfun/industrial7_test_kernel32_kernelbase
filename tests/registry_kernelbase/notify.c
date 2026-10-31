@@ -107,6 +107,7 @@ TEST(regkb_notify_all_filters_combined) {
     CHECK(signaled(ev, 5000));
     CloseHandle(ev); RegCloseKey(w); RegCloseKey(h);
 }
+/* kernelbase RegNotifyChangeKeyValue: fAsynchronous && !hEvent -> 0x57 */
 TEST(regkb_notify_async_requires_event) {
     REQUIRE(U(RegNotifyChangeKeyValue));
     HKEY h = FRESH(); REQUIRE(h); HKEY w = open_notify(h);

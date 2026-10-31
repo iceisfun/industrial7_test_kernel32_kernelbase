@@ -19,6 +19,7 @@ static HKEY mk_typed(const char *name) {
     return h;
 }
 
+/* kernelbase RegGetValueW: (dwFlags & 0xffff)==0 or hkey==NULL -> 0x57; unknown type w/o RRF_RT_ANY -> 0x65e */
 TEST(regkb_getvalue_flags_zero_invalid) {
     REQUIRE(U(RegGetValueW)); REQUIRE(U(RegGetValueA));
     HKEY h = mk_typed(__func__); REQUIRE(h); DWORD v, cb = 4;
@@ -504,7 +505,8 @@ TEST(regkb_muistring_plain_string_value_observed) {
 TEST(regkb_muistring_a_variant_exists) {
     REQUIRE(U(RegLoadMUIStringA));
     HKEY h = FRESH(); REQUIRE(h); char out[64]; DWORD cb = 0;
-    EQ(U(RegLoadMUIStringA)(h, "absent", out, sizeof out, &cb, 0, NULL), ERROR_FILE_NOT_FOUND);
-    EQ(U(RegLoadMUIStringA)(h, "absent", out, sizeof out, NULL, 0, NULL), ERROR_INVALID_PARAMETER);
+    /* Win10 kernelbase RegLoadMUIStringA is a stub: returns ERROR_CALL_NOT_IMPLEMENTED (0x78) unconditionally */
+    EQ(U(RegLoadMUIStringA)(h, "absent", out, sizeof out, &cb, 0, NULL), ERROR_CALL_NOT_IMPLEMENTED);
+    EQ(U(RegLoadMUIStringA)(h, "absent", out, sizeof out, NULL, 0, NULL), ERROR_CALL_NOT_IMPLEMENTED);
     RegCloseKey(h);
 }

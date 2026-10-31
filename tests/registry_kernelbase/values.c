@@ -147,6 +147,7 @@ TEST(regkb_val_repeated_set_is_idempotent) {
     DWORD v = 0, cb = 4, t; EQ(vget(h, L"counter", &t, &v, &cb), 0); EQ(v, 499); EQ(rk_valcount(h), 1);
     RegCloseKey(h);
 }
+/* kernelbase RegSetValueExW: Reserved != 0 returns 0x57 before anything else */
 TEST(regkb_val_set_reserved_nonzero) {
     REQUIRE(U(RegSetValueExW));
     HKEY h = FRESH(); REQUIRE(h); DWORD v = 1;
