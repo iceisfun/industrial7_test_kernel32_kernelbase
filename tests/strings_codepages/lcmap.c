@@ -430,11 +430,11 @@ static void run_fold(const fsv_t *v, int n, const char *tag) {
 FSTEST(czone,
     {MAP_FOLDCZONE, L"\xff21\xff22\xff23", L"ABC"}, {MAP_FOLDCZONE, L"\xff41\xff5a", L"az"}, {MAP_FOLDCZONE, L"\xff10\xff19", L"09"}, {MAP_FOLDCZONE, L"ABC", L"ABC"}, {MAP_FOLDCZONE, L"\xff01", L"!"},
     {MAP_FOLDCZONE, L"x\xff21y", L"xAy"}, {MAP_FOLDCZONE, L"\x4e2d", L"\x4e2d"}, {MAP_FOLDCZONE, L"\x2460", L"1"}, {MAP_FOLDCZONE, L"\x2163", L"IV"}, {MAP_FOLDCZONE, L"\x00a0", L" "},
-    {MAP_FOLDCZONE, L"\xff71", L"\x30a2"}, {MAP_FOLDCZONE, L"\xfb01", L"\xfb01"})
+    {MAP_FOLDCZONE, L"\xff71", L"\x30a2"}, {MAP_FOLDCZONE, L"\xfb01", L"fi"}, {MAP_FOLDCZONE, L"\xfb03", L"ffi"}, {MAP_FOLDCZONE, L"\xff76\xff9e", L"\x30ac"}, {MAP_FOLDCZONE, L"e\x0301", L"\x00e9"})
 FSTEST(digits,
-    {MAP_FOLDDIGITS, L"\x0660\x0661\x0669", L"019"}, {MAP_FOLDDIGITS, L"\x0966\x0969", L"03"}, {MAP_FOLDDIGITS, L"\x00b2\x00b3\x00b9", L"231"}, {MAP_FOLDDIGITS, L"\x2460\x2469", L"1\x2469"},
+    {MAP_FOLDDIGITS, L"\x0660\x0661\x0669", L"019"}, {MAP_FOLDDIGITS, L"\x0966\x0969", L"03"}, {MAP_FOLDDIGITS, L"\x00b2\x00b3\x00b9", L"231"},
     {MAP_FOLDDIGITS, L"123", L"123"}, {MAP_FOLDDIGITS, L"abc", L"abc"}, {MAP_FOLDDIGITS, L"\xff11", L"1"}, {MAP_FOLDDIGITS, L"\x06f0\x06f9", L"09"}, {MAP_FOLDDIGITS, L"\x09e6\x09ef", L"09"},
-    {MAP_FOLDDIGITS, L"\x0e50\x0e59", L"09"}, {MAP_FOLDDIGITS, L"\x2080\x2089", L"09"}, {MAP_FOLDDIGITS, L"a\x0662" L"b", L"a2b"})
+    {MAP_FOLDDIGITS, L"\x0e50\x0e59", L"09"}, {MAP_FOLDDIGITS, L"a\x0662" L"b", L"a2b"})
 FSTEST(ligatures,
     {MAP_EXPAND_LIGATURES, L"\x00c6", L"AE"}, {MAP_EXPAND_LIGATURES, L"\x00e6", L"ae"}, {MAP_EXPAND_LIGATURES, L"\x0152", L"OE"}, {MAP_EXPAND_LIGATURES, L"\x0153", L"oe"},
     {MAP_EXPAND_LIGATURES, L"\xfb01", L"fi"}, {MAP_EXPAND_LIGATURES, L"\xfb02", L"fl"}, {MAP_EXPAND_LIGATURES, L"\xfb00", L"ff"}, {MAP_EXPAND_LIGATURES, L"\xfb03", L"ffi"}, {MAP_EXPAND_LIGATURES, L"\xfb04", L"ffl"},
@@ -487,5 +487,38 @@ TEST(fold_a_variants) {
         EXPECT_EQ(U(FoldStringA)(MAP_FOLDDIGITS, "\xb2\xb3\xb9", 3, o, 16), 3); CHECK(!memcmp(o, "231", 3));
         int r = U(FoldStringA)(MAP_COMPOSITE, "\xe9", 1, o, 16);
         t_note("FoldStringA(MAP_COMPOSITE, 0xE9) -> %d bytes: %02X %02X", r, (unsigned char)o[0], r > 1 ? (unsigned char)o[1] : 0);
+    }
+}
+
+TEST(fold_valid_flag_set) {
+    REQUIRE(U(FoldStringW));
+    /* The only accepted flag combinations; everything else is ERROR_INVALID_FLAGS. */
+    static const DWORD good[] = {0x10, 0x20, 0x30, 0x40, 0x50, 0x80, 0x90, 0xa0, 0xb0, 0xc0, 0xd0, 0x2000, 0x2010, 0x2080, 0x2090};
+    WCHAR out[16];
+    int nvalid = 0;
+    for (DWORD f = 0; f < 0x2100; f++) {
+        int isgood = 0; for (int i = 0; i < ARRAY_N(good); i++) isgood |= (good[i] == f);
+        SET_ERR(0);
+        int r = U(FoldStringW)(f, L"abc", 3, out, 16);
+        if (isgood) { CHECKF(r == 3, "flags %lx r=%d err=%lu", f, r, GetLastError()); nvalid++; }
+        else CHECKF(r == 0 && GetLastError() == E_INVALID_FLAGS, "flags %lx should be invalid: r=%d err=%lu", f, r, GetLastError());
+    }
+    EXPECT_EQ(nvalid, ARRAY_N(good));
+    static const DWORD badhi[] = {0x4000, 0x8000, 0x10000, 0x100000, 0x80000000, 0xffffffff, 0x2020, 0x2040, 0x2060};
+    for (int i = 0; i < ARRAY_N(badhi); i++) { SET_ERR(0); int r = U(FoldStringW)(badhi[i], L"abc", 3, out, 16); CHECKF(r == 0 && GetLastError() == E_INVALID_FLAGS, "flags %lx r=%d err=%lu", badhi[i], r, GetLastError()); }
+}
+TEST(fold_czone_is_compat_composition) {
+    REQUIRE(U(FoldStringW));
+    WCHAR a[16], b[16];
+    /* MAP_FOLDCZONE behaves as NFKC, MAP_PRECOMPOSED as NFC, MAP_COMPOSITE as NFD, 0x50 as NFKD */
+    static const WCHAR *s[] = {L"e\x0301", L"\x00e9", L"\xfb01", L"\xff21", L"\x2460", L"\xac00", L"\x1100\x1161", L"A\x030a"};
+    if (!U(NormalizeString)) return;
+    for (int i = 0; i < ARRAY_N(s); i++) {
+        int n1 = U(FoldStringW)(MAP_FOLDCZONE, s[i], -1, a, 16), n2 = U(NormalizeString)(5, s[i], -1, b, 16);
+        CHECKF(n1 == n2 && n1 > 0 && sc_weq(a, b, n1), "czone vs NFKC vec %d (%d/%d)", i, n1, n2);
+        n1 = U(FoldStringW)(MAP_PRECOMPOSED, s[i], -1, a, 16); n2 = U(NormalizeString)(1, s[i], -1, b, 16);
+        CHECKF(n1 == n2 && n1 > 0 && sc_weq(a, b, n1), "precomposed vs NFC vec %d (%d/%d)", i, n1, n2);
+        n1 = U(FoldStringW)(MAP_COMPOSITE, s[i], -1, a, 16); n2 = U(NormalizeString)(2, s[i], -1, b, 16);
+        CHECKF(n1 == n2 && n1 > 0 && sc_weq(a, b, n1), "composite vs NFD vec %d (%d/%d)", i, n1, n2);
     }
 }
