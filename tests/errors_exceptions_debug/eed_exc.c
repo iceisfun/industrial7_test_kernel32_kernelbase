@@ -792,7 +792,8 @@ TEST(eed_hw_handler_modifies_rax) {
     NEEDVEH();
     veh_on(); FIXRIP(eed_ud2_after); g_fix_rax = 0x1234567; g_fix_set_rax = 1;
     typedef ULONG_PTR (*fn)(void);
-    ULONG_PTR r = ((fn)(void *)eed_ud2)();
+    void *vp = (void *)eed_ud2; fn f = (fn)vp;
+    ULONG_PTR r = f();
     veh_off();
     EXPECT_EQ(r, 0x1234567);
 }
