@@ -285,11 +285,10 @@ TEST(gap28_initterm_e_null_then_fail) {
   EXPECT_EQ(g_calls, 1);
 }
 
-/* ---- _invalid_parameter: only logs via DbgPrint and returns ---- */
+/* ---- _invalid_parameter: only logs via DbgPrint and returns (decomp verified) ---- */
 TEST(gap28_invalid_parameter_returns) {
   typedef void (__cdecl *fn_t)(void);
   fn_t f = (fn_t)t_proc_kb("_invalid_parameter"); REQUIRE(f);
-  if (t_is_wine()) { t_skip("not verified under wine"); return; }
   f();
   f();
   CHECK(1);
@@ -305,7 +304,6 @@ CHILD(gap28_exit_code) {
 }
 TEST(gap28_exit_terminates_with_code) {
   REQUIRE(t_proc_kb("_exit"));
-  if (t_is_wine()) { t_skip("not verified under wine"); return; }
   EXPECT_EQ(t_run_child("gap28_exit_code", "37", 20000), 37);
   EXPECT_EQ(t_run_child("gap28_exit_code", "0", 20000), 0);
   EXPECT_EQ(t_run_child("gap28_exit_code", "255", 20000), 255);
@@ -319,7 +317,6 @@ CHILD(gap28_c_exit_returns) {
 }
 TEST(gap28_c_exit_does_not_terminate) {
   REQUIRE(t_proc_kb("_c_exit"));
-  if (t_is_wine()) { t_skip("not verified under wine"); return; }
   EXPECT_EQ(t_run_child("gap28_c_exit_returns", "", 20000), 55);
 }
 CHILD(gap28_cexit_returns) {
@@ -331,7 +328,6 @@ CHILD(gap28_cexit_returns) {
 }
 TEST(gap28_cexit_does_not_terminate) {
   REQUIRE(t_proc_kb("_cexit"));
-  if (t_is_wine()) { t_skip("not verified under wine"); return; }
   EXPECT_EQ(t_run_child("gap28_cexit_returns", "", 20000), 56);
 }
 
