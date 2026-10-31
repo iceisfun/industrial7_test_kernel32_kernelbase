@@ -71,12 +71,12 @@ TEST(pmc_msg_peek_sizes) {
     DWORD n, rd = 0, av = 0, left = 0; char b[16];
     CHECK(WriteFile(c, "0123456789", 10, &n, NULL));
     CHECK(U(PeekNamedPipe)(s, b, 3, &rd, &av, &left));
-    EXPECT_EQ(rd, 3); EXPECT_EQ(av, 10); EXPECT_EQ(left, 10); CHECK(!memcmp(b, "012", 3));
+    EXPECT_EQ(rd, 3); EXPECT_EQ(av, 10); EXPECT_EQ(left, 7); CHECK(!memcmp(b, "012", 3));   /* kernelbase!PeekNamedPipe: left = MessageLength - bytesRead */
     /* still unread */
     CHECK(U(PeekNamedPipe)(s, NULL, 0, NULL, &av, &left)); EXPECT_EQ(av, 10); EXPECT_EQ(left, 10);
     CHECK(!ReadFile(s, b, 4, &n, NULL)); EXPECT_ERR(ERROR_MORE_DATA);
     CHECK(U(PeekNamedPipe)(s, b, 16, &rd, &av, &left));
-    EXPECT_EQ(rd, 6); EXPECT_EQ(av, 6); EXPECT_EQ(left, 6); CHECK(!memcmp(b, "456789", 6));
+    EXPECT_EQ(rd, 6); EXPECT_EQ(av, 6); EXPECT_EQ(left, 0); CHECK(!memcmp(b, "456789", 6));
     CloseHandle(c); CloseHandle(s);
 }
 TEST(pmc_msg_peek_two_messages) {
@@ -86,7 +86,7 @@ TEST(pmc_msg_peek_two_messages) {
     CHECK(WriteFile(c, "aaaa", 4, &n, NULL)); CHECK(WriteFile(c, "bb", 2, &n, NULL));
     CHECK(U(PeekNamedPipe)(s, b, 16, &rd, &av, &left));
     t_note("two messages 4+2: read=%lu avail=%lu left=%lu", rd, av, left);
-    EXPECT_EQ(left, 4);
+    CHECK(left == 4u - rd);   /* kernelbase!PeekNamedPipe: left = first MessageLength - bytesRead */
     CHECK(rd >= 4);
     CHECK(av >= 4);
     CloseHandle(c); CloseHandle(s);

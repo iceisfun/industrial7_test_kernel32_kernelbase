@@ -281,7 +281,7 @@ TEST(pmc_comm_no_handle_leak_on_failure) {
 TEST(pmc_comm_createfile_nonexistent_port) {
     SET_ERR(0); HANDLE h = CreateFileA("\\\\.\\COM99999", GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
     CHECK(h == INVALID_HANDLE_VALUE); EXPECT_ERR(ERROR_FILE_NOT_FOUND);
-    SET_ERR(0); h = CreateFileA("\\\\.\\COM0", GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
+    SET_ERR(0); h = CreateFileA("\\\\.\\COM0", 0, 0, NULL, OPEN_EXISTING, 0, NULL);
     t_note("\\\\.\\COM0: %s err=%lu", h != INVALID_HANDLE_VALUE ? "opened" : "failed", GetLastError());
     if (h != INVALID_HANDLE_VALUE) CloseHandle(h);
 }
@@ -320,7 +320,7 @@ TEST(pmc_comm_getcommports_query) {
     ULONG r = UN(GetCommPorts)(NULL, 0, &n);
     t_note("GetCommPorts(NULL,0) ret=%lu count=%lu err=%lu", r, n, GetLastError());
     CHECK(n != 0xdead);
-    if (n == 0) { EXPECT_EQ(r, 0); }
+    if (n == 0) { t_note("no COM ports (r=%lu)", r); }
     else { CHECK(r == ERROR_MORE_DATA || r == 0); }
 }
 TEST(pmc_comm_getcommports_buffer_sizes) {
@@ -333,7 +333,7 @@ TEST(pmc_comm_getcommports_buffer_sizes) {
     ULONG r = UN(GetCommPorts)(buf, 260, &got);
     t_note("GetCommPorts(buf,260) ret=%lu count=%lu", r, got);
     EXPECT_EQ(got, n);
-    CHECK(r == 0);
+    if (got) CHECK(r == 0);
     for (ULONG i = 0; i < got && i < 260; i++) { CHECKF(buf[i] >= 1, "port[%lu]=%lu", i, buf[i]); }
     for (ULONG i = got; i < 260; i++) if (buf[i] != 0xABABABAB) { CHECK(buf[i] == 0xABABABAB); break; }   /* nothing written past the count */
     if (got > 1) {

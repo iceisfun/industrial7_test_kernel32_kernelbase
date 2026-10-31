@@ -159,6 +159,9 @@ TEST(pmc_dcb_keyword_abbrev_baud) {
     CHECK(U(BuildCommDCBA)("baud=12", &d)); EXPECT_EQ(d.BaudRate, 1200);
     CHECK(U(BuildCommDCBA)("baud=96", &d)); EXPECT_EQ(d.BaudRate, 9600);
 }
+/* kernel32!ConvertDtrControl/ConvertRtsControl compare the token end against
+   token+2 for "hs"/"tg" (token+1 for "on"), so "dtr=hs", "rts=hs", "rts=tg"
+   are rejected by real Windows with ERROR_INVALID_PARAMETER. */
 TEST(pmc_dcb_keyword_flow_flags) {
     static const bcase t[] = {
         { "xon=on",   -1, -1, -1, 0, F_XON, F_XON, -1 },
@@ -172,13 +175,9 @@ TEST(pmc_dcb_keyword_flow_flags) {
         { "octs=off", -1, -1, -1, 0, F_CTS, 0, -1 },
         { "dtr=on",   -1, -1, -1, 0, F_DTR_MASK, 0x10, -1 },
         { "dtr=off",  -1, -1, -1, 0, F_DTR_MASK, 0x00, -1 },
-        { "dtr=hs",   -1, -1, -1, 0, F_DTR_MASK, 0x20, -1 },
-        { "DTR=HS",   -1, -1, -1, 0, F_DTR_MASK, 0x20, -1 },
         { "rts=on",   -1, -1, -1, 0, F_RTS_MASK, 0x1000, -1 },
         { "rts=off",  -1, -1, -1, 0, F_RTS_MASK, 0x0000, -1 },
-        { "rts=hs",   -1, -1, -1, 0, F_RTS_MASK, 0x2000, -1 },
-        { "rts=tg",   -1, -1, -1, 0, F_RTS_MASK, 0x3000, -1 },
-        { "baud=9600 xon=on rts=hs dtr=hs", 9600, -1, -1, 0, F_XON | F_RTS_MASK | F_DTR_MASK, F_XON | 0x2000 | 0x20, -1 },
+        { "baud=9600 xon=on rts=on dtr=on", 9600, -1, -1, 0, F_XON | F_RTS_MASK | F_DTR_MASK, F_XON | 0x1000 | 0x10, -1 },
         { "octs=on odsr=on idsr=on", -1, -1, -1, 0, F_CTS | F_DSR | F_DSRSENS, F_CTS | F_DSR | F_DSRSENS, -1 },
     };
     run_table(t, sizeof t / sizeof t[0]);
@@ -207,7 +206,7 @@ TEST(pmc_dcb_invalid_strings) {
     static const char *bad[] = {
         "abc", "baud=", "baud=abc", "baud", "=9600", "9600,x,8,1", "9600,n,9,1", "9600,n,4,1", "9600,n,0,1", "9600,n,8,3", "9600,n,8,0",
         "9600,n,8,1,z", "9600,n,8,1,pp", "9600,n,8,1 junk", "parity=x", "parity=", "data=9", "data=4", "data=", "stop=3", "stop=0", "stop=1.4", "stop=",
-        "xon=maybe", "xon=", "dtr=maybe", "rts=xx", "dtr=tg", "octs=on1", "to=maybe", "baud=9600,parity=n", "baud=9600;parity=n", "bogus=1",
+        "dtr=hs", "DTR=HS", "rts=hs", "rts=tg", "xon=maybe", "xon=", "dtr=maybe", "rts=xx", "dtr=tg", "octs=on1", "to=maybe", "baud=9600,parity=n", "baud=9600;parity=n", "bogus=1",
         " 9600,n,8,1", "9600 n 8 1", "n,8,1", ",n,8,1", "9600,n,8,1.5.5", "baud=9600 parity=n data=8 stop=1 bogus",
     };
     for (size_t i = 0; i < sizeof bad / sizeof bad[0]; i++) {
