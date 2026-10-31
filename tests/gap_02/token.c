@@ -827,6 +827,8 @@ TEST(gap2_rtok_count_overflow) {
         SET_ERR(0);
         CHECKF(!f(src, 0, 0, NULL, 0, NULL, counts[i], &sa, &n), "restrict count 0x%lx", counts[i]);
         EXPECT_ERR(ERROR_ARITHMETIC_OVERFLOW);
+        /* delete array size is (count-1)*12: 0x10000001 still fits in 32 bits (3.2 GB alloc + copy), so skip it */
+        if (counts[i] == 0x10000001) continue;
         SET_ERR(0);
         CHECKF(!f(src, 0, 0, NULL, counts[i], &la, 0, NULL, &n), "delete count 0x%lx", counts[i]);
         EXPECT_ERR(ERROR_ARITHMETIC_OVERFLOW);
