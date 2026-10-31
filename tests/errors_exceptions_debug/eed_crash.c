@@ -3,6 +3,7 @@
 #include "eed.h"
 #include "eed_asm.h"
 
+#pragma GCC diagnostic ignored "-Winfinite-recursion"
 static char g_marker[MAX_PATH];
 static DWORD g_main_tid;
 static void mark(const char *what) {
@@ -431,19 +432,18 @@ TEST(eed_debugbreak_exports) {
     CHECK(UK(DebugBreakProcess) != NULL);
     CHECK(UK(OutputDebugStringA) != NULL); CHECK(UK(OutputDebugStringW) != NULL);
 }
+static volatile LONG g_dbp_n;
+static LONG CALLBACK veh_dbp(PEXCEPTION_POINTERS ep) {
+    if (ep->ExceptionRecord->ExceptionCode != EXCEPTION_BREAKPOINT) return EXCEPTION_CONTINUE_SEARCH;
+    if (InterlockedIncrement(&g_dbp_n) >= 3) ep->ContextRecord->Rip = (DWORD64)(ULONG_PTR)ep->ExceptionRecord->ExceptionAddress + 1;   /* escape a re-execution loop */
+    return EXCEPTION_CONTINUE_EXECUTION;
+}
 TEST(eed_debugbreak_with_handler_in_process) {
     REQUIRE(U(DebugBreak)); REQUIRE(U(AddVectoredExceptionHandler)); REQUIRE(U(RemoveVectoredExceptionHandler));
     if (IsDebuggerPresent()) { t_skip("debugger present"); return; }
-    static volatile LONG n;
-    LONG (CALLBACK *cb)(PEXCEPTION_POINTERS) = NULL; (void)cb;
-    /* use a local VEH */
-    extern LONG CALLBACK eed_veh_bp_count(PEXCEPTION_POINTERS);
-    n = 0;
-    PVOID h = U(AddVectoredExceptionHandler)(1, eed_veh_bp_count);
+    g_dbp_n = 0;
+    PVOID h = U(AddVectoredExceptionHandler)(1, veh_dbp);
     U(DebugBreak)();
     U(RemoveVectoredExceptionHandler)(h);
-    CHECK(1);
-}
-LONG CALLBACK eed_veh_bp_count(PEXCEPTION_POINTERS ep) {
-    return ep->ExceptionRecord->ExceptionCode == EXCEPTION_BREAKPOINT ? EXCEPTION_CONTINUE_EXECUTION : EXCEPTION_CONTINUE_SEARCH;
+    EXPECT_EQ(g_dbp_n, 1);
 }
