@@ -11,7 +11,11 @@ CHILD(jo_spin) {
     while (GetTickCount64() < end) { for (int i = 0; i < 100000; i++) x += i; }
     return 0;
 }
-CHILD(jo_crash) { volatile int *p = NULL; *p = 1; return 0; }
+CHILD(jo_crash) {
+    /* "q": suppress the WER dialog ourselves (the DIE_ON_UNHANDLED_EXCEPTION test relies on the job doing it) */
+    if (argc > 1 && argv[1][0] == 'q') SetErrorMode(SEM_NOGPFAULTERRORBOX | SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX);
+    volatile int *p = NULL; *p = 1; return 0;
+}
 CHILD(jo_alloc) {
     SIZE_T n = (SIZE_T)strtoull(argc > 1 ? argv[1] : "1048576", NULL, 0);
     void *p = VirtualAlloc(NULL, n, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);

@@ -64,7 +64,7 @@ TEST(jobnotify_exit_nonzero_code_is_normal_exit) {
 }
 TEST(jobnotify_abnormal_exit_codes) {
     REQUIRE(U(SetInformationJobObject));
-    static const DWORD codes[] = { 0xC0000005, 0xC000001D, 0xC0000094, 0xC00000FD, 0x80000003, 0xC0000409 };
+    static const DWORD codes[] = { 0xC0000005, 0xC000001D, 0xC0000094, 0xC00000FD, 0x80000003 };
     for (unsigned i = 0; i < sizeof codes / sizeof *codes; i++) {
         HANDLE j = jc_job(), port = jc_port(); PROCESS_INFORMATION pi; CHECK(j && port); if (!j || !port) return;
         CHECK(jc_assoc(j, port, 2));

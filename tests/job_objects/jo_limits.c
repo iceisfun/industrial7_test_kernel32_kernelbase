@@ -467,7 +467,8 @@ TEST(joballocount_io_counts_file_write) {
         jc_wait_exit(pi.hProcess, 10000);
         JOBOBJECT_BASIC_AND_IO_ACCOUNTING_INFORMATION x;
         CHECK(U(QueryInformationJobObject)(j, JobObjectBasicAndIoAccountingInformation, &x, sizeof x, NULL));
-        CHECK(x.IoInfo.OtherOperationCount + x.IoInfo.ReadOperationCount + x.IoInfo.WriteOperationCount >= 0);
+        { ULONGLONG tot = x.IoInfo.OtherOperationCount + x.IoInfo.ReadOperationCount + x.IoInfo.WriteOperationCount;
+          CHECKF(tot > 0, "a process that started and ran has zero accounted I/O operations"); }
         jc_kill(&pi);
     }
     CloseHandle(j);
@@ -591,7 +592,7 @@ TEST(jobbreak_flag_without_job_is_harmless) {
 
 /* ---------- Unhandled exception policy ---------- */
 TEST(jobexc_crash_exit_code_baseline) {
-    PROCESS_INFORMATION pi; HANDLE p = t_spawn_child("jo_crash", "", 0, NULL, NULL, NULL, FALSE, NULL, &pi); CHECK(p);
+    PROCESS_INFORMATION pi; HANDLE p = t_spawn_child("jo_crash", "q", 0, NULL, NULL, NULL, FALSE, NULL, &pi); CHECK(p);
     if (p) { EXPECT_EQ(jc_wait_exit(p, 20000), 0xC0000005); CloseHandle(pi.hThread); CloseHandle(p); }
 }
 TEST(jobexc_die_on_unhandled_exception) {
@@ -606,7 +607,7 @@ TEST(jobexc_abnormal_exit_notification) {
     REQUIRE(U(SetInformationJobObject));
     HANDLE j = jc_job(), port = jc_port(); PROCESS_INFORMATION pi; CHECK(j && port); if (!j || !port) return;
     CHECK(jc_assoc(j, port, 0x31));
-    CHECK(jc_spawn_in_job(j, "jo_crash", "", &pi));
+    CHECK(jc_spawn_in_job(j, "jo_crash", "q", &pi));
     if (pi.hProcess) {
         jc_wait_exit(pi.hProcess, 20000);
         DWORD seen = 0; int got = jc_wait_msg(port, JOB_OBJECT_MSG_ABNORMAL_EXIT_PROCESS, pi.dwProcessId, 3000, &seen);
