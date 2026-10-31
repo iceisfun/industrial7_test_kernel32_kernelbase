@@ -117,6 +117,10 @@
 #define CTRL_C_EVENT 0
 #endif
 
+/* Children are dispatched through one registered harness child ("con_dispatch", see chreg.c): the exe is
+ * re-launched as `--child con_dispatch <name> <resultfile> [extra]`. */
+void ch_register(const char *name, int (*fn)(int, char **));
+
 /* ---------------- child side ---------------- */
 static char g_res[MAX_PATH * 2];
 static int g_cpass;
@@ -203,7 +207,7 @@ static HANDLE pspawn(const char *cname, const char *extra, DWORD flags, const ch
     memset(&si, 0, sizeof si); si.cb = sizeof si;
     si.dwFlags = STARTF_USESHOWWINDOW; si.wShowWindow = SW_SHOWMINNOACTIVE;
     if (title) si.lpTitle = (LPSTR)title;
-    snprintf(cmd, sizeof cmd, "\"%s\" --child %s \"%s\" %s", t_self_path(), cname, res, extra ? extra : "");
+    snprintf(cmd, sizeof cmd, "\"%s\" --child con_dispatch %s \"%s\" %s", t_self_path(), cname, res, extra ? extra : "");
     memset(pi, 0, sizeof *pi);
     if (!CreateProcessA(NULL, cmd, NULL, NULL, FALSE, flags, NULL, NULL, &si, pi)) return NULL;
     return pi->hProcess;
@@ -224,9 +228,13 @@ static void prun_ex(const char *cname, DWORD flags, const char *title) {
 
 /* CT(name) { child body }: TEST(name) runs the body in a fresh console.
  * CTF: explicit creation flags (DETACHED_PROCESS, CREATE_NO_WINDOW, ...). CTT: with a start title. */
+#define CHREG(n) \
+    static int chfn_##n(int argc, char **argv); \
+    static void __attribute__((constructor)) chreg_##n(void) { ch_register(#n, chfn_##n); } \
+    static int chfn_##n(int argc, char **argv)
 #define CTF(n, fl, ttl) \
     static void ct_##n(void); \
-    CHILD(c_##n) { return cwrap(argc, argv, ct_##n); } \
+    CHREG(c_##n) { return cwrap(argc, argv, ct_##n); } \
     TEST(n) { prun_ex("c_" #n, (fl), (ttl)); } \
     static void ct_##n(void)
 #define CT(n) CTF(n, CREATE_NEW_CONSOLE, NULL)
@@ -234,7 +242,7 @@ static void prun_ex(const char *cname, DWORD flags, const char *title) {
 #define CTN(n) CTF(n, CREATE_NO_WINDOW, NULL)
 
 /* Grandchild (spawned by a console child): CG(name) { GSETUP(); ...; return code; } */
-#define CG(n) CHILD(g_##n)
+#define CG(n) CHREG(g_##n)
 #define GSETUP() do { if (argc > 1) snprintf(g_res, sizeof g_res, "%s", argv[1]); } while (0)
 
 /* Child-side: spawn a grandchild g_<name>, same result file. */
@@ -242,7 +250,7 @@ static HANDLE gspawn(const char *name, const char *extra, DWORD flags, HANDLE hi
     char cmd[4096]; STARTUPINFOA si;
     memset(&si, 0, sizeof si); si.cb = sizeof si;
     if (hin || hout || herr) { si.dwFlags |= STARTF_USESTDHANDLES; si.hStdInput = hin; si.hStdOutput = hout; si.hStdError = herr; }
-    snprintf(cmd, sizeof cmd, "\"%s\" --child g_%s \"%s\" %s", t_self_path(), name, g_res, extra ? extra : "");
+    snprintf(cmd, sizeof cmd, "\"%s\" --child con_dispatch g_%s \"%s\" %s", t_self_path(), name, g_res, extra ? extra : "");
     memset(pi, 0, sizeof *pi);
     if (!CreateProcessA(NULL, cmd, NULL, NULL, inherit, flags, NULL, NULL, &si, pi)) return NULL;
     return pi->hProcess;

@@ -67,7 +67,7 @@ static BOOL pty_spawn(PTY *p, const char *child, const char *extra) {
     snprintf(p->res, sizeof p->res, "%spty_%lu_%d.txt", t_tmpdir(), GetCurrentProcessId(), ++seq);
     DeleteFileA(p->res);
     char cmd[4096];
-    snprintf(cmd, sizeof cmd, "\"%s\" --child %s \"%s\" %s", t_self_path(), child, p->res, extra ? extra : "");
+    snprintf(cmd, sizeof cmd, "\"%s\" --child con_dispatch %s \"%s\" %s", t_self_path(), child, p->res, extra ? extra : "");
     WCHAR wcmd[4096];
     MultiByteToWideChar(CP_ACP, 0, cmd, -1, wcmd, 4096);
     STARTUPINFOEXW si; SIZE_T sz = 0;
