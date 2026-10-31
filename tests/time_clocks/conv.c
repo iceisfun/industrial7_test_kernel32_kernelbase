@@ -341,7 +341,7 @@ TEST(timeconv_dos_invalid_fields) {
         {"feb30", dd(2020, 2, 30), 0}, {"feb29-2021", dd(2021, 2, 29), 0}, {"feb29-2100", dd(2100, 2, 29), 0},
         {"apr31", dd(2020, 4, 31), 0}, {"hour24", dd(2020, 1, 1), (WORD)(24 << 11)}, {"hour31", dd(2020, 1, 1), (WORD)(31 << 11)},
         {"minute60", dd(2020, 1, 1), (WORD)(60 << 5)}, {"minute63", dd(2020, 1, 1), (WORD)(63 << 5)},
-        {"sec30x2", dd(2020, 1, 1), 30}, {"sec31x2", dd(2020, 1, 1), 31},
+        {"sec31x2", dd(2020, 1, 1), 31}, /* sec 60 may be accepted by leap-second aware processes: not tested */
     };
     for (size_t i = 0; i < sizeof v / sizeof v[0]; i++) {
         FILETIME ft = tc_ft(99); SET_ERR(0);
@@ -382,7 +382,10 @@ TEST(timeconv_ft_to_dos_range) {
     WORD fd, ft_;
     FILETIME f = tc_ft(tc_mkft(1980, 1, 1, 0, 0, 0, 0)); SET_ERR(0);
     CHECK(U(FileTimeToDosDateTime)(&f, &fd, &ft_)); EXPECT_EQ(fd, 0x21); EXPECT_EQ(ft_, 0);
+    /* kernel32!FileTimeToDosDateTime adds 19999999 ticks first, so 1979-12-31 23:59:58 rounds up to 1980-01-01 00:00:00 */
     f = tc_ft(tc_mkft(1979, 12, 31, 23, 59, 58, 0)); SET_ERR(0);
+    CHECK(U(FileTimeToDosDateTime)(&f, &fd, &ft_)); EXPECT_EQ(fd, 0x21); EXPECT_EQ(ft_, 0);
+    f = tc_ft(tc_mkft(1979, 12, 31, 23, 59, 57, 0)); SET_ERR(0);
     CHECK(!U(FileTimeToDosDateTime)(&f, &fd, &ft_)); t_note("out-of-range dos err %lu", GetLastError());
     f = tc_ft(tc_mkft(2107, 12, 31, 23, 59, 58, 0)); CHECK(U(FileTimeToDosDateTime)(&f, &fd, &ft_)); EXPECT_EQ(fd, 0xFF9F); EXPECT_EQ(ft_, 0xBF7D);
     f = tc_ft(tc_mkft(2108, 1, 1, 0, 0, 0, 0)); SET_ERR(0);

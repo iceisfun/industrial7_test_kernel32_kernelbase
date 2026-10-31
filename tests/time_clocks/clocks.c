@@ -269,7 +269,9 @@ TEST(clocks_interrupt_time_monotonic_100k) {
     ULONGLONG pa = 0, pp = 0; int b1 = 0, b2 = 0;
     for (int i = 0; i < 100000; i++) {
         ULONGLONG a, p; U(QueryInterruptTime)(&a); U(QueryInterruptTimePrecise)(&p);
-        if (a < pa) b1++; if (p < pp) b2++; pa = a; pp = p;
+        if (a < pa) b1++;
+        if (p < pp) b2++;
+        pa = a; pp = p;
     }
     EXPECT_EQ(b1, 0); EXPECT_EQ(b2, 0);
 }
