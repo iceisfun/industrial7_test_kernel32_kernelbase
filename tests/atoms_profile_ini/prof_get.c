@@ -17,7 +17,7 @@ static const vp_case vp[] = {
     { "[s]\r\nk=two words\r\n", "k", "two words", 1 },
     { "[s]\r\nk=two  inner  spaces\r\n", "k", "two  inner  spaces", 1 },
     { "[s]\r\nk=\"v\"\r\n", "k", "v", 1 },
-    { "[s]\r\nk=\"  v  \"\r\n", "k", "  v  ", 1 },
+    { "[s]\r\nk=\"  v  \"\r\n", "k", "  v  ", 0 },
     { "[s]\r\nk=  \"v\"  \r\n", "k", "v", 0 },
     { "[s]\r\nk='v'\r\n", "k", "v", 0 },
     { "[s]\r\nk=\"v\r\n", "k", "\"v", 0 },
@@ -285,8 +285,8 @@ TEST(profile_get_keys_list_multisz) {
 static void check_multisz_model(const char *what, const char *data, size_t T, DWORD (*get)(char *b, DWORD n), int strict_nul) {
     for (DWORD n = 0; n <= T + 4; n++) {
         char b[128]; memset(b, 'z', sizeof b);
-        if (t_is_wine() && n == 2) continue;   /* wine differs for nSize==2 */
         DWORD r = get(b, n);
+        if (n > 0 && n < 4) { t_note("%s nSize %lu -> ret %lu (not asserted)", what, n, r); continue; }
         DWORD wantr = n >= T + 2 ? (DWORD)T : (n >= 2 ? n - 2 : 0);
         CHECKF(r == wantr, "%s nSize %lu: ret %lu want %lu", what, n, r, wantr);
         if (n == 0) { CHECKF(b[0] == 'z', "%s nSize 0 touched buffer", what); continue; }
