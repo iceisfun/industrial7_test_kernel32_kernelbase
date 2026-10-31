@@ -178,9 +178,6 @@ TEST(fattr_get_unc_style_local_prefix) {
         snprintf(q, sizeof q, "\\\\?\\GLOBALROOT\\??\\%s", p);
         DWORD r = gaA(q);
         t_note("GLOBALROOT form attr=0x%lx err=%lu", r, r == INVALID_FILE_ATTRIBUTES ? GetLastError() : 0);
-        snprintf(q, sizeof q, "\\\\localhost\\%c$\\%s", p[0], p + 3);
-        r = gaA(q);
-        t_note("localhost admin share attr=0x%lx err=%lu", r, r == INVALID_FILE_ATTRIBUTES ? GetLastError() : 0);
     }
     fa_rm(p);
 }
@@ -430,7 +427,7 @@ TEST(fattr_ex_large_sparse_size) {
     if (h == INVALID_HANDLE_VALUE) return;
     LARGE_INTEGER li; li.QuadPart = 0x100000001LL;     /* 4GB+1 logical size, not allocated if sparse */
     DWORD br;
-    if (fa_is_ntfs()) DeviceIoControl(h, FSCTL_SET_SPARSE, NULL, 0, NULL, 0, &br, NULL);
+    if (!fa_is_ntfs() || !DeviceIoControl(h, FSCTL_SET_SPARSE, NULL, 0, NULL, 0, &br, NULL)) { t_skip("sparse files unavailable; refusing to allocate 4GB"); CloseHandle(h); fa_rm(p); return; }
     BOOL ok = SetFilePointerEx(h, li, NULL, FILE_BEGIN) && SetEndOfFile(h);
     CloseHandle(h);
     if (!ok) { t_skip("cannot extend file (fs limit)"); fa_rm(p); return; }

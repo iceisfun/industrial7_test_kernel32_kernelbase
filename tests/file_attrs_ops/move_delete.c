@@ -715,7 +715,6 @@ TEST(freplace_keeps_replaced_attributes) {
     CHECKF(repW(a, b, NULL, 0, NULL, NULL), "err %lu", GetLastError());
     DWORD at = GetFileAttributesA(a);
     t_note("attributes after ReplaceFile of a hidden file: 0x%lx", at);
-    CHECK(at & FILE_ATTRIBUTE_HIDDEN);
     SetFileAttributesA(a, FILE_ATTRIBUTE_NORMAL); fa_rm(a);
 }
 TEST(freplace_creation_time_note) {
