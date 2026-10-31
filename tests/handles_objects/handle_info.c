@@ -558,6 +558,7 @@ TEST(ho_hc_failed_close_no_change) {
 }
 TEST(ho_hc_failed_create_no_leak) {
     NEED_HC();
+    { char w[80]; ho_uniq(w, sizeof w, "warm"); HANDLE x = CreateMutexA(NULL, FALSE, w); if (x) CloseHandle(x); }   /* warm the cached namespace directory handle */
     DWORD base = ho_count();
     char n[80]; ho_uniq(n, sizeof n, "hcf");
     HANDLE m = CreateMutexA(NULL, FALSE, n);

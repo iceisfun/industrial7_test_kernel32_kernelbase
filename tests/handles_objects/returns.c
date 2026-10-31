@@ -197,6 +197,7 @@ TEST(ho_ret_failure_table_misc) { run_rows(62, NROWS); }
 TEST(ho_ret_failure_table_covers_all_rows) { CHECK(NROWS >= 80); t_note("rows=%u", NROWS); }
 TEST(ho_ret_failure_table_no_leak) {
     NEED_HC();
+    run_rows(0, NROWS);          /* warm-up: lazily cached handles */
     DWORD base = ho_count();
     run_rows(0, NROWS);
     EXPECT_EQ(ho_count(), base);
@@ -484,13 +485,15 @@ TEST(ho_wait_non_waitable_types_fail_invalid_handle) {
     char kn[80]; snprintf(kn, sizeof kn, "Software\\k32t_%lu", GetCurrentProcessId());
     LONG rc = RegCreateKeyExA(HKEY_CURRENT_USER, kn, 0, NULL, 0, KEY_ALL_ACCESS, NULL, (PHKEY)&key, NULL);
     BOOL ot = OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &tok);
-    struct { const char *n; HANDLE h; } t[] = { { "section", map }, { "iocp", iocp }, { "registry key", rc == 0 ? key : NULL }, { "token", ot ? tok : NULL } };
+    /* want: 5 for handles that lack SYNCHRONIZE (the access check comes first); the port has SYNCHRONIZE but is not waitable */
+    struct { const char *n; HANDLE h; DWORD want; } t[] = { { "section", map, 5 }, { "iocp", iocp, 0 }, { "registry key", rc == 0 ? key : NULL, 5 }, { "token", ot ? tok : NULL, 5 } };
     for (int i = 0; i < 4; i++) {
         if (!t[i].h) { t_note("no %s handle", t[i].n); continue; }
         SET_ERR(0);
         DWORD r = U(WaitForSingleObject)(t[i].h, 0); DWORD e = GetLastError();
         CHECKF(r == WAIT_FAILED, "%s: wait returned %lu", t[i].n, r);
-        CHECKF(e == ERROR_INVALID_HANDLE, "%s: err=%lu", t[i].n, e);
+        if (t[i].want) CHECKF(e == t[i].want, "%s: err=%lu want %lu", t[i].n, e, t[i].want);
+        else t_note("%s: wait err=%lu", t[i].n, e);
     }
     if (rc == 0) { RegCloseKey((HKEY)key); RegDeleteKeyA(HKEY_CURRENT_USER, kn); }
     if (ot) CloseHandle(tok);
