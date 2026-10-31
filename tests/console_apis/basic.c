@@ -1092,6 +1092,7 @@ CT(con_keyboard_layout_name) {
     GetConsoleKeyboardLayoutNameA_pfn a = UN(GetConsoleKeyboardLayoutNameA);
     GetConsoleKeyboardLayoutNameW_pfn w = UN(GetConsoleKeyboardLayoutNameW);
     CREQ(a); CREQ(w);
+    CWINESKIP("keyboard layout name is not reported by the emulator");
     char ab[16]; WCHAR wb[16];
     memset(ab, 0, sizeof ab); memset(wb, 0, sizeof wb);
     BOOL ra = a(ab), rw = w(wb);
