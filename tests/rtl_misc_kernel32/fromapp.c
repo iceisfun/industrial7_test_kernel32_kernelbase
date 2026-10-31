@@ -22,7 +22,7 @@ TEST(fromapp_createfilemapping_pagefile_backed) {
 
 TEST(fromapp_createfilemapping_size_is_64bit) {
     REQUIRE(CFM);
-    HANDLE h = CFM(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0x100000000ull + 4096, NULL);   /* 4 GB + 4 KB, reserved not committed */
+    HANDLE h = CFM(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE | SEC_RESERVE, 0x100000000ull + 4096, NULL);   /* 4 GB + 4 KB, SEC_RESERVE: no commit charge */
     t_note("4GB+ pagefile mapping: %p err=%lu", h, GetLastError());
     if (h) CloseHandle(h);
     CHECK(1);
