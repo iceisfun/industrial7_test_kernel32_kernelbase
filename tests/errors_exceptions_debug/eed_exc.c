@@ -97,8 +97,10 @@ TEST(eed_exc_raise_exception_address_is_raiseexception) {
     RAISE(0xE0A00002, 0, 0, NULL);
     veh_off();
     EXPECT_EQ(g_ncap, 1);
-    /* decomp: ExceptionAddress is set to the address of RaiseException itself */
-    EXPECT_EQ(g_cap[0].addr, (void *)UB(RaiseException));
+    /* decomp: RaiseException stores itself, but RtlRaiseException then overwrites ExceptionAddress with the
+       unwound return address, i.e. a point inside RaiseException (KERNELBASE!RaiseException+N) */
+    {   ULONG_PTR a = (ULONG_PTR)g_cap[0].addr, f = (ULONG_PTR)UB(RaiseException);
+        CHECKF(a > f && a < f + 0x100, "addr %p RaiseException %p", g_cap[0].addr, (void *)f); }
 }
 TEST(eed_exc_raise_returns_when_continued) {
     NEEDVEH();

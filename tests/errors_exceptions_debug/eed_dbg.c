@@ -399,7 +399,7 @@ TEST(eed_dbg_exception_not_handled_second_chance_and_exit_code) {
     if (f >= 0) {
         EXPECT_EQ(s.ev[f].nparams, 2);
         EXPECT_EQ(s.ev[f].info[0], 0x11); EXPECT_EQ(s.ev[f].info[1], 0x22);
-        EXPECT_EQ((ULONG_PTR)s.ev[f].addr, (ULONG_PTR)UB(RaiseException));
+        CHECK((ULONG_PTR)s.ev[f].addr > (ULONG_PTR)UB(RaiseException) && (ULONG_PTR)s.ev[f].addr < (ULONG_PTR)UB(RaiseException) + 0x100);   /* inside RaiseException (RtlRaiseException rewrites ExceptionAddress) */
         EXPECT_EQ(s.ev[f].tid, s.pi.dwThreadId);
     }
     EXPECT_EQ(s.ev[s.n - 1].code, EXIT_PROCESS_DEBUG_EVENT);
