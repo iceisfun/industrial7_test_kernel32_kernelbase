@@ -258,7 +258,9 @@ TEST(gap5_filenameex_zero_size) {
 TEST(gap5_filenameex_truncation_exe) {
     WINDOWS_ONLY();
     NEED_NAMES();
-    char want[MAX_PATH]; GetModuleFileNameA(NULL, want, MAX_PATH);
+    /* NULL module goes through ProcessImageFileNameWin32 (decomp: NtQueryInformationProcess class 0x2b), so take the reference
+     * from the same call rather than from the loader's copy of the path. */
+    char want[MAX_PATH]; FN_A(GetCurrentProcess(), NULL, want, MAX_PATH);
     DWORD len = (DWORD)strlen(want);
     HANDLE me = GetCurrentProcess();
     WCHAR w[MAX_PATH]; char a[MAX_PATH], got[MAX_PATH];
@@ -279,7 +281,8 @@ TEST(gap5_filenameex_truncation_exe) {
     memset(a, 0x77, sizeof a);
     n = FN_A(me, NULL, a, len); EXPECT_EQ(n, len - 1); EXPECT_EQ(a[len - 1], 0);
     memset(a, 0x77, sizeof a);
-    n = FN_A(me, NULL, a, 1); EXPECT_EQ(n, 0); EXPECT_EQ(a[0], 0);
+    /* A form: GetModuleFileNameExW returns 0 for nSize 1, and the A wrapper then converts nothing (decomp: DVar1 == 0 skips WideCharToMultiByte) */
+    n = FN_A(me, NULL, a, 1); EXPECT_EQ(n, 0); EXPECT_EQ((unsigned char)a[0], 0x77);
 }
 TEST(gap5_filenameex_truncation_module) {
     NEED_NAMES();

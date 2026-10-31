@@ -107,6 +107,7 @@ CHILD(gap5_con_own) {
     if (in == INVALID_HANDLE_VALUE || out == INVALID_HANDLE_VALUE) return child_end();
 
     /* --- input events --- */
+    Sleep(500);                /* let the new window's focus/size events arrive before the first flush */
     CC(FlushConsoleInputBuffer(in));
     DWORD n = 0xCCCCCCCC; SetLastError(0);
     CC(NINP(in, &n)); CC(n == 0);
@@ -150,7 +151,9 @@ CHILD(gap5_con_own) {
     /* a large queue */
     {
         INPUT_RECORD *big = calloc(500, sizeof *big);
-        for (int i = 0; i < 500; i++) { big[i].EventType = KEY_EVENT; big[i].Event.KeyEvent.bKeyDown = TRUE; big[i].Event.KeyEvent.wRepeatCount = 1; big[i].Event.KeyEvent.uChar.AsciiChar = 'x'; }
+        /* vary the key so no two neighbours are identical (conhost may merge identical repeated key-downs) */
+        for (int i = 0; i < 500; i++) { big[i].EventType = KEY_EVENT; big[i].Event.KeyEvent.bKeyDown = TRUE; big[i].Event.KeyEvent.wRepeatCount = 1;
+            big[i].Event.KeyEvent.wVirtualKeyCode = 'A' + (i % 26); big[i].Event.KeyEvent.uChar.AsciiChar = 'a' + (i % 26); }
         CC(WriteConsoleInputA(in, big, 500, &wr)); CC(wr == 500);
         n = 0; CC(NINP(in, &n)); CC(n == 500);
         CC(FlushConsoleInputBuffer(in));
