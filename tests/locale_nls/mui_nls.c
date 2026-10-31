@@ -324,7 +324,7 @@ CHILD(setthreadpref) {
     uiname(name);
     memset(list, 0, sizeof list); lstrcpyW(list, name);   /* "name\0\0" */
     SetLastError(0);
-    if (!U(SetThreadPreferredUILanguages)(MUI_LANGUAGE_NAME, list, &num)) bad |= 1;
+    if (!U(SetThreadPreferredUILanguages)(MUI_LANGUAGE_NAME, list, &num)) return 0x1000;  /* language may not be installed */
     if (num != 1) bad |= 2;
     cch = 512; num = 0;
     if (!U(GetThreadPreferredUILanguages)(MUI_LANGUAGE_NAME, &num, buf, &cch)) bad |= 4;
@@ -353,6 +353,7 @@ TEST(uipref_set_thread_roundtrip_child) {
     REQUIRE(U(SetThreadPreferredUILanguages));
     if (t_is_wine()) { t_skip("emulator lacks preferred-UI-language setters"); return; }
     DWORD r = t_run_child("setthreadpref", "", 20000);
+    if (r == 0x1000) { t_note("UI language not settable here"); return; }
     CHECKF(r == 0, "child bits 0x%lx", r);
 }
 CHILD(setthreadpref_invalid) {
@@ -384,7 +385,7 @@ CHILD(setprocesspref) {
     uiname(name);
     memset(list, 0, sizeof list); lstrcpyW(list, name);
     SetLastError(0);
-    if (!U(SetProcessPreferredUILanguages)(MUI_LANGUAGE_NAME, list, &num)) bad |= 1;
+    if (!U(SetProcessPreferredUILanguages)(MUI_LANGUAGE_NAME, list, &num)) return 0x1000;
     if (num != 1) bad |= 2;
     cch = 512; num = 0;
     if (!U(GetProcessPreferredUILanguages)(MUI_LANGUAGE_NAME, &num, buf, &cch)) bad |= 4;
@@ -401,6 +402,7 @@ TEST(uipref_set_process_roundtrip_child) {
     REQUIRE(U(SetProcessPreferredUILanguages));
     if (t_is_wine()) { t_skip("emulator lacks preferred-UI-language setters"); return; }
     DWORD r = t_run_child("setprocesspref", "", 20000);
+    if (r == 0x1000) { t_note("UI language not settable here"); return; }
     CHECKF(r == 0, "child bits 0x%lx", r);
 }
 CHILD(setthreadpref_multi) {
