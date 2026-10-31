@@ -146,12 +146,12 @@ TEST(tp_qwi_1000_long_function) {
     tp_ctx_free(&c);
 }
 
+static volatile int prio; static HANDLE prio_ev;
+static DWORD WINAPI wi_prio(LPVOID p) { prio = GetThreadPriority(GetCurrentThread()); SetEvent(prio_ev); return 0; }
 TEST(tp_qwi_normal_thread_priority) {
     REQUIRE(U(QueueUserWorkItem));
-    static volatile int prio; static HANDLE ev;
-    ev = tp_ev(FALSE); prio = 99;
-    DWORD WINAPI f(LPVOID p) { prio = GetThreadPriority(GetCurrentThread()); SetEvent(ev); return 0; }
-    CHECK(U(QueueUserWorkItem)(f, NULL, 0));
+    HANDLE ev = prio_ev = tp_ev(FALSE); prio = 99;
+    CHECK(U(QueueUserWorkItem)(wi_prio, NULL, 0));
     CHECK(tp_signaled(ev, TP_WAIT_MS));
     CHECK(prio == THREAD_PRIORITY_NORMAL);
     CloseHandle(ev);
