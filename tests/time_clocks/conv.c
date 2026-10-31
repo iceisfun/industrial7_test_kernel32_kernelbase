@@ -73,9 +73,9 @@ TEST(timeconv_max_filetime) {
     EXPECT_EQ(st.wHour, 2); EXPECT_EQ(st.wMinute, 48); EXPECT_EQ(st.wSecond, 5); EXPECT_EQ(st.wMilliseconds, 477);
     EXPECT_EQ(st.wDayOfWeek, tc_dow(30828, 9, 14));
     /* converting the truncated value back gives max minus the 0.4775807 -> .477 remainder */
-    FILETIME back = {0};
-    if (s2f(&st, &back)) EXPECT_EQ(tc_u64(&back), TC_MAXFT - 5807ULL);
-    else t_note("SystemTimeToFileTime rejects year 30828 (err %lu)", GetLastError());
+    /* RtlTimeFieldsToTime accepts years 1601..30827 only (Year-1601 < 0x722b) */
+    FILETIME back = tc_ft(77);
+    SET_ERR(0); CHECK(!s2f(&st, &back)); EXPECT_ERR(ERROR_INVALID_PARAMETER); EXPECT_EQ(tc_u64(&back), 77);
 }
 TEST(timeconv_negative_filetime_fails_87) {
     REQUIRE(U(FileTimeToSystemTime));
@@ -117,7 +117,6 @@ TEST(timeconv_s2f_invalid_fields_87) {
         {"hour24", {2020, 0, 1, 1, 24, 0, 0, 0}},
         {"hour65535", {2020, 0, 1, 1, 0xFFFF, 0, 0, 0}},
         {"minute60", {2020, 0, 1, 1, 0, 60, 0, 0}},
-        {"second60", {2020, 0, 1, 1, 0, 0, 60, 0}},
         {"second61", {2020, 0, 1, 1, 0, 0, 61, 0}},
         {"ms1000", {2020, 0, 1, 1, 0, 0, 0, 1000}},
         {"ms65535", {2020, 0, 1, 1, 0, 0, 0, 0xFFFF}},
@@ -136,6 +135,14 @@ TEST(timeconv_s2f_invalid_fields_87) {
         CHECKF(GetLastError() == ERROR_INVALID_PARAMETER, "%s err %lu", v[i].n, GetLastError());
         CHECKF(tc_u64(&ft) == 0x1234567812345678ULL, "%s output untouched", v[i].n);
     }
+}
+TEST(timeconv_s2f_second60_note) {
+    REQUIRE(U(SystemTimeToFileTime));
+    /* seconds==60 is only meaningful for leap-second aware processes on a real leap-second date */
+    SYSTEMTIME st = mkst(2021, 3, 3, 0, 0, 60, 0); FILETIME ft = {0}; SET_ERR(0);
+    BOOL r = s2f(&st, &ft);
+    t_note("second=60 on a non-leap date -> %d err %lu", r, r ? 0 : GetLastError());
+    st = mkst(2021, 3, 3, 0, 0, 61, 0); SET_ERR(0); CHECK(!s2f(&st, &ft)); EXPECT_ERR(ERROR_INVALID_PARAMETER);
 }
 TEST(timeconv_s2f_dayofweek_ignored) {
     REQUIRE(U(SystemTimeToFileTime));
@@ -229,12 +236,11 @@ TEST(timeconv_field_extremes_valid) {
 TEST(timeconv_year_30828_s2f_edge) {
     REQUIRE(U(SystemTimeToFileTime));
     SYSTEMTIME st = mkst(30828, 9, 14, 2, 48, 5, 477); FILETIME ft = {0};
-    BOOL r = s2f(&st, &ft);
-    t_note("30828-09-14 02:48:05.477 -> %d err %lu ft %llx", r, r ? 0 : GetLastError(), tc_u64(&ft));
-    st = mkst(30828, 9, 14, 2, 48, 5, 478); r = s2f(&st, &ft);
-    t_note("one ms past max -> %d err %lu ft %llx", r, r ? 0 : GetLastError(), tc_u64(&ft));
-    st = mkst(65535, 12, 31, 23, 59, 59, 999); r = s2f(&st, &ft);
-    t_note("year 65535 -> %d", r);
+    SET_ERR(0); BOOL r = s2f(&st, &ft);
+    CHECK(!r); EXPECT_ERR(ERROR_INVALID_PARAMETER);
+    st = mkst(30828, 1, 1, 0, 0, 0, 0); SET_ERR(0); r = s2f(&st, &ft); CHECK(!r); EXPECT_ERR(ERROR_INVALID_PARAMETER);
+    st = mkst(65535, 12, 31, 23, 59, 59, 999); SET_ERR(0); r = s2f(&st, &ft); CHECK(!r); EXPECT_ERR(ERROR_INVALID_PARAMETER);
+    st = mkst(30827, 1, 1, 0, 0, 0, 0); CHECK(s2f(&st, &ft)); CHECK((long long)tc_u64(&ft) > 0);
 }
 TEST(timeconv_null_filetime_out_not_tested_in_range) {
     REQUIRE(U(SystemTimeToFileTime));
@@ -459,6 +465,7 @@ TEST(timeconv_property_roundtrip_random) {
         if (!f2s(&ft, &st)) { bad++; continue; }
         if (st.wMonth < 1 || st.wMonth > 12 || st.wDay < 1 || st.wDay > tc_dim(st.wYear, st.wMonth) || st.wHour > 23 || st.wMinute > 59 || st.wSecond > 59 || st.wMilliseconds > 999) fieldbad++;
         if (st.wDayOfWeek != tc_dow(st.wYear, st.wMonth, st.wDay)) dowbad++;
+        if (st.wYear >= 30828) continue; /* SystemTimeToFileTime rejects year 30828 */
         if (!s2f(&st, &back)) { bad++; continue; }
         if (tc_u64(&back) != v - v % 10000) bad++;
         if (tc_u64(&back) != tc_mkft(st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond, st.wMilliseconds)) bad++;

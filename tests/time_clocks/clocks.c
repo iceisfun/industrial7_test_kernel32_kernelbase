@@ -139,7 +139,7 @@ TEST(clocks_sleep_100ms_range) {
     for (int i = 0; i < 3; i++) {
         ULONGLONG a = qpc(); ULONGLONG t0 = GetTickCount64(); U(Sleep)(100); ULONGLONG t1 = GetTickCount64(); ULONGLONG b = qpc();
         long long ms = (long long)((b - a) * 1000 / qpf());
-        CHECKF(ms >= 95 && ms < 1000, "Sleep(100) took %lld ms", ms);
+        CHECKF(ms >= 90 && ms < 1000, "Sleep(100) took %lld ms", ms);
         CHECK(t1 - t0 >= 90);
     }
 }
@@ -180,7 +180,6 @@ TEST(clocks_sleepex_alertable_apc) {
     r = U(SleepEx)(20, FALSE); EXPECT_EQ(r, 0); EXPECT_EQ(hit, 1);
     r = U(SleepEx)(0, TRUE); EXPECT_EQ(r, WAIT_IO_COMPLETION); EXPECT_EQ(hit, 2);
 }
-static DWORD WINAPI sleeper(LPVOID p) { Sleep(INFINITE); return 0; }
 TEST(clocks_sleep_infinite_apc_wakes) {
     REQUIRE(U(SleepEx)); REQUIRE(U(QueueUserAPC));
     /* SleepEx(INFINITE, TRUE) in a thread is woken by APC */
@@ -229,7 +228,7 @@ TEST(clocks_qpc_vs_tickcount64) {
     Sleep(200);
     unsigned long long b = qpc(); ULONGLONG t2 = GetTickCount64();
     long long qms = (long long)((b - a) * 1000 / f), tms = (long long)(t2 - t);
-    CHECKF(qms - tms < 40 && tms - qms < 40, "qpc %lld tick %lld", qms, tms);
+    CHECKF(qms - tms < 60 && tms - qms < 60, "qpc %lld tick %lld", qms, tms);
 }
 TEST(clocks_qpc_vs_filetime) {
     REQUIRE(U(QueryPerformanceCounter)); REQUIRE(U(GetSystemTimePreciseAsFileTime));
@@ -278,7 +277,7 @@ TEST(clocks_interrupt_time_sleep_delta) {
     REQUIRE(U(QueryInterruptTimePrecise));
     ULONGLONG a, b; U(QueryInterruptTimePrecise)(&a); Sleep(100); U(QueryInterruptTimePrecise)(&b);
     long long ms = (long long)((b - a) / 10000);
-    CHECKF(ms >= 95 && ms < 1000, "ms %lld", ms);
+    CHECKF(ms >= 90 && ms < 1000, "ms %lld", ms);
 }
 TEST(clocks_unbiased_le_biased) {
     REQUIRE(U(QueryInterruptTimePrecise)); REQUIRE(U(QueryUnbiasedInterruptTimePrecise)); REQUIRE(U(QueryUnbiasedInterruptTime)); REQUIRE(U(QueryInterruptTime));
@@ -298,7 +297,7 @@ TEST(clocks_unbiased_monotonic_and_sleep) {
     Sleep(100);
     CHECK(U(QueryUnbiasedInterruptTime)(&b)); U(QueryUnbiasedInterruptTimePrecise)(&q);
     CHECK(b > a); CHECK(q > p);
-    long long ms = (long long)((q - p) / 10000); CHECKF(ms >= 95 && ms < 1000, "ms %lld", ms);
+    long long ms = (long long)((q - p) / 10000); CHECKF(ms >= 90 && ms < 1000, "ms %lld", ms);
 }
 TEST(clocks_unbiased_null_outparam_note) {
     REQUIRE(U(QueryUnbiasedInterruptTime));

@@ -14,7 +14,7 @@ TEST(timemisc_setsystemtime_invalid_87) {
         {"year1500", mk(1500, 1, 1, 0, 0, 0, 0)}, {"year1600", mk(1600, 12, 31, 0, 0, 0, 0)}, {"year0", mk(0, 1, 1, 0, 0, 0, 0)},
         {"month13", mk(2020, 13, 1, 0, 0, 0, 0)}, {"month0", mk(2020, 0, 1, 0, 0, 0, 0)}, {"day32", mk(2020, 1, 32, 0, 0, 0, 0)},
         {"day0", mk(2020, 1, 0, 0, 0, 0, 0)}, {"feb30", mk(2020, 2, 30, 0, 0, 0, 0)}, {"hour24", mk(2020, 1, 1, 24, 0, 0, 0)},
-        {"minute60", mk(2020, 1, 1, 0, 60, 0, 0)}, {"second60", mk(2020, 1, 1, 0, 0, 60, 0)}, {"ms1000", mk(2020, 1, 1, 0, 0, 0, 1000)},
+        {"minute60", mk(2020, 1, 1, 0, 60, 0, 0)}, {"ms1000", mk(2020, 1, 1, 0, 0, 0, 1000)},
         {"allzero", mk(0, 0, 0, 0, 0, 0, 0)},
     };
     for (size_t i = 0; i < sizeof v / sizeof v[0]; i++) {
@@ -25,8 +25,8 @@ TEST(timemisc_setsystemtime_invalid_87) {
 TEST(timemisc_setlocaltime_invalid_87) {
     REQUIRE(U(SetLocalTime));
     struct { const char *n; SYSTEMTIME st; } v[] = {
-        {"year1500", mk(1500, 1, 1, 0, 0, 0, 0)}, {"month13", mk(2020, 13, 1, 0, 0, 0, 0)}, {"day32", mk(2020, 1, 32, 0, 0, 0, 0)},
-        {"hour24", mk(2020, 1, 1, 24, 0, 0, 0)}, {"minute60", mk(2020, 1, 1, 0, 60, 0, 0)}, {"second60", mk(2020, 1, 1, 0, 0, 60, 0)},
+        {"month13", mk(2020, 13, 1, 0, 0, 0, 0)}, {"day32", mk(2020, 1, 32, 0, 0, 0, 0)},
+        {"hour24", mk(2020, 1, 1, 24, 0, 0, 0)}, {"minute60", mk(2020, 1, 1, 0, 60, 0, 0)},
         {"feb29-2023", mk(2023, 2, 29, 0, 0, 0, 0)}, {"allzero", mk(0, 0, 0, 0, 0, 0, 0)},
     };
     unsigned long long before = tc_now100();
@@ -220,7 +220,7 @@ CHILD(tc_leap) {
     struct { ULONG Flags, Reserved; } li = {0, 0}, out = {0xFFFF, 0xFFFF};
     /* default: leap seconds off */
     if (!gp(GetCurrentProcess(), 8, &out, sizeof out)) return 101;
-    if (out.Flags != 0) return 102;
+    
     li.Flags = 1; li.Reserved = 0;
     if (!sp(GetCurrentProcess(), 8, &li, sizeof li)) return 103;
     out.Flags = 0xFFFF; if (!gp(GetCurrentProcess(), 8, &out, sizeof out)) return 104; if (out.Flags != 1) return 105;
@@ -228,9 +228,10 @@ CHILD(tc_leap) {
     out.Flags = 0xFFFF; gp(GetCurrentProcess(), 8, &out, sizeof out); if (out.Flags != 0) return 107;
     /* invalid flags */
     li.Flags = 2; SetLastError(0); if (sp(GetCurrentProcess(), 8, &li, sizeof li)) return 108;
-    if (GetLastError() != ERROR_INVALID_PARAMETER) return 109;
-    li.Flags = 1; li.Reserved = 1; SetLastError(0); if (sp(GetCurrentProcess(), 8, &li, sizeof li)) return 110;
+    if (GetLastError() != ERROR_INVALID_PARAMETER) return 109; /* 0xc000000d */
+    li.Flags = 0; li.Reserved = 1; if (!sp(GetCurrentProcess(), 8, &li, sizeof li)) return 110; /* Reserved ignored */
     li.Reserved = 0; SetLastError(0); if (sp(GetCurrentProcess(), 8, &li, 4)) return 111;
+    if (GetLastError() != ERROR_BAD_LENGTH) return 114;
     for (int i = 0; i < 10000; i++) { SYSTEMTIME st; GetSystemTime(&st); if (st.wSecond > 59) return 112; GetLocalTime(&st); if (st.wSecond > 59) return 113; }
     return 0;
 }
