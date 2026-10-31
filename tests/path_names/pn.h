@@ -60,4 +60,7 @@ static inline void pn_touch(const char *p) {
 static inline void pn_fill(WCHAR *b, int n, WCHAR c) { for (int i = 0; i < n; i++) b[i] = c; b[n] = 0; }
 
 #define SENT 0xBEEF
+/* Evaluates the call exactly once (EXPECT_EQ evaluates its arguments twice). */
+#define EXPECT_HR(call, want) do { HRESULT h_ = (call); \
+    t_check(h_ == (HRESULT)(want), __FILE__, __LINE__, #call " == " #want, "hr 0x%lx want 0x%lx", (unsigned long)h_, (unsigned long)(HRESULT)(want)); } while (0)
 #endif
