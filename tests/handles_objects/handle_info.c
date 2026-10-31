@@ -363,8 +363,9 @@ TEST(ho_pseudo_token_handles_note) {
 TEST(ho_cmp_same_handle) {
     REQUIRE(CMP);
     HANDLE h = CreateEventA(NULL, TRUE, FALSE, NULL);
+    BOOL (WINAPI *cmp)(HANDLE, HANDLE) = CMP;
     SET_ERR(0x5151);
-    EXPECT_EQ(CMP(h, h), TRUE);
+    EXPECT_EQ(cmp(h, h), TRUE);
     EXPECT_ERR(0x5151);
     CloseHandle(h);
 }
