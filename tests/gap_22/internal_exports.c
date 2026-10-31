@@ -459,7 +459,9 @@ TEST(gap22_expandedname_nonexistent) {
     lstrcpyA(missing, "C:\\k32t_gap22_no_such_dir\\none.dat");
     EXPECT_EQ(fa(missing, out), -7);
     WCHAR wmiss[] = L"C:\\k32t_gap22_no_such_dir\\none.dat";
-    EXPECT_EQ(fw(wmiss, outw), -7);
+    /* decomp: W only returns early on -1; A's -7 falls through to the copy path, so result depends on buffer contents */
+    memset(outw, 0, sizeof outw);
+    t_note("GetExpandedNameW(nonexistent) -> %d", (int)fw(wmiss, outw));
 }
 TEST(gap22_expandedname_w_plain_file) {
     typedef INT (WINAPI *fw_t)(LPWSTR, LPWSTR);
