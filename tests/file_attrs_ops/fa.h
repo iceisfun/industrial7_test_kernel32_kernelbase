@@ -81,6 +81,13 @@ static int fa_is_ntfs(void) {
     }
     return cached;
 }
+/* single-evaluation versions: operands often contain calls with side effects */
+#undef EXPECT_EQ
+#undef EXPECT_NE
+#define EXPECT_EQ(a, b) do { ULONG_PTR a_ = (ULONG_PTR)(a), b_ = (ULONG_PTR)(b); \
+    t_check(a_ == b_, __FILE__, __LINE__, #a " == " #b, "got 0x%llx want 0x%llx", (unsigned long long)a_, (unsigned long long)b_); } while (0)
+#define EXPECT_NE(a, b) do { ULONG_PTR a_ = (ULONG_PTR)(a), b_ = (ULONG_PTR)(b); \
+    t_check(a_ != b_, __FILE__, __LINE__, #a " != " #b, "got 0x%llx", (unsigned long long)a_); } while (0)
 #define FA_REQUIRE_STREAMS() do { if (!fa_is_ntfs() || t_is_wine()) { t_skip("needs real NTFS"); return; } } while (0)
 #define FA_REQUIRE_NTFS() do { if (!fa_is_ntfs()) { t_skip("not NTFS"); return; } } while (0)
 
