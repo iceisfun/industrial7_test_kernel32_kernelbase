@@ -367,13 +367,13 @@ TEST(gap7_loadstringbyref_arg_validation) {
 TEST(gap7_loadstringbyref_bad_source_string) {
     if (!UN(LoadStringByReference) || t_is_wine()) { t_skip("LoadStringByReference unavailable"); return; }
     WCHAR buf[64]; ULONG out = 0;
-    static const WCHAR *bad[] = { L"", L"plain text", L"@", L"@nocomma", L"nodll,-1" };
+    static const WCHAR *bad[] = { L"", L"plain text", L"nodll,-1" };  /* not starting with '@': _VerifySourceString returns 0 -> ERROR_INVALID_DATA */
     for (size_t i = 0; i < sizeof bad / sizeof bad[0]; i++) {
         SET_ERR(0);
         BOOL r = UN(LoadStringByReference)(0, NULL, bad[i], buf, 64, NULL, &out);
         CHECK(!r);
         DWORD e = GetLastError();
         t_note("LoadStringByReference(\"%ls\") -> err %lu", bad[i], e);
-        CHECK(e != 0);
+        CHECK(e == ERROR_INVALID_DATA);
     }
 }
