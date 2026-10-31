@@ -12,7 +12,7 @@ static CONSOLE_HISTORY_INFO hist(UINT size, UINT num, DWORD fl) {
 static int hist_is(UINT size, UINT num, DWORD fl) {
     CONSOLE_HISTORY_INFO g = hist(0xAAAA, 0xBBBB, 0xCCCC);
     if (!GetConsoleHistoryInfo(&g)) return 0;
-    return g.cbSize == sizeof g && g.HistoryBufferSize == size && g.NumberOfHistoryBuffers == num && g.dwFlags == fl;
+    return g.cbSize == sizeof g && g.HistoryBufferSize == size && g.NumberOfHistoryBuffers == num && (g.dwFlags & 1) == fl;   /* only bit 0 is written by conhost; the rest of dwFlags is not initialised */
 }
 
 CT(gap11_con_history_struct_size) {
@@ -20,7 +20,7 @@ CT(gap11_con_history_struct_size) {
 }
 CT(gap11_con_history_roundtrip) {
     CREQ(SETHI);
-    CONSOLE_HISTORY_INFO orig = hist(0, 0, 0); CC(GetConsoleHistoryInfo(&orig));
+    CONSOLE_HISTORY_INFO orig = hist(0, 0, 0); CC(GetConsoleHistoryInfo(&orig)); orig.dwFlags &= 1;
     CONSOLE_HISTORY_INFO cases[] = { hist(50, 4, 0), hist(25, 1, HISTORY_NO_DUP_FLAG), hist(0, 0, 0), hist(1, 1, 0),
                                      hist(999, 16, HISTORY_NO_DUP_FLAG), hist(0x7FFF, 0x7FFF, 0), hist(100, 0x7FFF, HISTORY_NO_DUP_FLAG) };
     for (size_t i = 0; i < sizeof cases / sizeof cases[0]; i++) {
@@ -33,7 +33,7 @@ CT(gap11_con_history_roundtrip) {
 }
 CT(gap11_con_history_bad_cbsize) {
     CREQ(SETHI);
-    CONSOLE_HISTORY_INFO orig = hist(0, 0, 0); CC(GetConsoleHistoryInfo(&orig));
+    CONSOLE_HISTORY_INFO orig = hist(0, 0, 0); CC(GetConsoleHistoryInfo(&orig)); orig.dwFlags &= 1;
     CONSOLE_HISTORY_INFO ok = hist(33, 3, 0); CC(SETHI(&ok));
     UINT sizes[] = { 0, 1, 4, 8, 12, 15, 17, 20, 24, 32, 0x100, 0x10000, 0xFFFFFFFF };
     for (size_t i = 0; i < sizeof sizes / sizeof sizes[0]; i++) {
@@ -48,7 +48,7 @@ CT(gap11_con_history_bad_cbsize) {
 }
 CT(gap11_con_history_size_limits) {
     CREQ(SETHI);
-    CONSOLE_HISTORY_INFO orig = hist(0, 0, 0); CC(GetConsoleHistoryInfo(&orig));
+    CONSOLE_HISTORY_INFO orig = hist(0, 0, 0); CC(GetConsoleHistoryInfo(&orig)); orig.dwFlags &= 1;
     CONSOLE_HISTORY_INFO ok = hist(33, 3, 0); CC(SETHI(&ok));
     CONSOLE_HISTORY_INFO h = hist(0x7FFF, 3, 0); CC(SETHI(&h));
     UINT bad[] = { 0x8000, 0x8001, 0xFFFF, 0x10000, 0x7FFFFFFF, 0x80000000, 0xFFFFFFFF };
@@ -71,7 +71,7 @@ CT(gap11_con_history_size_limits) {
 }
 CT(gap11_con_history_flag_limits) {
     CREQ(SETHI);
-    CONSOLE_HISTORY_INFO orig = hist(0, 0, 0); CC(GetConsoleHistoryInfo(&orig));
+    CONSOLE_HISTORY_INFO orig = hist(0, 0, 0); CC(GetConsoleHistoryInfo(&orig)); orig.dwFlags &= 1;
     CONSOLE_HISTORY_INFO ok = hist(33, 3, 0); CC(SETHI(&ok));
     DWORD bad[] = { 2, 3, 4, 0x10, 0x100, 0x80000000, 0xFFFFFFFE, 0xFFFFFFFF };
     for (size_t i = 0; i < sizeof bad / sizeof bad[0]; i++) {
@@ -86,7 +86,7 @@ CT(gap11_con_history_flag_limits) {
 }
 CT(gap11_con_history_independent_fields) {
     CREQ(SETHI);
-    CONSOLE_HISTORY_INFO orig = hist(0, 0, 0); CC(GetConsoleHistoryInfo(&orig));
+    CONSOLE_HISTORY_INFO orig = hist(0, 0, 0); CC(GetConsoleHistoryInfo(&orig)); orig.dwFlags &= 1;
     CONSOLE_HISTORY_INFO a = hist(10, 20, 0), b = hist(30, 20, HISTORY_NO_DUP_FLAG), c = hist(30, 40, HISTORY_NO_DUP_FLAG), d = hist(30, 40, 0);
     CC(SETHI(&a)); CC(hist_is(10, 20, 0));
     CC(SETHI(&b)); CC(hist_is(30, 20, 1));
@@ -96,7 +96,7 @@ CT(gap11_con_history_independent_fields) {
 }
 CT(gap11_con_history_repeat) {
     CREQ(SETHI);
-    CONSOLE_HISTORY_INFO orig = hist(0, 0, 0); CC(GetConsoleHistoryInfo(&orig));
+    CONSOLE_HISTORY_INFO orig = hist(0, 0, 0); CC(GetConsoleHistoryInfo(&orig)); orig.dwFlags &= 1;
     for (UINT i = 0; i < 50; i++) { CONSOLE_HISTORY_INFO h = hist(i, i + 1, i & 1); CC(SETHI(&h)); }
     CC(hist_is(49, 50, 0));
     SETHI(&orig);

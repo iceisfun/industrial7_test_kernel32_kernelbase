@@ -159,14 +159,21 @@ TEST(gap11_shreg_set_w_sz_read_as_ansi) {
 }
 TEST(gap11_shreg_set_long_path) {
     REQUIRE(U(SHRegSetUSValueW)); REQUIRE(U(SHRegSetUSValueA));
-    WCHAR pw[400]; char pa[400]; DWORD v = 1;
-    for (int i = 0; i < 399; i++) { pw[i] = L'q'; pa[i] = 'q'; } pw[399] = 0; pa[399] = 0;
+    WCHAR pw[600]; char pa[600]; DWORD v = 1;
+    /* anchored below the private root so nothing can ever be created outside HKCU\\Software\\k32t_<pid>_g11 */
+    g11_clean();
+    char pre[96]; snprintf(pre, sizeof pre, "%s\\", g11_root());
+    size_t pl = strlen(pre);
+    memcpy(pa, pre, pl);
+    for (size_t i = 0; i < pl; i++) pw[i] = (WCHAR)pre[i];
+    for (int i = 0; i < 399; i++) { pw[pl + i] = L'q'; pa[pl + i] = 'q'; } pw[pl + 399] = 0; pa[pl + 399] = 0;
     LONG r = U(SHRegSetUSValueW)(pw, L"v", REG_DWORD, &v, 4, 2);
     t_note("SHRegSetUSValueW(399 char path) -> %ld", (long)r);
     NE(r, 0);
     r = U(SHRegSetUSValueA)(pa, "v", REG_DWORD, &v, 4, 2);
     t_note("SHRegSetUSValueA(399 char path) -> %ld", (long)r);
     NE(r, 0);
+    g11_clean();
 }
 TEST(gap11_shreg_set_readable_back_with_get) {
     REQUIRE(U(SHRegSetUSValueW)); REQUIRE(U(SHRegGetUSValueW));
