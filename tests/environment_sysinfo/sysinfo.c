@@ -461,7 +461,7 @@ TEST(procnum_follows_thread_affinity) {
 }
 TEST(procnum_ex_null_pointer_not_called) {
     /* documentation: the pointer is required; only verify the exports resolve and forward */
-    REQUIRE(UK(GetCurrentProcessorNumberEx)); REQUIRE(UB(GetCurrentProcessorNumberEx));
+    REQUIRE(UK(GetCurrentProcessorNumberEx)); REQUIRE(UB(GetCurrentProcessorNumberEx)); REQUIRE(U(GetActiveProcessorGroupCount));
     PROCESSOR_NUMBER a, b; UK(GetCurrentProcessorNumberEx)(&a); UB(GetCurrentProcessorNumberEx)(&b);
-    CHECK(a.Group == b.Group || 1);
+    CHECK(a.Group < U(GetActiveProcessorGroupCount)() && b.Group < U(GetActiveProcessorGroupCount)());
 }

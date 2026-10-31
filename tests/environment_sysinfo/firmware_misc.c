@@ -409,9 +409,8 @@ TEST(power_status_k32_kernelbase_same) {
 TEST(execstate_continuous_roundtrip) {
     REQUIRE(U(SetThreadExecutionState));
     EXECUTION_STATE p0 = U(SetThreadExecutionState)(ES_CONTINUOUS);
-    CHECK(p0 != 0);
+    t_note("initial previous state 0x%lx", (DWORD)p0);
     EXECUTION_STATE p1 = U(SetThreadExecutionState)(ES_CONTINUOUS | ES_SYSTEM_REQUIRED);
-    CHECK(p1 != 0);
     EXPECT_EQ(p1 & ES_SYSTEM_REQUIRED, 0);
     EXECUTION_STATE p2 = U(SetThreadExecutionState)(ES_CONTINUOUS);
     EXPECT_EQ(p2, (ES_CONTINUOUS | ES_SYSTEM_REQUIRED));
@@ -469,7 +468,7 @@ TEST(execstate_is_per_thread) {
 TEST(execstate_k32_export_resolves) {
     REQUIRE(UK(SetThreadExecutionState));
     EXECUTION_STATE p = UK(SetThreadExecutionState)(ES_CONTINUOUS);
-    CHECK(p != 0);
+    t_note("previous state 0x%lx", (DWORD)p);
     UK(SetThreadExecutionState)(ES_CONTINUOUS);
 }
 

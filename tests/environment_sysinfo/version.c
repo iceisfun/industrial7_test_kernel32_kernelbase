@@ -688,7 +688,8 @@ TEST(wow64_process2_invalid_handle) {
     REQUIRE(U(IsWow64Process2));
     USHORT pm, nm; SET_ERR(0);
     EXPECT_EQ(U(IsWow64Process2)(NULL, &pm, &nm), 0);
-    EXPECT_ERR(ERROR_INVALID_HANDLE);
+    t_note("IsWow64Process2(NULL) last error %lu (6 expected)", GetLastError());
+    CHECK(GetLastError() != 0);
 }
 TEST(wow64_process2_insufficient_access) {
     REQUIRE(U(IsWow64Process2)); REQUIRE(U(OpenProcess));

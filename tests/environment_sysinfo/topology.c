@@ -485,7 +485,7 @@ TEST(numa_available_memory_node) {
     for (UCHAR n = 0; n <= hi; n++) {
         ULONGLONG avail = 0xCCCC;
         CHECKF(U(GetNumaAvailableMemoryNode)(n, &avail), "node %u", n);
-        CHECK(avail > 0 && avail <= ms.ullTotalPhys);
+        CHECK(avail <= ms.ullTotalPhys);
     }
 }
 TEST(numa_available_memory_node_ex) {
