@@ -32,6 +32,9 @@ void g10_cnote(const char *fmt, ...);
 #define GWINESKIP(why) do { if (t_is_wine()) { g10_cline("SKIP " why); g10_cskip = 1; return; } } while (0)
 #define GWSTR(a, b) do { if (!lstrcmpW((a), (b))) g10_cpass++; else g10_cfail(__FILE__, __LINE__, #a " == " #b, "got \"%ls\" want \"%ls\"", (a), (b)); } while (0)
 #define GSTR(a, b)  do { if (!strcmp((a), (b))) g10_cpass++; else g10_cfail(__FILE__, __LINE__, #a " == " #b, "got \"%s\" want \"%s\"", (a), (b)); } while (0)
+/* single-evaluation equality for t_check based tests (EXPECT_EQ evaluates its arguments twice) */
+#define EQ1(a, b) do { unsigned long long a_ = (unsigned long long)(ULONG_PTR)(a), b_ = (unsigned long long)(ULONG_PTR)(b); \
+    t_check(a_ == b_, __FILE__, __LINE__, #a " == " #b, "got 0x%llx want 0x%llx", a_, b_); } while (0)
 /* call that must fail with return 0 and a given last error */
 #define GFAIL(call, err) do { SetLastError(0xBAD); BOOL r_ = (BOOL)(call); GEQ(r_, 0); GERR(err); } while (0)
 
