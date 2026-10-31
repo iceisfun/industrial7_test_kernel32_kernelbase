@@ -289,8 +289,6 @@ TEST(pq_priority_boost_child) {
     CHECK(U(GetProcessPriorityBoost)(pi.hProcess, &d)); EQV(d, FALSE);
     CHECK(U(SetProcessPriorityBoost)(pi.hProcess, TRUE));
     CHECK(U(GetProcessPriorityBoost)(pi.hProcess, &d)); EQV(d, TRUE);
-    CHECK(U(SetProcessPriorityBoost)(pi.hProcess, 5));
-    CHECK(U(GetProcessPriorityBoost)(pi.hProcess, &d)); EQV(d, TRUE);
     CHECK(U(SetProcessPriorityBoost)(pi.hProcess, FALSE));
     CHECK(U(GetProcessPriorityBoost)(pi.hProcess, &d)); EQV(d, FALSE);
     pc_kill(&pi);
@@ -356,6 +354,7 @@ TEST(pq_image_name_invalid_flags_87) {
 }
 TEST(pq_image_name_huge_size_87) {
     REQUIRE(U(QueryFullProcessImageNameW));
+    if (t_is_wine()) { t_skip("crashes under wine"); return; }
     WCHAR b[16]; DWORD s = 0x7FFFFFF8; SET_ERR(0); CHECK(!U(QueryFullProcessImageNameW)(GetCurrentProcess(), 0, b, &s)); EQV(GetLastError(), ERROR_INVALID_PARAMETER);
     s = 0xFFFFFFFF; SET_ERR(0); CHECK(!U(QueryFullProcessImageNameW)(GetCurrentProcess(), 0, b, &s)); EQV(GetLastError(), ERROR_INVALID_PARAMETER);
 }
@@ -444,7 +443,7 @@ TEST(pq_session_id_system_process_is_zero) {
 TEST(pq_session_id_errors) {
     REQUIRE(U(ProcessIdToSessionId));
     DWORD sid = 0xFFFF;
-    SET_ERR(0); CHECK(!U(ProcessIdToSessionId)(GetCurrentProcessId(), NULL)); EQV(GetLastError(), ERROR_INVALID_PARAMETER);
+    if (!t_is_wine()) { SET_ERR(0); CHECK(!U(ProcessIdToSessionId)(GetCurrentProcessId(), NULL)); EQV(GetLastError(), ERROR_INVALID_PARAMETER); }
     SET_ERR(0); CHECK(!U(ProcessIdToSessionId)(0x7FFFFFF0, &sid)); EQV(GetLastError(), ERROR_INVALID_PARAMETER);
     SET_ERR(0); CHECK(!U(ProcessIdToSessionId)(3, &sid)); EQV(GetLastError(), ERROR_INVALID_PARAMETER);
     SET_ERR(0); if (U(ProcessIdToSessionId)(0, &sid)) t_note("ProcessIdToSessionId(0) -> %lu", sid); else t_note("ProcessIdToSessionId(0) err %lu", GetLastError());

@@ -278,9 +278,9 @@ TEST(popen_own_pid_access_matrix) {
         PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE | PROCESS_VM_READ, READ_CONTROL, PROCESS_SET_LIMITED_INFORMATION };
     NtQueryObject_pfn q = UN(NtQueryObject); int i;
     for (i = 0; i < (int)(sizeof rights / sizeof rights[0]); i++) {
-        HANDLE h = U(OpenProcess)(rights[i], FALSE, GetCurrentProcessId()); ULONG b[7] = { 0 };
+        HANDLE h = U(OpenProcess)(rights[i], FALSE, GetCurrentProcessId()); PC_OBI b; memset(&b, 0, sizeof b);
         CHECKF(h != NULL, "right 0x%lx err %lu", rights[i], GetLastError());
-        if (h && q && q(h, 0, b, sizeof b, NULL) >= 0) CHECKF((b[1] & rights[i]) == rights[i], "granted 0x%lx for 0x%lx", b[1], rights[i]);
+        if (h && q && q(h, 0, &b, sizeof b, NULL) >= 0) CHECKF((b.GrantedAccess & rights[i]) == rights[i], "granted 0x%lx for 0x%lx", b.GrantedAccess, rights[i]);
         if (h) CloseHandle(h);
     }
 }
@@ -345,7 +345,7 @@ TEST(popen_zero_and_generic_access_observed) {
     SET_ERR(0); h = U(OpenProcess)(GENERIC_ALL, FALSE, me); t_note("OpenProcess(GENERIC_ALL) -> %s err %lu", h ? "handle" : "NULL", GetLastError()); if (h) CloseHandle(h);
     SET_ERR(0); h = U(OpenProcess)(MAXIMUM_ALLOWED, FALSE, me);
     CHECK(h != NULL);
-    if (h) { NtQueryObject_pfn q = UN(NtQueryObject); ULONG b[7] = { 0 }; if (q && q(h, 0, b, sizeof b, NULL) >= 0) t_note("MAXIMUM_ALLOWED granted 0x%lx", b[1]); CloseHandle(h); }
+    if (h) { NtQueryObject_pfn q = UN(NtQueryObject); PC_OBI b; memset(&b, 0, sizeof b); if (q && q(h, 0, &b, sizeof b, NULL) >= 0) t_note("MAXIMUM_ALLOWED granted 0x%lx", b.GrantedAccess); CloseHandle(h); }
 }
 TEST(popen_access_rights_enforced_on_operations) {
     REQUIRE(U(OpenProcess));

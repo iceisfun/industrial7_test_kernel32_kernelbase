@@ -14,6 +14,7 @@ UDECL(LONG, NtQueryObject, (HANDLE, ULONG, PVOID, ULONG, PULONG));
 /* single-evaluation equality check (EXPECT_EQ evaluates its arguments twice) */
 #define EQV(a, b) do { unsigned long long a_ = (unsigned long long)(ULONG_PTR)(a), b_ = (unsigned long long)(ULONG_PTR)(b); \
     t_check(a_ == b_, __FILE__, __LINE__, #a " == " #b, "got 0x%llx want 0x%llx", a_, b_); } while (0)
+typedef struct { ULONG Attributes, GrantedAccess, HandleCount, PointerCount, PagedPool, NonPagedPool, Res[3], NameInfoSize, TypeInfoSize, SecDescSize; LARGE_INTEGER CreationTime; } PC_OBI;
 #define PC_NOTSET ((HANDLE)0)
 #define PC_TIMEOUT 25000
 

@@ -56,15 +56,15 @@ TEST(pcreate_pi_ids_unique_across_spawns) {
 }
 TEST(pcreate_pi_process_handle_full_access) {
     REQUIRE(UK(CreateProcessW)); UNT(NtQueryObject);
-    NtQueryObject_pfn q = UN(NtQueryObject); PROCESS_INFORMATION pi; ULONG b[7];
+    NtQueryObject_pfn q = UN(NtQueryObject); PROCESS_INFORMATION pi; PC_OBI b;
     REQUIRE(q);
     CHECK(pc_suspended("pc_exit77", "", 0, &pi));
-    memset(b, 0, sizeof b);
-    CHECK(q(pi.hProcess, 0, b, sizeof b, NULL) >= 0);
-    CHECKF((b[1] & PROCESS_ALL_ACCESS) == PROCESS_ALL_ACCESS, "granted 0x%lx", b[1]);
-    memset(b, 0, sizeof b);
-    CHECK(q(pi.hThread, 0, b, sizeof b, NULL) >= 0);
-    CHECKF((b[1] & THREAD_ALL_ACCESS) == THREAD_ALL_ACCESS, "granted 0x%lx", b[1]);
+    memset(&b, 0, sizeof b);
+    CHECK(q(pi.hProcess, 0, &b, sizeof b, NULL) >= 0);
+    CHECKF((b.GrantedAccess & PROCESS_ALL_ACCESS) == PROCESS_ALL_ACCESS, "granted 0x%lx", b.GrantedAccess);
+    memset(&b, 0, sizeof b);
+    CHECK(q(pi.hThread, 0, &b, sizeof b, NULL) >= 0);
+    CHECKF((b.GrantedAccess & THREAD_ALL_ACCESS) == THREAD_ALL_ACCESS, "granted 0x%lx", b.GrantedAccess);
     pc_kill(&pi);
 }
 TEST(pcreate_pi_handles_not_inheritable_by_default) {
