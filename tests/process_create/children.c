@@ -426,3 +426,14 @@ CHILD(pc_scn) {
     pc_out("fail=unknown scenario %s\n", argv[1]);
     return 2;
 }
+
+/* child run under a pseudo console: reports console state through its (console) stdout */
+CHILD(pc_pty) {
+    DWORD mode = 0, w; HANDLE o = GetStdHandle(STD_OUTPUT_HANDLE), i = GetStdHandle(STD_INPUT_HANDLE);
+    CONSOLE_SCREEN_BUFFER_INFO csbi; char b[256]; int n;
+    BOOL outcon = U(GetConsoleMode)(o, &mode), incon = U(GetConsoleMode)(i, &mode), sb;
+    memset(&csbi, 0, sizeof csbi); sb = GetConsoleScreenBufferInfo(o, &csbi);
+    n = snprintf(b, sizeof b, "PTYHELLO outcon=%d incon=%d sb=%d cols=%d rows=%d\r\n", outcon, incon, sb, csbi.srWindow.Right - csbi.srWindow.Left + 1, csbi.srWindow.Bottom - csbi.srWindow.Top + 1);
+    WriteFile(o, b, n, &w, NULL);
+    return 0;
+}
