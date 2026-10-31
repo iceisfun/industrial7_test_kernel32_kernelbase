@@ -677,17 +677,15 @@ CTF(con_title_original_matches_start_title, CREATE_NEW_CONSOLE, "k32t_title_orig
     WCHAR o[64], t[64]; char oa[64];
     DWORD n = GetConsoleOriginalTitleW(o, 64);
     cnote("original title \"%ls\" (%lu)", o, n);
-    CEQ(n, 15);
-    CWSTR(o, L"k32t_title_orig");
+    /* an elevated console host may prefix the title; accept that */
+    CC(n >= 15 && !lstrcmpW(o + n - 15, L"k32t_title_orig"));
     GetConsoleTitleW(t, 64);
-    CWSTR(t, L"k32t_title_orig");
+    CC(lstrlenW(t) >= 15 && !lstrcmpW(t + lstrlenW(t) - 15, L"k32t_title_orig"));
     CC(SetConsoleTitleW(L"changed"));
     n = GetConsoleOriginalTitleW(o, 64);
-    CEQ(n, 15);
-    CWSTR(o, L"k32t_title_orig");
+    CC(n >= 15 && !lstrcmpW(o + n - 15, L"k32t_title_orig"));
     n = GetConsoleOriginalTitleA(oa, 64);
-    CEQ(n, 15);
-    CSTR(oa, "k32t_title_orig");
+    CC(n >= 15 && !strcmp(oa + n - 15, "k32t_title_orig"));
 }
 
 CTF(con_title_original_buffer_sizes, CREATE_NEW_CONSOLE, "k32t_title_orig") {

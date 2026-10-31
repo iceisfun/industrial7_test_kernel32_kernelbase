@@ -1767,12 +1767,9 @@ CT(con_font_ex_bad_cbsize) {
     DWORD sz[] = { 0, 1, 80, 83, 85, 100, 0x10000 };
     for (size_t k = 0; k < sizeof sz / sizeof sz[0]; k++) {
         CONSOLE_FONT_INFOEX f; memset(&f, 0, sizeof f); f.cbSize = sz[k];
-        SetLastError(0xBAD);
-        BOOL r = GetCurrentConsoleFontEx(hout_(), FALSE, &f);
-        DWORD e = GetLastError();
-        cnote("GetCurrentConsoleFontEx cbSize=%lu -> %d err=%lu", sz[k], r, e);
-        CCF(r == FALSE, "cbSize %lu", sz[k]);
-        if (!r) CEQ(e, ERROR_INVALID_PARAMETER);
+        FAILS(GetCurrentConsoleFontEx(hout_(), FALSE, &f), ERROR_INVALID_PARAMETER);
+        FAILS(GetCurrentConsoleFontEx(hout_(), TRUE, &f), ERROR_INVALID_PARAMETER);
+        FAILS(SetCurrentConsoleFontEx(hout_(), FALSE, &f), ERROR_INVALID_PARAMETER);
     }
 }
 
