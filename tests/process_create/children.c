@@ -93,8 +93,7 @@ CHILD(pc_stdprobe) {
 CHILD(pc_cmdline) {
     LPWSTR w = U(GetCommandLineW)(); LPSTR a = U(GetCommandLineA)();
     WCHAR conv[40000]; int n;
-    pc_outw("cmdW", w);
-    pc_out("cmdA=%s\n", a);
+    if (lstrlenW(w) < 3000) { pc_outw("cmdW", w); pc_out("cmdA=%s\n", a); }
     pc_out("lenW=%d\nlenA=%d\n", lstrlenW(w), lstrlenA(a));
     pc_out("stableW=%d\nstableA=%d\n", w == U(GetCommandLineW)(), a == U(GetCommandLineA)());
     n = MultiByteToWideChar(CP_ACP, 0, a, -1, conv, 40000);
@@ -394,7 +393,30 @@ static void scn_errmode(void) {
     old = U(SetErrorMode)(SEM_NOALIGNMENTFAULTEXCEPT);
     CK(U(SetErrorMode)(old) == SEM_NOALIGNMENTFAULTEXCEPT);
 }
+typedef struct { DWORD Size; int Type; union { struct { DWORD Id; WORD Group; BYTE LogicalProcessorIndex, CoreIndex, LastLevelCacheIndex, NumaNodeIndex, EfficiencyClass, Flags; DWORD Reserved; DWORD64 AllocationTag; } CpuSet; } u; } PC_CPUSET;
+static void scn_cpuset(void) {
+    ULONG len = 0, n; BYTE *buf; DWORD id = 0, req = 0xFFFF, ids[4]; ULONG got = 0; BOOL ok;
+    SetLastError(0);
+    ok = UN(GetSystemCpuSetInformation)(NULL, 0, &len, GetCurrentProcess(), 0);
+    CK(!ok); CK(GetLastError() == ERROR_INSUFFICIENT_BUFFER); CK(len >= 32);
+    buf = (BYTE *)HeapAlloc(GetProcessHeap(), 0, len + 64);
+    CK(UN(GetSystemCpuSetInformation)((PVOID)buf, len + 64, &len, GetCurrentProcess(), 0));
+    { ULONG off = 0, cnt = 0; while (off < len) { PC_CPUSET *e = (PC_CPUSET *)(buf + off); CK(e->Size >= 32); CK(e->Type == 0); if (cnt == 0) id = e->u.CpuSet.Id; cnt++; off += e->Size ? e->Size : 32; }
+      CK(cnt >= 1); { SYSTEM_INFO si; GetSystemInfo(&si); NOTE("cpu sets %lu, logical processors %lu", cnt, si.dwNumberOfProcessors); } }
+    /* default cpu set: none by default */
+    CK(UN(GetProcessDefaultCpuSets)(GetCurrentProcess(), NULL, 0, &req)); CK(req == 0);
+    ids[0] = id;
+    CK(UN(SetProcessDefaultCpuSets)(GetCurrentProcess(), ids, 1));
+    req = 0xFFFF; SetLastError(0); ok = UN(GetProcessDefaultCpuSets)(GetCurrentProcess(), NULL, 0, &req);
+    CK(!ok); CK(GetLastError() == ERROR_INSUFFICIENT_BUFFER); CK(req == 1);
+    memset(ids, 0, sizeof ids); CK(UN(GetProcessDefaultCpuSets)(GetCurrentProcess(), ids, 4, &req)); CK(req == 1); CK(ids[0] == id);
+    SetLastError(0); ids[0] = 0x7FFFFFF0; CK(!UN(SetProcessDefaultCpuSets)(GetCurrentProcess(), ids, 1)); NOTE("bad cpu set id error %lu", GetLastError());
+    CK(UN(SetProcessDefaultCpuSets)(GetCurrentProcess(), NULL, 0));
+    req = 0xFFFF; CK(UN(GetProcessDefaultCpuSets)(GetCurrentProcess(), NULL, 0, &req)); CK(req == 0);
+    HeapFree(GetProcessHeap(), 0, buf);
+}
 static struct { const char *n; void (*f)(void); } g_scn[] = {
+    { "cpuset", scn_cpuset },
     { "prio_bg", scn_prio_bg }, { "prio_set", scn_prio_set }, { "affinity", scn_affinity }, { "shutdown", scn_shutdown },
     { "mitig_set", scn_mitig_set }, { "procinfo", scn_procinfo }, { "errmode", scn_errmode },
 };

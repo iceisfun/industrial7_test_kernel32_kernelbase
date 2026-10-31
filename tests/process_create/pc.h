@@ -6,8 +6,14 @@
 #include <ctype.h>
 
 UDECL(LONG, NtQueryInformationProcess, (HANDLE, ULONG, PVOID, ULONG, PULONG));
+UDECL(BOOL, GetSystemCpuSetInformation, (PVOID, ULONG, PULONG, HANDLE, ULONG));
+UDECL(BOOL, GetProcessDefaultCpuSets, (HANDLE, PULONG, ULONG, PULONG));
+UDECL(BOOL, SetProcessDefaultCpuSets, (HANDLE, const ULONG *, ULONG));
 UDECL(LONG, NtQueryObject, (HANDLE, ULONG, PVOID, ULONG, PULONG));
 
+/* single-evaluation equality check (EXPECT_EQ evaluates its arguments twice) */
+#define EQV(a, b) do { unsigned long long a_ = (unsigned long long)(ULONG_PTR)(a), b_ = (unsigned long long)(ULONG_PTR)(b); \
+    t_check(a_ == b_, __FILE__, __LINE__, #a " == " #b, "got 0x%llx want 0x%llx", a_, b_); } while (0)
 #define PC_NOTSET ((HANDLE)0)
 #define PC_TIMEOUT 25000
 
@@ -211,7 +217,7 @@ static void pc_out(const char *fmt, ...) {
     char b[8192]; va_list a; DWORD w; int n;
     va_start(a, fmt); n = vsnprintf(b, sizeof b, fmt, a); va_end(a);
     if (n < 0) return;
-    if (n >= (int)sizeof b) n = sizeof b - 1;
+    if (n >= (int)sizeof b) { n = sizeof b - 1; b[n - 1] = '\n'; }
     WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), b, n, &w, NULL);
 }
 static void pc_outw(const char *key, const WCHAR *s) {

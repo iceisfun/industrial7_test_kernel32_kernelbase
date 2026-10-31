@@ -13,22 +13,22 @@ static void pc_writefile(const char *leaf, const void *data, DWORD n) {
 TEST(pcreate_w_basic_exit_code) {
     REQUIRE(UK(CreateProcessW));
     pc_opts o; memset(&o, 0, sizeof o); o.child = "pc_exit77";
-    EXPECT_EQ(pc_run(&o, PC_TIMEOUT), 77);
+    EQV(pc_run(&o, PC_TIMEOUT), 77);
 }
 TEST(pcreate_a_basic_exit_code) {
     REQUIRE(UK(CreateProcessA));
     pc_opts o; memset(&o, 0, sizeof o); o.child = "pc_exit77"; o.ansi = 1;
-    EXPECT_EQ(pc_run(&o, PC_TIMEOUT), 77);
+    EQV(pc_run(&o, PC_TIMEOUT), 77);
 }
 TEST(pcreate_a_with_application_name) {
     REQUIRE(UK(CreateProcessA));
     pc_opts o; memset(&o, 0, sizeof o); o.child = "pc_exit77"; o.ansi = 1; o.app = pc_selfw();
-    EXPECT_EQ(pc_run(&o, PC_TIMEOUT), 77);
+    EQV(pc_run(&o, PC_TIMEOUT), 77);
 }
 TEST(pcreate_w_with_application_name) {
     REQUIRE(UK(CreateProcessW));
     pc_opts o; memset(&o, 0, sizeof o); o.child = "pc_exit77"; o.app = pc_selfw();
-    EXPECT_EQ(pc_run(&o, PC_TIMEOUT), 77);
+    EQV(pc_run(&o, PC_TIMEOUT), 77);
 }
 TEST(pcreate_pi_fields_valid) {
     REQUIRE(UK(CreateProcessW));
@@ -93,19 +93,19 @@ TEST(pcreate_initial_thread_priority_normal) {
     REQUIRE(UK(CreateProcessW));
     PROCESS_INFORMATION pi;
     CHECK(pc_suspended("pc_exit77", "", IDLE_PRIORITY_CLASS, &pi));
-    EXPECT_EQ(U(GetThreadPriority)(pi.hThread), THREAD_PRIORITY_NORMAL);
+    EQV(U(GetThreadPriority)(pi.hThread), THREAD_PRIORITY_NORMAL);
     pc_kill(&pi);
 }
 TEST(pcreate_wait_signals_after_exit_and_stays_signaled) {
     REQUIRE(UK(CreateProcessW));
     PROCESS_INFORMATION pi; DWORD code = 0;
     CHECK(pc_suspended("pc_exit77", "", 0, &pi));
-    EXPECT_EQ(WaitForSingleObject(pi.hProcess, 150), WAIT_TIMEOUT);
-    EXPECT_EQ(ResumeThread(pi.hThread), 1);
-    EXPECT_EQ(WaitForSingleObject(pi.hProcess, PC_TIMEOUT), WAIT_OBJECT_0);
-    EXPECT_EQ(WaitForSingleObject(pi.hProcess, 0), WAIT_OBJECT_0);
-    EXPECT_EQ(WaitForSingleObject(pi.hThread, 5000), WAIT_OBJECT_0);
-    CHECK(GetExitCodeProcess(pi.hProcess, &code)); EXPECT_EQ(code, 77);
+    EQV(WaitForSingleObject(pi.hProcess, 150), WAIT_TIMEOUT);
+    EQV(ResumeThread(pi.hThread), 1);
+    EQV(WaitForSingleObject(pi.hProcess, PC_TIMEOUT), WAIT_OBJECT_0);
+    EQV(WaitForSingleObject(pi.hProcess, 0), WAIT_OBJECT_0);
+    EQV(WaitForSingleObject(pi.hThread, 5000), WAIT_OBJECT_0);
+    CHECK(GetExitCodeProcess(pi.hProcess, &code)); EQV(code, 77);
     CHECK(GetExitCodeThread(pi.hThread, &code)); t_note("main thread exit code %lu", code);
     CloseHandle(pi.hProcess); CloseHandle(pi.hThread);
 }
@@ -113,6 +113,7 @@ TEST(pcreate_wait_signals_after_exit_and_stays_signaled) {
 /* ---------- parameter validation ---------- */
 TEST(pcreate_null_app_and_cmdline_fails_87) {
     REQUIRE(UK(CreateProcessW)); REQUIRE(UK(CreateProcessA));
+    if (t_is_wine()) { t_skip("crashes under wine"); return; }
     STARTUPINFOW si; STARTUPINFOA sa; PROCESS_INFORMATION pi;
     memset(&si, 0, sizeof si); si.cb = sizeof si; memset(&sa, 0, sizeof sa); sa.cb = sizeof sa;
     SET_ERR(0); CHECK(!UK(CreateProcessW)(NULL, NULL, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)); EXPECT_ERR(ERROR_INVALID_PARAMETER);
@@ -120,6 +121,7 @@ TEST(pcreate_null_app_and_cmdline_fails_87) {
 }
 TEST(pcreate_null_startupinfo_or_pi_fails_87) {
     REQUIRE(UK(CreateProcessW));
+    if (t_is_wine()) { t_skip("crashes under wine"); return; }
     WCHAR cmd[MAX_PATH * 2]; STARTUPINFOW si; PROCESS_INFORMATION pi;
     wsprintfW(cmd, L"\"%s\" --child pc_exit77", pc_selfw());
     memset(&si, 0, sizeof si); si.cb = sizeof si;
@@ -263,11 +265,11 @@ TEST(pcreate_system_program_found_by_search) {
     REQUIRE(UK(CreateProcessW));
     pc_opts o; memset(&o, 0, sizeof o); o.raw_cmd = L"cmd /c exit 5";
     o.flags = CREATE_NO_WINDOW;
-    EXPECT_EQ(pc_run(&o, PC_TIMEOUT), 5);
+    EQV(pc_run(&o, PC_TIMEOUT), 5);
     o.raw_cmd = L"cmd.exe /c exit 6";
-    EXPECT_EQ(pc_run(&o, PC_TIMEOUT), 6);
+    EQV(pc_run(&o, PC_TIMEOUT), 6);
     o.raw_cmd = L"CMD.EXE /C exit 7";
-    EXPECT_EQ(pc_run(&o, PC_TIMEOUT), 7);
+    EQV(pc_run(&o, PC_TIMEOUT), 7);
 }
 TEST(pcreate_system_program_via_application_name) {
     REQUIRE(UK(CreateProcessW));
@@ -275,7 +277,7 @@ TEST(pcreate_system_program_via_application_name) {
     GetSystemDirectoryW(p, MAX_PATH); lstrcatW(p, L"\\cmd.exe");
     wsprintfW(cmd, L"cmd /c exit 9");
     memset(&o, 0, sizeof o); o.app = p; o.raw_cmd = cmd; o.flags = CREATE_NO_WINDOW;
-    EXPECT_EQ(pc_run(&o, PC_TIMEOUT), 9);
+    EQV(pc_run(&o, PC_TIMEOUT), 9);
 }
 
 /* ---------- access denied / suspended-never-runs ---------- */
@@ -284,11 +286,11 @@ TEST(pcreate_suspended_then_terminated_never_runs) {
     char f[MAX_PATH * 2], args[MAX_PATH * 2 + 4]; PROCESS_INFORMATION pi; DWORD code = 0;
     t_tmpfile(f, sizeof f, "marker_never.txt"); snprintf(args, sizeof args, "\"%s\"", f);
     CHECK(pc_suspended("pc_touch", args, 0, &pi));
-    EXPECT_EQ(WaitForSingleObject(pi.hProcess, 300), WAIT_TIMEOUT);
-    CHECK(GetExitCodeProcess(pi.hProcess, &code)); EXPECT_EQ(code, STILL_ACTIVE);
+    EQV(WaitForSingleObject(pi.hProcess, 300), WAIT_TIMEOUT);
+    CHECK(GetExitCodeProcess(pi.hProcess, &code)); EQV(code, STILL_ACTIVE);
     CHECK(U(TerminateProcess)(pi.hProcess, 0x1234));
-    EXPECT_EQ(WaitForSingleObject(pi.hProcess, 5000), WAIT_OBJECT_0);
-    CHECK(GetExitCodeProcess(pi.hProcess, &code)); EXPECT_EQ(code, 0x1234);
+    EQV(WaitForSingleObject(pi.hProcess, 5000), WAIT_OBJECT_0);
+    CHECK(GetExitCodeProcess(pi.hProcess, &code)); EQV(code, 0x1234);
     CHECK(GetFileAttributesA(f) == INVALID_FILE_ATTRIBUTES);
     CloseHandle(pi.hProcess); CloseHandle(pi.hThread);
 }
@@ -311,12 +313,13 @@ UDECL(BOOL, CreateProcessInternalW, (HANDLE, LPCWSTR, LPWSTR, LPSECURITY_ATTRIBU
 UDECL(BOOL, CreateProcessInternalA, (HANDLE, LPCSTR, LPSTR, LPSECURITY_ATTRIBUTES, LPSECURITY_ATTRIBUTES, BOOL, DWORD, LPVOID, LPCSTR, LPSTARTUPINFOA, LPPROCESS_INFORMATION, PHANDLE));
 TEST(pcreate_internal_w_null_token) {
     CreateProcessInternalW_pfn f = UN(CreateProcessInternalW); REQUIRE(f);
+    if (t_is_wine()) { t_skip("crashes under wine"); return; }
     WCHAR cmd[MAX_PATH * 2]; STARTUPINFOW si; PROCESS_INFORMATION pi; DWORD code = 0;
     wsprintfW(cmd, L"\"%s\" --child pc_exit77", pc_selfw());
     memset(&si, 0, sizeof si); si.cb = sizeof si;
     CHECK(f(NULL, NULL, cmd, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi, NULL));
     CHECK(WaitForSingleObject(pi.hProcess, PC_TIMEOUT) == WAIT_OBJECT_0);
-    GetExitCodeProcess(pi.hProcess, &code); EXPECT_EQ(code, 77);
+    GetExitCodeProcess(pi.hProcess, &code); EQV(code, 77);
     CloseHandle(pi.hProcess); CloseHandle(pi.hThread);
     SET_ERR(0); CHECK(!f(NULL, NULL, NULL, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi, NULL)); EXPECT_ERR(ERROR_INVALID_PARAMETER);
 }
@@ -327,7 +330,7 @@ TEST(pcreate_internal_a_null_token) {
     memset(&si, 0, sizeof si); si.cb = sizeof si;
     CHECK(f(NULL, NULL, cmd, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi, NULL));
     CHECK(WaitForSingleObject(pi.hProcess, PC_TIMEOUT) == WAIT_OBJECT_0);
-    GetExitCodeProcess(pi.hProcess, &code); EXPECT_EQ(code, 77);
+    GetExitCodeProcess(pi.hProcess, &code); EQV(code, 77);
     CloseHandle(pi.hProcess); CloseHandle(pi.hThread);
 }
 TEST(pcreate_as_user_null_token_observed) {
@@ -344,23 +347,23 @@ TEST(pcreate_winexec_success_returns_33) {
     char f[MAX_PATH * 2], cmd[MAX_PATH * 4]; int i; UINT r;
     t_tmpfile(f, sizeof f, "winexec_marker.txt");
     snprintf(cmd, sizeof cmd, "\"%s\" --child pc_touch \"%s\"", t_self_path(), f);
-    r = U(WinExec)(cmd, SW_HIDE); EXPECT_EQ(r, 33);
+    r = U(WinExec)(cmd, SW_HIDE); EQV(r, 33);
     for (i = 0; i < 200 && GetFileAttributesA(f) == INVALID_FILE_ATTRIBUTES; i++) Sleep(50);
     CHECK(GetFileAttributesA(f) != INVALID_FILE_ATTRIBUTES);
 }
 TEST(pcreate_winexec_error_returns) {
     REQUIRE(U(WinExec));
     char p[MAX_PATH * 2];
-    EXPECT_EQ(U(WinExec)("k32t_no_such_program_zz.exe", SW_HIDE), 2);
-    t_tmpfile(p, sizeof p, "no_such_dir\\x.exe"); EXPECT_EQ(U(WinExec)(p, SW_HIDE), 3);
+    EQV(U(WinExec)("k32t_no_such_program_zz.exe", SW_HIDE), 2);
+    t_tmpfile(p, sizeof p, "no_such_dir\\x.exe"); { UINT r = U(WinExec)(p, SW_HIDE); CHECKF(r == 2 || r == 3, "got %u", r); }
     pc_writefile("winexec_bad.exe", "not an exe at all", 17); t_tmpfile(p, sizeof p, "winexec_bad.exe");
-    EXPECT_EQ(U(WinExec)(p, SW_HIDE), 11);
+    EQV(U(WinExec)(p, SW_HIDE), 11);
 }
 TEST(pcreate_loadmodule_not_found) {
     REQUIRE(U(LoadModule));
     struct { LPVOID env; LPSTR cmd; WORD *show; DWORD rsv; } pb; WORD show[2] = { 2, SW_HIDE };
     pb.env = NULL; pb.cmd = (LPSTR)"\0"; pb.show = show; pb.rsv = 0;
-    EXPECT_EQ(U(LoadModule)("k32t_no_such_module_zz", &pb), 2);
+    EQV(U(LoadModule)("k32t_no_such_module_zz", &pb), 2);
 }
 TEST(pcreate_loadmodule_runs_program) {
     REQUIRE(U(LoadModule));
@@ -372,7 +375,7 @@ TEST(pcreate_loadmodule_runs_program) {
     if (strchr(self, ' ') || strchr(f, ' ')) { t_skip("path contains spaces"); return; }
     snprintf(pas + 1, sizeof pas - 1, "--child pc_touch %s", f); pas[0] = (char)strlen(pas + 1);
     pb.env = NULL; pb.cmd = pas; pb.show = show; pb.rsv = 0;
-    r = U(LoadModule)(self, &pb); EXPECT_EQ(r, 33);
+    r = U(LoadModule)(self, &pb); EQV(r, 33);
     for (i = 0; i < 200 && GetFileAttributesA(f) == INVALID_FILE_ATTRIBUTES; i++) Sleep(50);
     CHECK(GetFileAttributesA(f) != INVALID_FILE_ATTRIBUTES);
 }

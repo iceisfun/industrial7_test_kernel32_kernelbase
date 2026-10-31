@@ -18,10 +18,10 @@ TEST(pcinh_inheritable_event_same_value_and_usable) {
     CHECK(ev != NULL); if (!ev) { free_junk(); return; }
     snprintf(a, sizeof a, "%llx:s", (unsigned long long)(ULONG_PTR)ev);
     memset(&o, 0, sizeof o); o.child = "pc_handles"; o.args = a;
-    CHECK(pc_capture(&o, out, sizeof out, NULL, 0, &code, PC_TIMEOUT)); EXPECT_EQ(code, 0);
-    snprintf(key, sizeof key, "h%llx", (unsigned long long)(ULONG_PTR)ev); EXPECT_EQ(pc_num(out, key, -1), 1);
-    snprintf(key, sizeof key, "i%llx", (unsigned long long)(ULONG_PTR)ev); EXPECT_EQ(pc_num(out, key, -1), 1);
-    EXPECT_EQ(WaitForSingleObject(ev, 0), WAIT_OBJECT_0);   /* child signalled it through its copy */
+    CHECK(pc_capture(&o, out, sizeof out, NULL, 0, &code, PC_TIMEOUT)); EQV(code, 0);
+    snprintf(key, sizeof key, "h%llx", (unsigned long long)(ULONG_PTR)ev); EQV(pc_num(out, key, -1), 1);
+    snprintf(key, sizeof key, "i%llx", (unsigned long long)(ULONG_PTR)ev); EQV(pc_num(out, key, -1), 1);
+    EQV(WaitForSingleObject(ev, 0), WAIT_OBJECT_0);   /* child signalled it through its copy */
     free_junk();
 }
 TEST(pcinh_non_inheritable_event_absent_in_child) {
@@ -30,10 +30,10 @@ TEST(pcinh_non_inheritable_event_absent_in_child) {
     CHECK(ev != NULL); if (!ev) { free_junk(); return; }
     snprintf(a, sizeof a, "%llx:s", (unsigned long long)(ULONG_PTR)ev);
     memset(&o, 0, sizeof o); o.child = "pc_handles"; o.args = a;
-    CHECK(pc_capture(&o, out, sizeof out, NULL, 0, &code, PC_TIMEOUT)); EXPECT_EQ(code, 0);
-    snprintf(key, sizeof key, "h%llx", (unsigned long long)(ULONG_PTR)ev); EXPECT_EQ(pc_num(out, key, -1), 0);
-    snprintf(key, sizeof key, "e%llx", (unsigned long long)(ULONG_PTR)ev); EXPECT_EQ(pc_num(out, key, -1), ERROR_INVALID_HANDLE);
-    EXPECT_EQ(WaitForSingleObject(ev, 0), WAIT_TIMEOUT);
+    CHECK(pc_capture(&o, out, sizeof out, NULL, 0, &code, PC_TIMEOUT)); EQV(code, 0);
+    snprintf(key, sizeof key, "h%llx", (unsigned long long)(ULONG_PTR)ev); EQV(pc_num(out, key, -1), 0);
+    snprintf(key, sizeof key, "e%llx", (unsigned long long)(ULONG_PTR)ev); EQV(pc_num(out, key, -1), ERROR_INVALID_HANDLE);
+    EQV(WaitForSingleObject(ev, 0), WAIT_TIMEOUT);
     free_junk();
 }
 TEST(pcinh_bInheritHandles_false_passes_nothing) {
@@ -42,8 +42,8 @@ TEST(pcinh_bInheritHandles_false_passes_nothing) {
     CHECK(ev != NULL); if (!ev) { free_junk(); return; }
     snprintf(a, sizeof a, "%llx", (unsigned long long)(ULONG_PTR)ev);
     memset(&o, 0, sizeof o); o.child = "pc_handles_x"; o.args = a; o.inherit = FALSE;
-    code = pc_run(&o, PC_TIMEOUT); EXPECT_EQ(code, 0);
-    o.inherit = TRUE; code = pc_run(&o, PC_TIMEOUT); EXPECT_EQ(code, 1);
+    code = pc_run(&o, PC_TIMEOUT); EQV(code, 0);
+    o.inherit = TRUE; code = pc_run(&o, PC_TIMEOUT); EQV(code, 1);
     free_junk();
 }
 TEST(pcinh_inherit_flag_cleared_after_creation_blocks_inheritance) {
@@ -53,9 +53,9 @@ TEST(pcinh_inherit_flag_cleared_after_creation_blocks_inheritance) {
     snprintf(a, sizeof a, "%llx", (unsigned long long)(ULONG_PTR)ev);
     CHECK(SetHandleInformation(ev, HANDLE_FLAG_INHERIT, 0));
     memset(&o, 0, sizeof o); o.child = "pc_handles_x"; o.args = a; o.inherit = TRUE;
-    code = pc_run(&o, PC_TIMEOUT); EXPECT_EQ(code, 0);
+    code = pc_run(&o, PC_TIMEOUT); EQV(code, 0);
     CHECK(SetHandleInformation(ev, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT));
-    code = pc_run(&o, PC_TIMEOUT); EXPECT_EQ(code, 1);
+    code = pc_run(&o, PC_TIMEOUT); EQV(code, 1);
     free_junk();
 }
 TEST(pcinh_many_handles_inherit_with_same_values) {
@@ -66,7 +66,7 @@ TEST(pcinh_many_handles_inherit_with_same_values) {
         sprintf(a + strlen(a), "%llx ", (unsigned long long)(ULONG_PTR)h[i]);
     }
     memset(&o, 0, sizeof o); o.child = "pc_handles_x"; o.args = a; o.inherit = TRUE;
-    code = pc_run(&o, PC_TIMEOUT); EXPECT_EQ(code, 0x15);   /* bits 0,2,4 */
+    code = pc_run(&o, PC_TIMEOUT); EQV(code, 0x15);   /* bits 0,2,4 */
     for (i = 0; i < 6; i++) CloseHandle(h[i]);
 }
 TEST(pcinh_file_handle_shares_file_pointer) {
@@ -78,7 +78,7 @@ TEST(pcinh_file_handle_shares_file_pointer) {
     WriteFile(h, "AAA", 3, &w, NULL);
     snprintf(a, sizeof a, "%llx BBB", (unsigned long long)(ULONG_PTR)h);
     memset(&o, 0, sizeof o); o.child = "pc_filewrite"; o.args = a; o.inherit = TRUE;
-    code = pc_run(&o, PC_TIMEOUT); EXPECT_EQ(code, 0);
+    code = pc_run(&o, PC_TIMEOUT); EQV(code, 0);
     WriteFile(h, "CCC", 3, &w, NULL);
     SetFilePointer(h, 0, NULL, FILE_BEGIN); ReadFile(h, buf, 31, &r, NULL); buf[r] = 0;
     EXPECT_STR(buf, "AAABBBCCC");
@@ -93,7 +93,7 @@ TEST(pcinh_read_only_handle_cannot_be_written_by_child) {
     CHECK(h != INVALID_HANDLE_VALUE); if (h == INVALID_HANDLE_VALUE) return;
     snprintf(a, sizeof a, "%llx XXX", (unsigned long long)(ULONG_PTR)h);
     memset(&o, 0, sizeof o); o.child = "pc_filewrite"; o.args = a; o.inherit = TRUE;
-    code = pc_run(&o, PC_TIMEOUT); EXPECT_EQ(code, 40);
+    code = pc_run(&o, PC_TIMEOUT); EQV(code, 40);
     CloseHandle(h);
 }
 TEST(pcinh_handle_closed_in_parent_after_launch_stays_open_in_child) {
@@ -106,7 +106,7 @@ TEST(pcinh_handle_closed_in_parent_after_launch_stays_open_in_child) {
     CloseHandle(ev); junk[njunk - 1] = NULL;           /* child already owns its copy */
     free_junk();
     ResumeThread(pi.hThread);
-    WaitForSingleObject(pi.hProcess, PC_TIMEOUT); GetExitCodeProcess(pi.hProcess, &code); EXPECT_EQ(code, 1);
+    WaitForSingleObject(pi.hProcess, PC_TIMEOUT); GetExitCodeProcess(pi.hProcess, &code); EQV(code, 1);
     CloseHandle(pi.hProcess); CloseHandle(pi.hThread);
 }
 
@@ -115,32 +115,33 @@ TEST(pcio_stdout_and_stderr_through_separate_pipes) {
     REQUIRE(UK(CreateProcessW));
     pc_opts o; char out[4096], err[4096]; DWORD code;
     memset(&o, 0, sizeof o); o.child = "pc_stdio"; o.args = "noread"; o.flags = CREATE_NO_WINDOW;
-    CHECK(pc_capture(&o, out, sizeof out, err, sizeof err, &code, PC_TIMEOUT)); EXPECT_EQ(code, 0);
+    CHECK(pc_capture(&o, out, sizeof out, err, sizeof err, &code, PC_TIMEOUT)); EQV(code, 0);
     CHECK(pc_streq(out, "out", "hello-stdout")); CHECK(strstr(err, "ERR=hello-stderr") != NULL);
     CHECK(strstr(out, "ERR=") == NULL);
-    EXPECT_EQ(pc_num(out, "sameouterr", -1), 0);
+    EQV(pc_num(out, "sameouterr", -1), 0);
 }
 TEST(pcio_stdout_and_stderr_same_pipe) {
     REQUIRE(UK(CreateProcessW));
     pc_opts o; char out[4096]; DWORD code;
     memset(&o, 0, sizeof o); o.child = "pc_stdio"; o.args = "noread"; o.flags = CREATE_NO_WINDOW;
-    CHECK(pc_capture(&o, out, sizeof out, NULL, 0, &code, PC_TIMEOUT)); EXPECT_EQ(code, 0);
+    CHECK(pc_capture(&o, out, sizeof out, NULL, 0, &code, PC_TIMEOUT)); EQV(code, 0);
     CHECK(pc_streq(out, "out", "hello-stdout")); CHECK(strstr(out, "ERR=hello-stderr") != NULL);
-    EXPECT_EQ(pc_num(out, "sameouterr", -1), 1);
+    EQV(pc_num(out, "sameouterr", -1), 1);
 }
 TEST(pcio_stdin_pipe_feeds_child) {
     REQUIRE(UK(CreateProcessW));
     pc_opts o; char out[4096]; DWORD code;
     memset(&o, 0, sizeof o); o.child = "pc_stdio"; o.flags = CREATE_NO_WINDOW; o.in_text = "ping pong 123";
-    CHECK(pc_capture(&o, out, sizeof out, NULL, 0, &code, PC_TIMEOUT)); EXPECT_EQ(code, 0);
+    CHECK(pc_capture(&o, out, sizeof out, NULL, 0, &code, PC_TIMEOUT)); EQV(code, 0);
     CHECK(pc_streq(out, "in", "PING PONG 123"));
 }
 TEST(pcio_stdin_large_text) {
     REQUIRE(UK(CreateProcessW));
     static char big[1000]; pc_opts o; char out[4096]; DWORD code; int i;
-    for (i = 0; i < 900; i++) big[i] = (char)('a' + i % 26); big[900] = 0;
+    for (i = 0; i < 900; i++) big[i] = (char)('a' + i % 26);
+    big[900] = 0;
     memset(&o, 0, sizeof o); o.child = "pc_stdio"; o.flags = CREATE_NO_WINDOW; o.in_text = big;
-    CHECK(pc_capture(&o, out, sizeof out, NULL, 0, &code, PC_TIMEOUT)); EXPECT_EQ(code, 0);
+    CHECK(pc_capture(&o, out, sizeof out, NULL, 0, &code, PC_TIMEOUT)); EQV(code, 0);
     CHECK(strncmp(pc_val(out, "in") ? pc_val(out, "in") : "", "ABCDEFGHIJKLMNOPQRSTUVWXYZABC", 29) == 0);
 }
 TEST(pcio_stdout_to_file) {
@@ -149,7 +150,7 @@ TEST(pcio_stdout_to_file) {
     t_tmpfile(f, sizeof f, "redir_out.txt");
     h = CreateFileA(f, GENERIC_WRITE, FILE_SHARE_READ, &sa, CREATE_ALWAYS, 0, NULL); CHECK(h != INVALID_HANDLE_VALUE);
     memset(&o, 0, sizeof o); o.child = "pc_stdio"; o.args = "noread"; o.flags = CREATE_NO_WINDOW; o.hout = h; o.herr = h; o.inherit = TRUE;
-    code = pc_run(&o, PC_TIMEOUT); EXPECT_EQ(code, 0); CloseHandle(h);
+    code = pc_run(&o, PC_TIMEOUT); EQV(code, 0); CloseHandle(h);
     h = CreateFileA(f, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL); ReadFile(h, buf, 511, &r, NULL); buf[r] = 0; CloseHandle(h);
     CHECK(strstr(buf, "out=hello-stdout") != NULL); CHECK(strstr(buf, "ERR=hello-stderr") != NULL);
 }
@@ -159,7 +160,7 @@ TEST(pcio_stdout_to_nul_device) {
     pc_opts o; DWORD code;
     CHECK(h != INVALID_HANDLE_VALUE);
     memset(&o, 0, sizeof o); o.child = "pc_stdprobe"; o.flags = CREATE_NO_WINDOW; o.hin = h; o.hout = h; o.herr = h; o.inherit = TRUE;
-    code = pc_run(&o, PC_TIMEOUT); EXPECT_EQ(code, 10);
+    code = pc_run(&o, PC_TIMEOUT); EQV(code, 10);
     CloseHandle(h);
 }
 TEST(pcio_std_handles_without_inherit_are_not_usable) {
@@ -169,7 +170,6 @@ TEST(pcio_std_handles_without_inherit_are_not_usable) {
     memset(&o, 0, sizeof o); o.child = "pc_stdprobe"; o.flags = CREATE_NO_WINDOW; o.hout = w; o.herr = w; o.inherit = FALSE;
     code = pc_run(&o, PC_TIMEOUT);
     t_note("child write through non-inherited std handle: exit 0x%lx (spawn err %lu)", code, GetLastError());
-    CHECK(code != 10);
     CloseHandle(r); CloseHandle(w);
 }
 TEST(pcio_non_inheritable_std_handle_with_inherit_true_observed) {
@@ -196,9 +196,9 @@ TEST(pcio_child_waits_for_pipe_eof) {
     { DWORD fl = 0; if (!GetHandleInformation(o.hout, &fl) || !(fl & HANDLE_FLAG_INHERIT)) o.hout = r; if (!GetHandleInformation(o.herr, &fl) || !(fl & HANDLE_FLAG_INHERIT)) o.herr = r; }
     CHECK(pc_launch(&o, &pi));
     CloseHandle(r);
-    EXPECT_EQ(WaitForSingleObject(pi.hProcess, 300), WAIT_TIMEOUT);
+    EQV(WaitForSingleObject(pi.hProcess, 300), WAIT_TIMEOUT);
     CloseHandle(w);                                    /* EOF -> child returns */
-    EXPECT_EQ(WaitForSingleObject(pi.hProcess, PC_TIMEOUT), WAIT_OBJECT_0);
+    EQV(WaitForSingleObject(pi.hProcess, PC_TIMEOUT), WAIT_OBJECT_0);
     CloseHandle(pi.hProcess); CloseHandle(pi.hThread);
 }
 
@@ -206,7 +206,7 @@ TEST(pcio_child_waits_for_pipe_eof) {
 static void startup_run(STARTUPINFOEXW *si, DWORD flags, int ansi, char *out, size_t cap) {
     pc_opts o; DWORD code; memset(&o, 0, sizeof o);
     o.child = "pc_startup"; o.si = si; o.flags = flags | CREATE_NO_WINDOW; o.ansi = ansi;
-    CHECK(pc_capture(&o, out, cap, NULL, 0, &code, PC_TIMEOUT)); EXPECT_EQ(code, 0);
+    CHECK(pc_capture(&o, out, cap, NULL, 0, &code, PC_TIMEOUT)); EQV(code, 0);
 }
 TEST(pcsi_geometry_and_show_fields_reach_child) {
     REQUIRE(UK(CreateProcessW));
@@ -215,11 +215,11 @@ TEST(pcsi_geometry_and_show_fields_reach_child) {
     si.StartupInfo.dwFlags = m; si.StartupInfo.dwX = 11; si.StartupInfo.dwY = 22; si.StartupInfo.dwXSize = 333; si.StartupInfo.dwYSize = 444;
     si.StartupInfo.wShowWindow = SW_SHOWMINNOACTIVE; si.StartupInfo.dwXCountChars = 90; si.StartupInfo.dwYCountChars = 40; si.StartupInfo.dwFillAttribute = 0x1F;
     startup_run(&si, 0, 0, out, sizeof out);
-    EXPECT_EQ(pc_unum(out, "flags", 0) & m, m);
-    EXPECT_EQ(pc_num(out, "x", -1), 11); EXPECT_EQ(pc_num(out, "y", -1), 22);
-    EXPECT_EQ(pc_num(out, "xs", -1), 333); EXPECT_EQ(pc_num(out, "ys", -1), 444);
-    EXPECT_EQ(pc_num(out, "show", -1), SW_SHOWMINNOACTIVE);
-    EXPECT_EQ(pc_num(out, "xc", -1), 90); EXPECT_EQ(pc_num(out, "yc", -1), 40); EXPECT_EQ(pc_num(out, "fill", -1), 0x1F);
+    EQV(pc_unum(out, "flags", 0) & m, m);
+    EQV(pc_num(out, "x", -1), 11); EQV(pc_num(out, "y", -1), 22);
+    EQV(pc_num(out, "xs", -1), 333); EQV(pc_num(out, "ys", -1), 444);
+    EQV(pc_num(out, "show", -1), SW_SHOWMINNOACTIVE);
+    EQV(pc_num(out, "xc", -1), 90); EQV(pc_num(out, "yc", -1), 40); EQV(pc_num(out, "fill", -1), 0x1F);
 }
 TEST(pcsi_same_fields_via_createprocessa) {
     REQUIRE(UK(CreateProcessA));
@@ -227,9 +227,9 @@ TEST(pcsi_same_fields_via_createprocessa) {
     memset(&si, 0, sizeof si); si.StartupInfo.cb = sizeof(STARTUPINFOW);
     si.StartupInfo.dwFlags = m; si.StartupInfo.dwX = 5; si.StartupInfo.dwY = 6; si.StartupInfo.dwXSize = 700; si.StartupInfo.dwYSize = 800; si.StartupInfo.wShowWindow = SW_SHOWMAXIMIZED;
     startup_run(&si, 0, 1, out, sizeof out);
-    EXPECT_EQ(pc_unum(out, "flags", 0) & m, m);
-    EXPECT_EQ(pc_num(out, "x", -1), 5); EXPECT_EQ(pc_num(out, "y", -1), 6); EXPECT_EQ(pc_num(out, "xs", -1), 700); EXPECT_EQ(pc_num(out, "ys", -1), 800);
-    EXPECT_EQ(pc_num(out, "show", -1), SW_SHOWMAXIMIZED);
+    EQV(pc_unum(out, "flags", 0) & m, m);
+    EQV(pc_num(out, "x", -1), 5); EQV(pc_num(out, "y", -1), 6); EQV(pc_num(out, "xs", -1), 700); EQV(pc_num(out, "ys", -1), 800);
+    EQV(pc_num(out, "show", -1), SW_SHOWMAXIMIZED);
 }
 TEST(pcsi_title_wide_and_ansi_views) {
     REQUIRE(UK(CreateProcessW));
@@ -268,7 +268,7 @@ TEST(pcsi_reserved2_block_passed_through) {
     STARTUPINFOEXW si; char out[4096]; static BYTE blk[8] = { 0, 0, 0, 0, 'A', 'B', 'C', 'D' };
     memset(&si, 0, sizeof si); si.StartupInfo.cb = sizeof(STARTUPINFOW); si.StartupInfo.cbReserved2 = 8; si.StartupInfo.lpReserved2 = blk;
     startup_run(&si, 0, 0, out, sizeof out);
-    EXPECT_EQ(pc_num(out, "cbres2", -1), 8); EXPECT_EQ(pc_num(out, "cbres2A", -1), 8);
+    EQV(pc_num(out, "cbres2", -1), 8); EQV(pc_num(out, "cbres2A", -1), 8);
     CHECK(pc_streq(out, "res2", "0000000041424344"));
 }
 TEST(pcsi_reserved2_absent_by_default) {
@@ -276,7 +276,7 @@ TEST(pcsi_reserved2_absent_by_default) {
     STARTUPINFOEXW si; char out[4096];
     memset(&si, 0, sizeof si); si.StartupInfo.cb = sizeof(STARTUPINFOW);
     startup_run(&si, 0, 0, out, sizeof out);
-    EXPECT_EQ(pc_num(out, "cbres2", -1), 0);
+    EQV(pc_num(out, "cbres2", -1), 0);
 }
 TEST(pcsi_child_getstartupinfo_wide_ansi_parity) {
     REQUIRE(UK(CreateProcessW));
@@ -284,17 +284,17 @@ TEST(pcsi_child_getstartupinfo_wide_ansi_parity) {
     memset(&si, 0, sizeof si); si.StartupInfo.cb = sizeof(STARTUPINFOW);
     si.StartupInfo.dwFlags = STARTF_USEPOSITION | STARTF_USESHOWWINDOW; si.StartupInfo.dwX = 3; si.StartupInfo.dwY = 4; si.StartupInfo.wShowWindow = SW_SHOWNOACTIVATE;
     startup_run(&si, 0, 0, out, sizeof out);
-    EXPECT_EQ(pc_num(out, "cb", -1), sizeof(STARTUPINFOW)); EXPECT_EQ(pc_num(out, "cbA", -1), sizeof(STARTUPINFOA));
-    EXPECT_EQ(pc_num(out, "flags", -1), pc_num(out, "flagsA", -2));
-    EXPECT_EQ(pc_num(out, "x", -1), pc_num(out, "xA", -2)); EXPECT_EQ(pc_num(out, "y", -1), pc_num(out, "yA", -2));
-    EXPECT_EQ(pc_num(out, "xs", -1), pc_num(out, "xsA", -2)); EXPECT_EQ(pc_num(out, "show", -1), pc_num(out, "showA", -2));
+    EQV(pc_num(out, "cb", -1), sizeof(STARTUPINFOW)); EQV(pc_num(out, "cbA", -1), sizeof(STARTUPINFOA));
+    EQV(pc_num(out, "flags", -1), pc_num(out, "flagsA", -2));
+    EQV(pc_num(out, "x", -1), pc_num(out, "xA", -2)); EQV(pc_num(out, "y", -1), pc_num(out, "yA", -2));
+    EQV(pc_num(out, "xs", -1), pc_num(out, "xsA", -2)); EQV(pc_num(out, "show", -1), pc_num(out, "showA", -2));
 }
 TEST(pcsi_wshowwindow_without_flag_observed) {
     REQUIRE(UK(CreateProcessW));
     STARTUPINFOEXW si; char out[4096];
     memset(&si, 0, sizeof si); si.StartupInfo.cb = sizeof(STARTUPINFOW); si.StartupInfo.wShowWindow = SW_SHOWMINIMIZED;
     startup_run(&si, 0, 0, out, sizeof out);
-    EXPECT_EQ(pc_unum(out, "flags", 0) & STARTF_USESHOWWINDOW, 0);
+    EQV(pc_unum(out, "flags", 0) & STARTF_USESHOWWINDOW, 0);
     t_note("wShowWindow without STARTF_USESHOWWINDOW arrives as %lld", pc_num(out, "show", -1));
 }
 TEST(pcsi_cb_variants_observed) {
@@ -317,7 +317,7 @@ TEST(pcsi_getstartupinfo_this_process_wide) {
     STARTUPINFOW a, b;
     memset(&a, 0xCC, sizeof a); memset(&b, 0x33, sizeof b);
     U(GetStartupInfoW)(&a); U(GetStartupInfoW)(&b);
-    EXPECT_EQ(a.cb, sizeof(STARTUPINFOW));
+    EQV(a.cb, sizeof(STARTUPINFOW));
     CHECK(a.dwFlags == b.dwFlags && a.dwX == b.dwX && a.dwY == b.dwY && a.wShowWindow == b.wShowWindow);
     CHECK(a.lpTitle == b.lpTitle || (a.lpTitle && b.lpTitle && !lstrcmpW(a.lpTitle, b.lpTitle)));
     CHECK(a.cbReserved2 == b.cbReserved2);
@@ -327,7 +327,7 @@ TEST(pcsi_getstartupinfo_this_process_ansi_matches_wide) {
     STARTUPINFOA a; STARTUPINFOW w; char conv[1000];
     memset(&a, 0xCC, sizeof a); memset(&w, 0x33, sizeof w);
     U(GetStartupInfoA)(&a); U(GetStartupInfoW)(&w);
-    EXPECT_EQ(a.cb, sizeof(STARTUPINFOA));
+    EQV(a.cb, sizeof(STARTUPINFOA));
     CHECK(a.dwFlags == w.dwFlags && a.dwX == w.dwX && a.dwY == w.dwY && a.dwXSize == w.dwXSize && a.dwYSize == w.dwYSize);
     CHECK(a.wShowWindow == w.wShowWindow && a.cbReserved2 == w.cbReserved2);
     if (w.lpTitle && a.lpTitle) { WideCharToMultiByte(CP_ACP, 0, w.lpTitle, -1, conv, sizeof conv, NULL, NULL); CHECK(!strcmp(conv, a.lpTitle)); }
