@@ -2,7 +2,7 @@
 #include "tf.h"
 
 typedef struct { HANDLE h; HANDLE ev; DWORD tid; } worker;
-static void w_start(worker *w) { w->ev = tf_ev(TRUE, FALSE); w->h = CreateThread(NULL, 0, tf_th_waitev, w->ev, 0, &w->tid); }
+static void w_start(worker *w) { w->ev = tf_ev(TRUE, FALSE); w->h = CreateThread(NULL, 0, tf_th_waitev, w->ev, 0, &w->tid); Sleep(20); }
 static void w_stop(worker *w) { SetEvent(w->ev); tf_join(w->h); CloseHandle(w->ev); w->h = w->ev = NULL; }
 static HANDLE w_open(worker *w, DWORD access) { return OpenThread(access, FALSE, w->tid); }
 
