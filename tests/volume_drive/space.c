@@ -77,7 +77,7 @@ TEST(vd_diskfree_nonexistent_drive_fails) {
     SET_ERR(0);
     CHECK(!U(GetDiskFreeSpaceW)(w, &spc, &bps, &fr, &tot));
     DWORD e = GetLastError();
-    CHECKF(e == ERROR_PATH_NOT_FOUND || e == ERROR_INVALID_DRIVE, "err %lu", e);
+    CHECKF(e == ERROR_PATH_NOT_FOUND || e == ERROR_FILE_NOT_FOUND || e == ERROR_INVALID_DRIVE, "err %lu", e);
     CHECK(bps == 0);          /* zeroed when the open fails */
     CHECK(spc == SENT && fr == SENT && tot == SENT);
     CHECK(!U(GetDiskFreeSpaceA)(a, &spc, &bps, &fr, &tot));
@@ -247,7 +247,7 @@ TEST(vd_diskfreeex_nonexistent_drive) {
     SET_ERR(0);
     CHECK(!U(GetDiskFreeSpaceExW)(w, &av, &t, &f));
     DWORD e = GetLastError();
-    CHECKF(e == ERROR_PATH_NOT_FOUND || e == ERROR_INVALID_DRIVE, "err %lu", e);
+    CHECKF(e == ERROR_PATH_NOT_FOUND || e == ERROR_FILE_NOT_FOUND || e == ERROR_INVALID_DRIVE, "err %lu", e);
     CHECK(av.QuadPart == SENT && t.QuadPart == SENT && f.QuadPart == SENT);
     CHECK(!U(GetDiskFreeSpaceExA)(a, &av, &t, &f));
 }

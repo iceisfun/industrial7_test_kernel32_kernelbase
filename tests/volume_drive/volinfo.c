@@ -58,7 +58,8 @@ TEST(vd_gvi_serial_matches_across_calls) {
 }
 TEST(vd_gvi_no_trailing_backslash_invalid_name) {
     REQUIRE(U(GetVolumeInformationW)); REQUIRE(U(GetVolumeInformationA));
-    char s[3] = { vd_sysletter(), ':', 0 }; WCHAR w[3]; vd_widen(s, w, 3);
+    /* Must not be a bare "X:" (resolves via the drive's cwd, possibly the root). Decomp: NT path not ending in '\\' -> STATUS_OBJECT_NAME_INVALID -> 123. */
+    char s[16] = { vd_sysletter(), ':', '\\', 'W', 'i', 'n', 'd', 'o', 'w', 's', 0 }; WCHAR w[16]; vd_widen(s, w, 16);
     DWORD ser = SENT_U;
     SET_ERR(0);
     CHECK(!U(GetVolumeInformationW)(w, NULL, 0, &ser, NULL, NULL, NULL, 0));
