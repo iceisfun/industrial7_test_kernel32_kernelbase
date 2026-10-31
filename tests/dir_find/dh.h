@@ -147,5 +147,27 @@ static int dh_mksymlink(const char *link, const char *target, int isdir) {
     if (!f) return 0;
     return f(link, target, (isdir ? 1 : 0) | 2) != 0;
 }
+
+/* Recursive delete using wide APIs and \\?\ paths (handles unicode, trailing dots, long paths). dirw is a plain or \\?\ path. */
+static void dh_rmtreeW(const WCHAR *dirw) {
+    WCHAR raw[32768 / 8], pat[32768 / 8], sub[32768 / 8];
+    if (!wcsncmp(dirw, L"\\\\?\\", 4)) wcscpy(raw, dirw); else snwprintf(raw, 4096, L"\\\\?\\%ls", dirw);
+    snwprintf(pat, 4096, L"%ls\\*", raw);
+    WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileW(pat, &fd);
+    if (h != INVALID_HANDLE_VALUE) {
+        do {
+            if (!wcscmp(fd.cFileName, L".") || !wcscmp(fd.cFileName, L"..")) continue;
+            snwprintf(sub, 4096, L"%ls\\%ls", raw, fd.cFileName);
+            SetFileAttributesW(sub, FILE_ATTRIBUTE_NORMAL | ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) ? FILE_ATTRIBUTE_DIRECTORY : 0));
+            if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) && !(fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)) dh_rmtreeW(sub);
+            else if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) RemoveDirectoryW(sub);
+            else DeleteFileW(sub);
+        } while (FindNextFileW(h, &fd));
+        FindClose(h);
+    }
+    RemoveDirectoryW(raw);
+}
+static void dh_rmtree(const char *dir) { WCHAR w[MAX_PATH]; dh_w(w, MAX_PATH, dir); dh_rmtreeW(w); }
 #define DH_CHILD_CHECK(c) do { if (!(c)) return __LINE__; } while (0)
 #endif

@@ -7,7 +7,8 @@
     TEST(cwd_##nm) { char a[MAX_PATH + 8]; char *d = dh_dir("cwd_" #nm); \
         snprintf(a, sizeof a, "\"%s\"", d); \
         DWORD r = t_run_child("cw_" #nm, a, 25000); \
-        CHECKF(r == 0, "child failed at line %lu (0xdead0000/1 = spawn/timeout)", r); } \
+        CHECKF(r == 0, "child failed at line %lu (0xdead0000/1 = spawn/timeout)", r); \
+        dh_rmtree(d); } \
     static int cwdbody_##nm(const char *d)
 
 static int cwd_is(const char *want) {
