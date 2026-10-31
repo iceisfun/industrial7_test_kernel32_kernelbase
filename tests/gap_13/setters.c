@@ -312,7 +312,7 @@ TEST(gap13_settokeninfo_session_requires_tcb) {
 /* ---------- Tape APIs: all on invalid / non-tape handles ---------- */
 TEST(gap13_settapeparameters_bad_operation) {
     REQUIRE(U(SetTapeParameters));
-    /* operations other than 0 and 1 return ERROR_INVALID_FUNCTION without touching the handle */
+    /* kernel32!SetTapeParameters: operations other than 0 and 1 return 1 without touching the handle */
     EXPECT_EQ(U(SetTapeParameters)(INVALID_HANDLE_VALUE, 2, NULL), ERROR_INVALID_FUNCTION);
     EXPECT_EQ(U(SetTapeParameters)(NULL, 2, NULL), ERROR_INVALID_FUNCTION);
     EXPECT_EQ(U(SetTapeParameters)(NULL, 0xffffffff, NULL), ERROR_INVALID_FUNCTION);
@@ -527,7 +527,9 @@ TEST(gap13_setusergeoname_current_noop) {
     /* setting the already-current region name short-circuits and returns TRUE without any change */
     WCHAR cur[16] = {0};
     int n = U(GetUserDefaultGeoName)(cur, 16);
-    if (n == 0) { t_skip("no geo name"); return; }
+    /* SetUserGeoName short-circuits only when the name fits GetUserDefaultGeoName(buf, 4); otherwise it
+       would rewrite the registry, which this test must never do. */
+    if (n == 0 || n > 4) { t_skip("no geo name / not short-circuit eligible"); return; }
     SET_ERR(0);
     BOOL ok = U(SetUserGeoName)(cur);
     CHECKF(ok, "err %lu", GetLastError());
