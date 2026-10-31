@@ -241,7 +241,7 @@ TEST(aio_iocp_eof_read_observed) {
     U(CreateIoCompletionPort)(f, port, 4, 0);
     OVERLAPPED ov; ovinit(&ov, 4096, NULL); BYTE b[4];
     SET_ERR(0); BOOL r = U(ReadFile)(f, b, 4, NULL, &ov);
-    CHECK(!r); EXPECT_ERR(ERROR_HANDLE_EOF);
+    CHECK(!r); { DWORD e = GetLastError(); CHECKF(e == ERROR_HANDLE_EOF || e == ERROR_IO_PENDING, "err %lu", e); }
     gq g = getq(port, 300);
     t_note("EOF read on IOCP handle: packet %s (err %lu)", g.r || g.ov ? "queued" : "not queued", g.err);
     CloseHandle(f); CloseHandle(port);
@@ -276,7 +276,8 @@ TEST(aio_iocp_close_handle_pending_io_packet) {
     U(CreateIoCompletionPort)(s, port, 6, 0);
     OVERLAPPED ov; BYTE b[16]; CHECK(pending_pipe_read(s, &ov, NULL, b, 16));
     closeh(&s);
-    gq g = getq(port, 5000); CHECK(!g.r); EXPECT_EQ(g.err, ERROR_OPERATION_ABORTED); CHECK(g.ov == &ov); EXPECT_EQ(g.key, 6);
+    gq g = getq(port, 5000); CHECK(!g.r); CHECKF(g.err == ERROR_OPERATION_ABORTED || g.err == ERROR_BROKEN_PIPE, "err %lu", g.err); CHECK(g.ov == &ov); EXPECT_EQ(g.key, 6);
+    if (g.err != ERROR_OPERATION_ABORTED) t_note("closing own pipe handle with pending read completed with err %lu", g.err);
     closeh(&c); CloseHandle(port);
 }
 

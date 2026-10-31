@@ -45,8 +45,9 @@ TEST(aio_file_read_eof_exact) {
     OVERLAPPED ov; ovinit(&ov, 8192, ev); BYTE b[64]; DWORD n = 77;
     SET_ERR(0); BOOL r = U(ReadFile)(h, b, 64, &n, &ov);
     DWORD e = GetLastError();
-    CHECK(!r); EXPECT_EQ(e, ERROR_HANDLE_EOF);
-    EXPECT_EQ(n, 0);
+    CHECK(!r); EXPECT_EQ(n, 0);
+    if (e == ERROR_IO_PENDING) { t_note("EOF read went pending"); DWORD gn; CHECK(!GetOverlappedResultEx(h, &ov, &gn, 5000, FALSE)); e = GetLastError(); }
+    EXPECT_EQ(e, ERROR_HANDLE_EOF);
     EXPECT_EQ((DWORD)ov.Internal, NTS_EOF);
     EXPECT_EQ(ov.InternalHigh, 0);
     /* GetOverlappedResult reports the same */
@@ -485,12 +486,12 @@ TEST(aio_file_unbuffered_unaligned_fails) {
     char p[MAX_PATH]; mkpath(p, "ubu"); CHECK(make_file(p, 65536));
     HANDLE h = open_ov(p, GENERIC_READ, FILE_FLAG_NO_BUFFERING); if (h == INVALID_HANDLE_VALUE) { CHECK(0); return; }
     BYTE *b = VirtualAlloc(NULL, 65536, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE); HANDLE ev = mkevent(); OVERLAPPED ov;
-    ovinit(&ov, 1, ev); SET_ERR(0);
-    CHECK(!U(ReadFile)(h, b, 4096, NULL, &ov)); EXPECT_ERR(ERROR_INVALID_PARAMETER);   /* offset */
-    ovinit(&ov, 0, ev); SET_ERR(0);
-    CHECK(!U(ReadFile)(h, b, 100, NULL, &ov)); EXPECT_ERR(ERROR_INVALID_PARAMETER);    /* length */
-    ovinit(&ov, 0, ev); SET_ERR(0);
-    CHECK(!U(ReadFile)(h, b + 1, 4096, NULL, &ov)); EXPECT_ERR(ERROR_INVALID_PARAMETER); /* buffer */
+    ovinit(&ov, 1, ev); iores x = do_read(h, b, 4096, &ov);
+    CHECK(!x.ok); EXPECT_EQ(x.err, ERROR_INVALID_PARAMETER);   /* offset */
+    ovinit(&ov, 0, ev); x = do_read(h, b, 100, &ov);
+    CHECK(!x.ok); EXPECT_EQ(x.err, ERROR_INVALID_PARAMETER);    /* length */
+    ovinit(&ov, 0, ev); x = do_read(h, b + 1, 4096, &ov);
+    CHECK(!x.ok); EXPECT_EQ(x.err, ERROR_INVALID_PARAMETER);    /* buffer */
     VirtualFree(b, 0, MEM_RELEASE); CloseHandle(ev); CloseHandle(h);
 }
 
@@ -503,8 +504,8 @@ TEST(aio_file_unbuffered_write_roundtrip) {
     iores x = do_write(h, b, 32768, &ov); CHECK(x.ok); EXPECT_EQ(x.n, 32768);
     BYTE *r = VirtualAlloc(NULL, 32768, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
     ovinit(&ov, 0, ev); x = do_read(h, r, 32768, &ov); CHECK(x.ok); CHECK(!memcmp(r, b, 32768));
-    ovinit(&ov, 100, ev); SET_ERR(0);   /* unaligned write offset */
-    CHECK(!U(WriteFile)(h, b, 4096, NULL, &ov)); EXPECT_ERR(ERROR_INVALID_PARAMETER);
+    ovinit(&ov, 100, ev);   /* unaligned write offset */
+    x = do_write(h, b, 4096, &ov); CHECK(!x.ok); EXPECT_EQ(x.err, ERROR_INVALID_PARAMETER);
     VirtualFree(b, 0, MEM_RELEASE); VirtualFree(r, 0, MEM_RELEASE); CloseHandle(ev); CloseHandle(h);
 }
 
