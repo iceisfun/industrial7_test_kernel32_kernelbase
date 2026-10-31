@@ -698,7 +698,8 @@ TEST(rtlctx_backtrace_hash_is_sum_of_low_dwords) {
 
 static __attribute__((noinline)) void hash_loop(ULONG *h1, ULONG *h2) {
     PVOID f[40];
-    for (int k = 0; k < 2; k++) { bt_nest(4, 0, 40, f, k ? h2 : h1); __asm__ volatile("" ::: "memory"); }
+    volatile int k = 0;
+    while (k < 2) { bt_nest(4, 0, 40, f, k ? h2 : h1); k = k + 1; }
 }
 TEST(rtlctx_backtrace_hash_deterministic_same_site) {
     REQUIRE(UN(RtlCaptureStackBackTrace));
