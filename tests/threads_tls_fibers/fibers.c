@@ -311,8 +311,11 @@ FIB_BODY(w_huge) {
         if (GetLastError() == 0) bits |= 2;
         SetLastError(0);
         f = pCFE(0, sz[i], 0, fa_pp, NULL);
-        if (f) { bits |= 4; pDF(f); }
-        if (GetLastError() == 0) bits |= 8;
+        if (i == 0) { if (f) pDF(f); }   /* 1TB pure reservation may succeed on x64 */
+        else {
+            if (f) { bits |= 4; pDF(f); }
+            if (GetLastError() == 0) bits |= 8;
+        }
     }
     return bits;
 }
