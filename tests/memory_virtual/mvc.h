@@ -1,6 +1,9 @@
 /* Shared helpers for the memory_virtual area (all static). */
 #ifndef MVC_H
 #define MVC_H
+#ifndef NTDDI_VERSION
+#define NTDDI_VERSION 0x0A000008
+#endif
 #include "t.h"
 #include <setjmp.h>
 
