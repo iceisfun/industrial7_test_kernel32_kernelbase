@@ -13,7 +13,7 @@ static const georow_t geos[] = {
     { 205, L"SA", L"SAU", L"682", L"Saudi Arabia", 1 }, { 117, L"IL", L"ISR", L"376", L"Israel", 1 },
     { 227, L"TH", L"THA", L"764", L"Thailand", 1 }, { 242, L"GB", L"GBR", L"826", L"United Kingdom", 1 },
     { 39, L"CA", L"CAN", L"124", L"Canada", 1 }, { 12, L"AU", L"AUS", L"036", L"Australia", 1 },
-    { 77, L"ES", L"ESP", L"724", L"Spain", 1 }, { 118, L"IT", L"ITA", L"380", L"Italy", 1 },
+    { 217, L"ES", L"ESP", L"724", L"Spain", 1 }, { 118, L"IT", L"ITA", L"380", L"Italy", 1 },
     { 176, L"NL", L"NLD", L"528", L"Netherlands", 1 }, { 221, L"SE", L"SWE", L"752", L"Sweden", 1 },
     { 191, L"PL", L"POL", L"616", L"Poland", 1 }, { 166, L"MX", L"MEX", L"484", L"Mexico", 1 },
 };

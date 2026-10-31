@@ -431,6 +431,7 @@ TEST(uipref_set_thread_two_languages_child) {
 /* ---- GetUILanguageInfo ---- */
 TEST(uilanginfo_basic) {
     REQUIRE(U(GetUILanguageInfo));
+    if (t_is_wine()) { t_skip("emulator aborts on unimplemented GetUILanguageInfo"); return; }
     WCHAR lang[16]; memset(lang, 0, sizeof lang); lstrcpyW(lang, L"en-US");
     WCHAR fb[256]; DWORD cch = 0, attr = 0xDEAD; SET_ERR(0);
     BOOL r = U(GetUILanguageInfo)(MUI_LANGUAGE_NAME, lang, NULL, &cch, &attr);
@@ -451,6 +452,7 @@ TEST(uilanginfo_basic) {
 }
 TEST(uilanginfo_id_format) {
     REQUIRE(U(GetUILanguageInfo));
+    if (t_is_wine()) { t_skip("emulator aborts on unimplemented GetUILanguageInfo"); return; }
     WCHAR lang[16]; memset(lang, 0, sizeof lang); lstrcpyW(lang, L"0409");
     WCHAR fb[256]; DWORD cch = 256, attr = 0; SET_ERR(0);
     BOOL r = U(GetUILanguageInfo)(MUI_LANGUAGE_ID, lang, fb, &cch, &attr);
@@ -459,6 +461,7 @@ TEST(uilanginfo_id_format) {
 }
 TEST(uilanginfo_errors) {
     REQUIRE(U(GetUILanguageInfo));
+    if (t_is_wine()) { t_skip("emulator aborts on unimplemented GetUILanguageInfo"); return; }
     WCHAR lang[16]; memset(lang, 0, sizeof lang); lstrcpyW(lang, L"en-US");
     WCHAR fb[64]; DWORD cch = 64, attr = 0;
     SET_ERR(0); CHECK(!U(GetUILanguageInfo)(MUI_LANGUAGE_NAME, NULL, fb, &cch, &attr)); t_note("NULL language err=%lu", GetLastError());

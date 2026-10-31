@@ -354,6 +354,7 @@ static const vec_t PAC[] = {
 };
 TEST(tzex_utc_to_local_pacific_key) {
     REQUIRE(UN(SystemTimeToTzSpecificLocalTimeEx));
+    if (t_is_wine()) { t_skip("emulator aborts on unimplemented *TzSpecific*Ex"); return; }
     DYNAMIC_TIME_ZONE_INFORMATION d; dtzi_for_key(&d, L"Pacific Standard Time");
     for (int i = 0; i < ARRAYLEN(PAC); i++) {
         SYSTEMTIME u = nls_st(PAC[i].uy, PAC[i].um, PAC[i].ud, PAC[i].uh, PAC[i].umi, PAC[i].us, 7), l, w;
@@ -365,6 +366,7 @@ TEST(tzex_utc_to_local_pacific_key) {
 }
 TEST(tzex_local_to_utc_pacific_key) {
     REQUIRE(UN(TzSpecificLocalTimeToSystemTimeEx));
+    if (t_is_wine()) { t_skip("emulator aborts on unimplemented *TzSpecific*Ex"); return; }
     DYNAMIC_TIME_ZONE_INFORMATION d; dtzi_for_key(&d, L"Pacific Standard Time");
     for (int i = 0; i < ARRAYLEN(PAC); i++) {
         if (PAC[i].um == 11 && PAC[i].ud == 3 && PAC[i].uh == 9) continue;   /* ambiguous hour */
@@ -378,6 +380,7 @@ TEST(tzex_local_to_utc_pacific_key) {
 }
 TEST(tzex_dynamic_dst_disabled_flag) {
     REQUIRE(UN(SystemTimeToTzSpecificLocalTimeEx));
+    if (t_is_wine()) { t_skip("emulator aborts on unimplemented *TzSpecific*Ex"); return; }
     DYNAMIC_TIME_ZONE_INFORMATION d; dtzi_for_key(&d, L"Pacific Standard Time"); d.DynamicDaylightTimeDisabled = TRUE;
     SYSTEMTIME u = nls_st(2024, 7, 15, 12, 0, 0, 0), l; SET_ERR(0);
     BOOL r = UN(SystemTimeToTzSpecificLocalTimeEx)(&d, &u, &l);
@@ -386,6 +389,7 @@ TEST(tzex_dynamic_dst_disabled_flag) {
 }
 TEST(tzex_fixed_zones_by_key) {
     REQUIRE(UN(SystemTimeToTzSpecificLocalTimeEx));
+    if (t_is_wine()) { t_skip("emulator aborts on unimplemented *TzSpecific*Ex"); return; }
     static const struct { const WCHAR *key; int off_min; } z[] = {
         { L"UTC", 0 }, { L"Tokyo Standard Time", 540 }, { L"India Standard Time", 330 }, { L"Nepal Standard Time", 345 },
         { L"China Standard Time", 480 }, { L"Hawaiian Standard Time", -600 }, { L"Line Islands Standard Time", 840 }, { L"Dateline Standard Time", -720 },
@@ -402,6 +406,7 @@ TEST(tzex_fixed_zones_by_key) {
 }
 TEST(tzex_europe_and_australia_by_key) {
     REQUIRE(UN(SystemTimeToTzSpecificLocalTimeEx));
+    if (t_is_wine()) { t_skip("emulator aborts on unimplemented *TzSpecific*Ex"); return; }
     struct { const WCHAR *key; vec_t v; } t[] = {
         { L"W. Europe Standard Time", { 2024, 3, 31, 0, 59, 59,  2024, 3, 31, 1, 59, 59 } },
         { L"W. Europe Standard Time", { 2024, 3, 31, 1, 0, 0,    2024, 3, 31, 3, 0, 0 } },
@@ -436,6 +441,7 @@ TEST(tzex_europe_and_australia_by_key) {
 }
 TEST(tzex_null_zone_is_current) {
     REQUIRE(UN(SystemTimeToTzSpecificLocalTimeEx)); REQUIRE(U(SystemTimeToTzSpecificLocalTime));
+    if (t_is_wine()) { t_skip("emulator aborts on unimplemented *TzSpecific*Ex"); return; }
     SYSTEMTIME u = nls_st(2024, 7, 15, 12, 0, 0, 0), a, b; SET_ERR(0);
     BOOL r = UN(SystemTimeToTzSpecificLocalTimeEx)(NULL, &u, &a);
     CHECKF(r, "err %lu", GetLastError());
@@ -449,6 +455,7 @@ TEST(tzex_null_zone_is_current) {
 }
 TEST(tzex_current_zone_dtzi_roundtrip) {
     REQUIRE(UN(SystemTimeToTzSpecificLocalTimeEx)); REQUIRE(UN(TzSpecificLocalTimeToSystemTimeEx)); REQUIRE(U(GetDynamicTimeZoneInformation));
+    if (t_is_wine()) { t_skip("emulator aborts on unimplemented *TzSpecific*Ex"); return; }
     DYNAMIC_TIME_ZONE_INFORMATION d; U(GetDynamicTimeZoneInformation)(&d);
     SYSTEMTIME u = nls_st(2024, 1, 15, 12, 0, 0, 0), l, b, n;
     CHECK(UN(SystemTimeToTzSpecificLocalTimeEx)(&d, &u, &l));
@@ -457,6 +464,7 @@ TEST(tzex_current_zone_dtzi_roundtrip) {
 }
 TEST(tzex_invalid_inputs) {
     REQUIRE(UN(SystemTimeToTzSpecificLocalTimeEx)); REQUIRE(UN(TzSpecificLocalTimeToSystemTimeEx));
+    if (t_is_wine()) { t_skip("emulator aborts on unimplemented *TzSpecific*Ex"); return; }
     DYNAMIC_TIME_ZONE_INFORMATION d; dtzi_for_key(&d, L"Pacific Standard Time");
     SYSTEMTIME bad = nls_st(2024, 13, 1, 0, 0, 0, 0), l; SET_ERR(0);
     CHECK(!UN(SystemTimeToTzSpecificLocalTimeEx)(&d, &bad, &l));
@@ -472,6 +480,7 @@ TEST(tzex_invalid_inputs) {
 }
 TEST(tzex_matches_static_conversion_for_pacific_2024) {
     REQUIRE(UN(SystemTimeToTzSpecificLocalTimeEx)); REQUIRE(U(SystemTimeToTzSpecificLocalTime)); REQUIRE(U(GetTimeZoneInformationForYear));
+    if (t_is_wine()) { t_skip("emulator aborts on unimplemented *TzSpecific*Ex"); return; }
     DYNAMIC_TIME_ZONE_INFORMATION d; TIME_ZONE_INFORMATION t; dtzi_for_key(&d, L"Pacific Standard Time");
     CHECK(U(GetTimeZoneInformationForYear)(2024, &d, &t));
     int bad = 0;
