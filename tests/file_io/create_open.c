@@ -394,7 +394,7 @@ TEST(fio_unicode_name_w) {
     h = cfw(p, GENERIC_READ, 0, OPEN_EXISTING, 0); OK_H(h); CLOSE(h);
     /* Case-insensitivity applies to non-ASCII letters too (upper case table). */
     WCHAR q[MAX_PATH * 2]; lstrcpyW(q, p);
-    WCHAR *u = wcsstr(q, L"u_"); if (u) u[3] = 0x00c9;
+    WCHAR *u = NULL, *u2 = q; while ((u2 = wcsstr(u2, L"u_\x00e9")) != NULL) { u = u2; u2++; } if (u) u[2] = 0x00c9;
     h = cfw(q, GENERIC_READ, 0, OPEN_EXISTING, 0);
     CHECK(h != INVALID_HANDLE_VALUE); CLOSE(h);
     DeleteFileW(p);
