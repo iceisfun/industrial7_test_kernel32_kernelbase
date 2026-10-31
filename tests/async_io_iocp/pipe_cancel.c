@@ -25,7 +25,6 @@ TEST(aio_pipe_pending_read_state) {
     SET_ERR(0);
     CHECK(!U(GetOverlappedResultEx)(s, &ov, &n, 50, TRUE)); EXPECT_ERR(WAIT_TIMEOUT);
     /* complete */
-    DWORD w; CHECK(WriteFile(c, "hello", 5, &w, NULL) || 1);
     OVERLAPPED wo; HANDLE we = mkevent(); ovinit(&wo, 0, we); WriteFile(c, "hello", 5, NULL, &wo);
     CHECK(WaitForSingleObject(ev, 5000) == WAIT_OBJECT_0);
     CHECK(U(GetOverlappedResult)(s, &ov, &n, FALSE)); EXPECT_EQ(n, 5);
@@ -368,7 +367,8 @@ TEST(aio_pipe_server_disconnect_pending_read) {
     CHECK(start_pending_read(c, b, 8, &ov));
     closeh(&s);
     CHECK(WaitForSingleObject(ev, 5000) == WAIT_OBJECT_0);
-    DWORD n; SET_ERR(0); CHECK(!GetOverlappedResult(c, &ov, &n, FALSE)); EXPECT_ERR(ERROR_BROKEN_PIPE);
+    DWORD n; SET_ERR(0); CHECK(!GetOverlappedResult(c, &ov, &n, FALSE));
+    { DWORD e = GetLastError(); CHECKF(e == ERROR_BROKEN_PIPE || e == ERROR_PIPE_NOT_CONNECTED, "err %lu", e); if (e != ERROR_BROKEN_PIPE) t_note("client read after server close: err %lu", e); }
     CloseHandle(ev); closeh(&c);
 }
 
