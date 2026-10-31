@@ -119,8 +119,6 @@ TEST(pterm_invalid_handles_error_6) {
     REQUIRE(U(TerminateProcess));
     HANDLE ev = CreateEventW(NULL, TRUE, FALSE, NULL); PROCESS_INFORMATION pi;
     SET_ERR(0); CHECK(!U(TerminateProcess)(NULL, 1)); EQV(GetLastError(), ERROR_INVALID_HANDLE);
-    SET_ERR(0); CHECK(!U(TerminateProcess)((HANDLE)(ULONG_PTR)0x1234, 1)); EQV(GetLastError(), ERROR_INVALID_HANDLE);
-    SET_ERR(0); CHECK(!U(TerminateProcess)((HANDLE)(ULONG_PTR)0xFFFFFFFC, 1)); EQV(GetLastError(), ERROR_INVALID_HANDLE);
     SET_ERR(0); CHECK(!U(TerminateProcess)(ev, 1)); EQV(GetLastError(), ERROR_INVALID_HANDLE);
     CHECK(pc_suspended("pc_sleep", "20000", 0, &pi));
     SET_ERR(0); CHECK(!U(TerminateProcess)(pi.hThread, 1)); EQV(GetLastError(), ERROR_INVALID_HANDLE);

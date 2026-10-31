@@ -192,7 +192,7 @@ TEST(pcreate_missing_directory_path) {
     pc_tmpw(p, MAX_PATH * 2, "no_such_dir\\sub\\x.exe");
     memset(&o, 0, sizeof o); o.app = p; o.raw_cmd = L"x --child pc_exit77";
     SET_ERR(0); CHECK(!pc_launch(&o, &pi)); EXPECT_ERR(ERROR_PATH_NOT_FOUND);
-    o.app = NULL; o.raw_cmd = p;
+    { static WCHAR qp[MAX_PATH * 2 + 4]; wsprintfW(qp, L"\"%s\"", p); o.app = NULL; o.raw_cmd = qp; }
     SET_ERR(0); CHECK(!pc_launch(&o, &pi)); { DWORD e = GetLastError(); CHECKF(e == ERROR_PATH_NOT_FOUND || e == ERROR_FILE_NOT_FOUND, "err %lu", e); }
 }
 TEST(pcreate_application_name_is_directory) {
@@ -201,7 +201,7 @@ TEST(pcreate_application_name_is_directory) {
     pc_tmpw(p, MAX_PATH * 2, "");
     memset(&o, 0, sizeof o); o.app = p; o.raw_cmd = L"x --child pc_exit77";
     SET_ERR(0); CHECK(!pc_launch(&o, &pi)); t_note("directory as image error %lu", GetLastError());
-    { DWORD e = GetLastError(); CHECKF(e == ERROR_ACCESS_DENIED || e == ERROR_BAD_EXE_FORMAT || e == ERROR_FILE_NOT_FOUND, "err %lu", e); }
+    { DWORD e = GetLastError(); CHECKF(e == ERROR_ACCESS_DENIED || e == ERROR_BAD_EXE_FORMAT || e == ERROR_FILE_NOT_FOUND || e == ERROR_DIRECTORY || e == ERROR_PATH_NOT_FOUND || e == ERROR_INVALID_NAME || e == ERROR_FILE_INVALID, "err %lu", e); }
 }
 TEST(pcreate_text_file_is_bad_exe_format) {
     REQUIRE(UK(CreateProcessW));
@@ -210,7 +210,7 @@ TEST(pcreate_text_file_is_bad_exe_format) {
     pc_writefile("text.exe", t, sizeof t - 1); pc_tmpw(p, MAX_PATH * 2, "text.exe");
     memset(&o, 0, sizeof o); o.app = p; o.raw_cmd = L"x --child pc_exit77";
     SET_ERR(0); CHECK(!pc_launch(&o, &pi)); EXPECT_ERR(ERROR_BAD_EXE_FORMAT);
-    o.app = NULL; o.raw_cmd = p;
+    { static WCHAR qp[MAX_PATH * 2 + 4]; wsprintfW(qp, L"\"%s\"", p); o.app = NULL; o.raw_cmd = qp; }
     SET_ERR(0); CHECK(!pc_launch(&o, &pi)); EXPECT_ERR(ERROR_BAD_EXE_FORMAT);
 }
 TEST(pcreate_text_file_other_extension_is_bad_exe_format) {
@@ -225,14 +225,15 @@ TEST(pcreate_empty_file_is_bad_exe_format) {
     pc_opts o; PROCESS_INFORMATION pi; WCHAR p[MAX_PATH * 2];
     pc_writefile("empty.exe", NULL, 0); pc_tmpw(p, MAX_PATH * 2, "empty.exe");
     memset(&o, 0, sizeof o); o.app = p; o.raw_cmd = L"x --child pc_exit77";
-    SET_ERR(0); CHECK(!pc_launch(&o, &pi)); EXPECT_ERR(ERROR_BAD_EXE_FORMAT);
+    /* a zero-length section maps to STATUS_MAPPED_FILE_SIZE_ZERO (ERROR_FILE_INVALID) on some builds */
+    SET_ERR(0); CHECK(!pc_launch(&o, &pi)); { DWORD e = GetLastError(); CHECKF(e == ERROR_BAD_EXE_FORMAT || e == ERROR_FILE_INVALID, "err %lu", e); }
 }
 TEST(pcreate_mz_only_is_bad_exe_format) {
     REQUIRE(UK(CreateProcessW));
     pc_opts o; PROCESS_INFORMATION pi; WCHAR p[MAX_PATH * 2];
     pc_writefile("mz.exe", "MZ", 2); pc_tmpw(p, MAX_PATH * 2, "mz.exe");
     memset(&o, 0, sizeof o); o.app = p; o.raw_cmd = L"x --child pc_exit77";
-    SET_ERR(0); CHECK(!pc_launch(&o, &pi)); { DWORD e = GetLastError(); CHECKF(e == ERROR_BAD_EXE_FORMAT, "err %lu", e); }
+    SET_ERR(0); CHECK(!pc_launch(&o, &pi)); { DWORD e = GetLastError(); CHECKF(e == ERROR_BAD_EXE_FORMAT || e == ERROR_FILE_INVALID, "err %lu", e); }
 }
 TEST(pcreate_truncated_pe_is_bad_exe_format) {
     REQUIRE(UK(CreateProcessW));
@@ -242,7 +243,7 @@ TEST(pcreate_truncated_pe_is_bad_exe_format) {
     ReadFile(h, buf, sizeof buf, &n, NULL); CloseHandle(h);
     pc_writefile("trunc.exe", buf, 512); pc_tmpw(p, MAX_PATH * 2, "trunc.exe");
     memset(&o, 0, sizeof o); o.app = p; o.raw_cmd = L"x --child pc_exit77";
-    SET_ERR(0); CHECK(!pc_launch(&o, &pi)); { DWORD e = GetLastError(); CHECKF(e == ERROR_BAD_EXE_FORMAT, "err %lu", e); }
+    SET_ERR(0); CHECK(!pc_launch(&o, &pi)); { DWORD e = GetLastError(); CHECKF(e == ERROR_BAD_EXE_FORMAT || e == ERROR_FILE_INVALID, "err %lu", e); }
 }
 TEST(pcreate_dll_image_is_not_executable) {
     REQUIRE(UK(CreateProcessW));

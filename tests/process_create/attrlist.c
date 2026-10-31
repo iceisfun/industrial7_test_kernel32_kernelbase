@@ -389,7 +389,6 @@ TEST(pcattr_handle_list_invalid_handle_value_observed) {
     exopts(&o, &sx, l, "pc_exit77", "", CREATE_SUSPENDED); o.inherit = TRUE;
     SET_ERR(0);
     if (pc_launch(&o, &pi)) { t_note("invalid handle in list accepted"); pc_kill(&pi); } else t_note("invalid handle in list rejected err %lu", GetLastError());
-    CHECK(GetLastError() != 0 || 1);
     rel(l);
 }
 TEST(pcattr_handle_list_with_std_pipe_in_list_works) {

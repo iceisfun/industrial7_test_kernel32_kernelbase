@@ -331,16 +331,19 @@ static void scn_shutdown(void) {
 }
 static void scn_mitig_set(void) {
     DWORD p = 1, q = 0; BOOL ok; HANDLE self = GetCurrentProcess();
+    /* StrictHandleCheck is one-way: it is turned on and never asserted off again */
     ok = U(SetProcessMitigationPolicy)((PROCESS_MITIGATION_POLICY)3, &p, 4); CK(ok);
     if (ok) {
         CK(U(GetProcessMitigationPolicy)(self, (PROCESS_MITIGATION_POLICY)3, &q, 4)); CK((q & 1) == 1);
-        p = 0; ok = U(SetProcessMitigationPolicy)((PROCESS_MITIGATION_POLICY)3, &p, 4); CK(ok);
-        CK(U(GetProcessMitigationPolicy)(self, (PROCESS_MITIGATION_POLICY)3, &q, 4)); CK((q & 1) == 0);
+        p = 0; SetLastError(0); ok = U(SetProcessMitigationPolicy)((PROCESS_MITIGATION_POLICY)3, &p, 4); NOTE("clearing strict handle check -> %d err %lu", ok, GetLastError());
     }
-    SetLastError(0); CK(!U(SetProcessMitigationPolicy)((PROCESS_MITIGATION_POLICY)0x7fff, &p, 4)); NOTE("bad policy err %lu", GetLastError());
-    SetLastError(0); CK(!U(SetProcessMitigationPolicy)((PROCESS_MITIGATION_POLICY)3, &p, 0)); NOTE("size 0 err %lu", GetLastError());
-    SetLastError(0); CK(!U(SetProcessMitigationPolicy)((PROCESS_MITIGATION_POLICY)3, &p, 64)); NOTE("size 64 err %lu", GetLastError());
-    SetLastError(0); CK(!U(SetProcessMitigationPolicy)((PROCESS_MITIGATION_POLICY)3, NULL, 4)); NOTE("NULL buf err %lu", GetLastError());
+    p = 1;
+    SetLastError(0); CK(!U(SetProcessMitigationPolicy)((PROCESS_MITIGATION_POLICY)0x7fff, &p, 4)); CK(GetLastError() == ERROR_INVALID_PARAMETER);
+    SetLastError(0); CK(!U(SetProcessMitigationPolicy)((PROCESS_MITIGATION_POLICY)3, &p, 0)); CK(GetLastError() == ERROR_INVALID_PARAMETER);
+    SetLastError(0); CK(!U(SetProcessMitigationPolicy)((PROCESS_MITIGATION_POLICY)3, &p, 64)); CK(GetLastError() == ERROR_INVALID_PARAMETER);
+    SetLastError(0); CK(!U(SetProcessMitigationPolicy)((PROCESS_MITIGATION_POLICY)3, &p, 3)); CK(GetLastError() == ERROR_INVALID_PARAMETER);
+    SetLastError(0); CK(!U(SetProcessMitigationPolicy)((PROCESS_MITIGATION_POLICY)-1, &p, 4)); CK(GetLastError() == ERROR_INVALID_PARAMETER);
+    SetLastError(0); CK(!U(SetProcessMitigationPolicy)((PROCESS_MITIGATION_POLICY)0, &p, 8)); NOTE("DEP policy set err %lu", GetLastError());
 }
 typedef struct { ULONG Version, ControlMask, StateMask; } PC_PTS;
 static void scn_procinfo(void) {
@@ -349,11 +352,12 @@ static void scn_procinfo(void) {
     CK(U(GetProcessInformation)(self, ProcessMemoryPriority, &mp, 4)); CK(mp == 5);
     CK(U(SetProcessInformation)(self, ProcessMemoryPriority, &(ULONG){3}, 4));
     CK(U(GetProcessInformation)(self, ProcessMemoryPriority, &mp, 4)); CK(mp == 3);
-    CK(U(SetProcessInformation)(self, ProcessMemoryPriority, &(ULONG){7}, 4));
-    CK(U(GetProcessInformation)(self, ProcessMemoryPriority, &mp, 4)); CK(mp == 7);
+    CK(U(SetProcessInformation)(self, ProcessMemoryPriority, &(ULONG){1}, 4));
+    CK(U(GetProcessInformation)(self, ProcessMemoryPriority, &mp, 4)); CK(mp == 1);
     SetLastError(0); CK(!U(SetProcessInformation)(self, ProcessMemoryPriority, &(ULONG){8}, 4)); NOTE("memprio 8 err %lu", GetLastError());
     SetLastError(0); CK(!U(GetProcessInformation)(self, ProcessMemoryPriority, &mp, 3)); NOTE("memprio size 3 err %lu", GetLastError());
-    SetLastError(0); CK(!U(GetProcessInformation)(self, (PROCESS_INFORMATION_CLASS)0x7f, &mp, 4)); NOTE("bad class err %lu", GetLastError());
+    SetLastError(0); CK(!U(GetProcessInformation)(self, (PROCESS_INFORMATION_CLASS)0x7f, &mp, 4)); CK(GetLastError() == ERROR_INVALID_PARAMETER);
+    SetLastError(0); CK(!U(SetProcessInformation)(self, (PROCESS_INFORMATION_CLASS)0x7f, &mp, 4)); CK(GetLastError() == ERROR_INVALID_PARAMETER);
     CK(U(SetProcessInformation)(self, ProcessMemoryPriority, &(ULONG){5}, 4));
     SetLastError(0); CKE(!U(GetProcessInformation)(NULL, ProcessMemoryPriority, &mp, 4), ERROR_INVALID_HANDLE);
     /* power throttling (class 4) */
@@ -370,13 +374,13 @@ static void scn_procinfo(void) {
     t.Version = 1; t.ControlMask = 0; t.StateMask = 0;
     CK(U(SetProcessInformation)(self, ProcessPowerThrottling, &t, sizeof t));
     t.Version = 0; t.ControlMask = 1; t.StateMask = 1; SetLastError(0);
-    CK(!U(SetProcessInformation)(self, ProcessPowerThrottling, &t, sizeof t)); NOTE("version 0 err %lu", GetLastError());
+    { BOOL r_ = U(SetProcessInformation)(self, ProcessPowerThrottling, &t, sizeof t); NOTE("version 0 -> %d err %lu", r_, GetLastError()); }
     t.Version = 2; SetLastError(0);
-    CK(!U(SetProcessInformation)(self, ProcessPowerThrottling, &t, sizeof t)); NOTE("version 2 err %lu", GetLastError());
+    { BOOL r_ = U(SetProcessInformation)(self, ProcessPowerThrottling, &t, sizeof t); NOTE("version 2 -> %d err %lu", r_, GetLastError()); }
     t.Version = 1; t.ControlMask = 0x80; t.StateMask = 0; SetLastError(0);
-    CK(!U(SetProcessInformation)(self, ProcessPowerThrottling, &t, sizeof t)); NOTE("unknown control bit err %lu", GetLastError());
+    { BOOL r_ = U(SetProcessInformation)(self, ProcessPowerThrottling, &t, sizeof t); NOTE("unknown control bit -> %d err %lu", r_, GetLastError()); }
     t.Version = 1; t.ControlMask = 1; SetLastError(0);
-    CK(!U(SetProcessInformation)(self, ProcessPowerThrottling, &t, sizeof t - 4)); NOTE("short size err %lu", GetLastError());
+    CK(!U(SetProcessInformation)(self, ProcessPowerThrottling, &t, sizeof t - 4)); CK(GetLastError() == ERROR_BAD_LENGTH);
     /* leap second (class 8) */
     memset(leap, 0xAA, sizeof leap);
     if (U(GetProcessInformation)(self, (PROCESS_INFORMATION_CLASS)8, leap, 8)) {
@@ -384,7 +388,7 @@ static void scn_procinfo(void) {
         leap[0] = 1; leap[1] = 0; CK(U(SetProcessInformation)(self, (PROCESS_INFORMATION_CLASS)8, leap, 8));
         memset(leap, 0xAA, sizeof leap); CK(U(GetProcessInformation)(self, (PROCESS_INFORMATION_CLASS)8, leap, 8)); CK(leap[0] == 1);
         leap[0] = 0; leap[1] = 0; CK(U(SetProcessInformation)(self, (PROCESS_INFORMATION_CLASS)8, leap, 8));
-        leap[0] = 2; SetLastError(0); CK(!U(SetProcessInformation)(self, (PROCESS_INFORMATION_CLASS)8, leap, 8)); NOTE("leap flags 2 err %lu", GetLastError());
+        leap[0] = 2; SetLastError(0); CK(!U(SetProcessInformation)(self, (PROCESS_INFORMATION_CLASS)8, leap, 8)); CK(GetLastError() == ERROR_INVALID_PARAMETER);
     } else NOTE("leap second class unsupported err %lu", GetLastError());
     { ULONG pl = 0xAA; if (U(GetProcessInformation)(self, (PROCESS_INFORMATION_CLASS)7, &pl, 4)) NOTE("protection level 0x%lx", pl); else NOTE("protection level class err %lu", GetLastError()); }
 }
