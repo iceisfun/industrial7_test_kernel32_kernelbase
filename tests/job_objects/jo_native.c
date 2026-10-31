@@ -15,7 +15,9 @@ TEST(jobnative_kernel32_exports_all_present) {
 }
 TEST(jobnative_isprocessinjob_in_kernelbase) {
     CHECK(t_proc_kb("IsProcessInJob") != NULL);
-    CHECK(t_proc_k32("IsProcessInJob") == t_proc_kb("IsProcessInJob"));   /* kernel32 forwards to kernelbase */
+    /* Win10 kernel32 IsProcessInJob is a jmp thunk through its import of kernelbase, not an export forwarder,
+       so the two GetProcAddress results need not be equal. */
+    t_note("kernel32 IsProcessInJob %p kernelbase %p", (void *)t_proc_k32("IsProcessInJob"), (void *)t_proc_kb("IsProcessInJob"));
 }
 TEST(jobnative_other_job_exports_in_kernelbase_observe) {
     static const char *const n[] = { "CreateJobObjectW", "OpenJobObjectW", "TerminateJobObject", "QueryInformationJobObject", "SetInformationJobObject", "AssignProcessToJobObject" };
