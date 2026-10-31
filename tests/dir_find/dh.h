@@ -92,15 +92,17 @@ static int dh_listA(const char *pattern, dh_name *out, int max) {
 }
 /* Like dh_listA but skips "." and ".." */
 static int dh_listA_nd(const char *pattern, dh_name *out, int max) {
-    dh_name tmp[1100];
-    int n = dh_listA(pattern, tmp, 1100);
-    if (n < 0) return n;
+    int cap = 20000;
+    dh_name *tmp = (dh_name *)malloc(sizeof(dh_name) * cap);
+    int n = dh_listA(pattern, tmp, cap);
+    if (n < 0) { free(tmp); return n; }
     int k = 0;
-    for (int i = 0; i < n && i < 1100; i++) {
+    for (int i = 0; i < n && i < cap; i++) {
         if (!strcmp(tmp[i].n, ".") || !strcmp(tmp[i].n, "..")) continue;
         if (k < max) out[k] = tmp[i];
         k++;
     }
+    free(tmp);
     return k;
 }
 static int dh_has(const dh_name *l, int n, const char *name) {
