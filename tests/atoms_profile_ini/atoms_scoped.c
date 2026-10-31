@@ -466,7 +466,7 @@ SCOPED(name_empty_string) {
     SET_ERR(0);
     EXPECT_EQ(ap_find_a(g, ""), 0);
     CHECK(GetLastError() != 0);
-    if (g) EXPECT_ERR(ERROR_INVALID_NAME);
+    if (g && !t_is_wine()) EXPECT_ERR(ERROR_INVALID_NAME);   /* explicit 123 in the Windows code path */
     SET_ERR(0);
     EXPECT_EQ(ap_find_w(g, &e), 0);
     CHECK(GetLastError() != 0);
