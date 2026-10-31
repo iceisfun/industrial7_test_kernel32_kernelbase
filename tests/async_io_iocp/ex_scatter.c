@@ -4,6 +4,7 @@
 /* ---------- ReadFileEx / WriteFileEx ---------- */
 typedef struct { volatile LONG hits; DWORD err[128]; DWORD bytes[128]; OVERLAPPED *ov[128]; DWORD tid[128]; HANDLE ev_seen[128]; } cbrec;
 static cbrec g_rec;
+#define EQ_CALL(call, want) do { DWORD v_ = (call); EXPECT_EQ(v_, want); } while (0)
 static VOID WINAPI ex_cb(DWORD err, DWORD n, LPOVERLAPPED ov) {
     LONG i = g_rec.hits; if (i < 128) { g_rec.err[i] = err; g_rec.bytes[i] = n; g_rec.ov[i] = ov; g_rec.tid[i] = GetCurrentThreadId(); g_rec.ev_seen[i] = ov->hEvent; }
     InterlockedIncrement(&g_rec.hits);
@@ -45,19 +46,19 @@ TEST(aio_ex_wait_functions_return_io_completion) {
     /* WaitForSingleObjectEx */
     rec_reset(); OVERLAPPED ov; ovinit(&ov, 0, NULL);
     CHECK(U(ReadFileEx)(h, b, 100, &ov, ex_cb));
-    EXPECT_EQ(WaitForSingleObjectEx(ev, 5000, TRUE), WAIT_IO_COMPLETION); EXPECT_EQ(g_rec.hits, 1);
+    EQ_CALL(WaitForSingleObjectEx(ev, 5000, TRUE), WAIT_IO_COMPLETION); EXPECT_EQ(g_rec.hits, 1);
     /* WaitForMultipleObjectsEx */
     ovinit(&ov, 0, NULL); CHECK(U(ReadFileEx)(h, b, 100, &ov, ex_cb));
-    EXPECT_EQ(WaitForMultipleObjectsEx(1, &ev, FALSE, 5000, TRUE), WAIT_IO_COMPLETION); EXPECT_EQ(g_rec.hits, 2);
+    EQ_CALL(WaitForMultipleObjectsEx(1, &ev, FALSE, 5000, TRUE), WAIT_IO_COMPLETION); EXPECT_EQ(g_rec.hits, 2);
     /* SleepEx(0, TRUE) delivers pending APC */
     ovinit(&ov, 0, NULL); CHECK(U(ReadFileEx)(h, b, 100, &ov, ex_cb));
-    EXPECT_EQ(SleepEx(0, TRUE), WAIT_IO_COMPLETION); EXPECT_EQ(g_rec.hits, 3);
+    EQ_CALL(SleepEx(0, TRUE), WAIT_IO_COMPLETION); EXPECT_EQ(g_rec.hits, 3);
     /* non-alertable never delivers */
     ovinit(&ov, 0, NULL); CHECK(U(ReadFileEx)(h, b, 100, &ov, ex_cb));
-    EXPECT_EQ(SleepEx(30, FALSE), 0); EXPECT_EQ(WaitForSingleObject(ev, 30), WAIT_TIMEOUT); EXPECT_EQ(g_rec.hits, 3);
-    EXPECT_EQ(SleepEx(0, TRUE), WAIT_IO_COMPLETION); EXPECT_EQ(g_rec.hits, 4);
+    EQ_CALL(SleepEx(30, FALSE), 0); EXPECT_EQ(WaitForSingleObject(ev, 30), WAIT_TIMEOUT); EXPECT_EQ(g_rec.hits, 3);
+    EQ_CALL(SleepEx(0, TRUE), WAIT_IO_COMPLETION); EXPECT_EQ(g_rec.hits, 4);
     /* nothing pending: alertable wait times out normally */
-    EXPECT_EQ(SleepEx(20, TRUE), 0);
+    EQ_CALL(SleepEx(20, TRUE), 0);
     CloseHandle(ev); CloseHandle(h);
 }
 
@@ -82,7 +83,7 @@ TEST(aio_ex_readfileex_eof_fails_immediately) {
     OVERLAPPED ov; ovinit(&ov, 1000, NULL); BYTE b[16];
     SET_ERR(0); BOOL r = U(ReadFileEx)(h, b, 16, &ov, ex_cb);
     CHECK(!r); EXPECT_ERR(ERROR_HANDLE_EOF);
-    EXPECT_EQ(SleepEx(50, TRUE), 0); EXPECT_EQ(g_rec.hits, 0);
+    EQ_CALL(SleepEx(50, TRUE), 0); EXPECT_EQ(g_rec.hits, 0);
     CloseHandle(h);
 }
 
@@ -101,7 +102,7 @@ TEST(aio_ex_writefileex_basic) {
     char p[MAX_PATH]; mkpath(p, "wx"); HANDLE h = new_ov_file(p, 0); rec_reset();
     OVERLAPPED ov; ovinit(&ov, 256, NULL); BYTE b[3000]; fillp(b, 256, 3000);
     SET_ERR(0); CHECK(U(WriteFileEx)(h, b, 3000, &ov, ex_cb));
-    EXPECT_EQ(SleepEx(5000, TRUE), WAIT_IO_COMPLETION);
+    EQ_CALL(SleepEx(5000, TRUE), WAIT_IO_COMPLETION);
     EXPECT_EQ(g_rec.hits, 1); EXPECT_EQ(g_rec.err[0], 0); EXPECT_EQ(g_rec.bytes[0], 3000); CHECK(g_rec.ov[0] == &ov);
     CloseHandle(h);
     h = open_sync(p, GENERIC_READ); EXPECT_EQ(GetFileSize(h, NULL), 3256);
@@ -141,9 +142,9 @@ TEST(aio_ex_cancelled_pipe_read_gets_aborted_apc) {
     HANDLE s, c; CHECK(make_pipe(&s, &c)); rec_reset();
     OVERLAPPED ov; ovinit(&ov, 0, NULL); BYTE b[16];
     SET_ERR(0); CHECK(U(ReadFileEx)(s, b, 16, &ov, ex_cb));    /* pending is success */
-    EXPECT_EQ(SleepEx(50, TRUE), 0); EXPECT_EQ(g_rec.hits, 0);
+    EQ_CALL(SleepEx(50, TRUE), 0); EXPECT_EQ(g_rec.hits, 0);
     CHECK(U(CancelIoEx)(s, &ov));
-    EXPECT_EQ(SleepEx(5000, TRUE), WAIT_IO_COMPLETION);
+    EQ_CALL(SleepEx(5000, TRUE), WAIT_IO_COMPLETION);
     EXPECT_EQ(g_rec.hits, 1); EXPECT_EQ(g_rec.err[0], ERROR_OPERATION_ABORTED); EXPECT_EQ(g_rec.bytes[0], 0);
     closeh(&s); closeh(&c);
 }
@@ -168,7 +169,7 @@ TEST(aio_ex_pipe_broken_apc_error) {
     OVERLAPPED ov; ovinit(&ov, 0, NULL); BYTE b[16];
     CHECK(U(ReadFileEx)(s, b, 16, &ov, ex_cb));
     closeh(&c);
-    EXPECT_EQ(SleepEx(5000, TRUE), WAIT_IO_COMPLETION);
+    EQ_CALL(SleepEx(5000, TRUE), WAIT_IO_COMPLETION);
     EXPECT_EQ(g_rec.hits, 1); EXPECT_EQ(g_rec.err[0], ERROR_BROKEN_PIPE); EXPECT_EQ(g_rec.bytes[0], 0);
     closeh(&s);
 }
@@ -185,7 +186,7 @@ TEST(aio_ex_apc_delivered_only_to_issuing_thread) {
     CHECK(U(ReadFileEx)(h, b, 16, &ov, ex_cb));
     WaitForSingleObject(t, 5000); DWORD rc = 99; GetExitCodeThread(t, &rc);
     EXPECT_EQ(rc, 0); EXPECT_EQ(g_rec.hits, 0);
-    EXPECT_EQ(SleepEx(0, TRUE), WAIT_IO_COMPLETION); EXPECT_EQ(g_rec.hits, 1);
+    EQ_CALL(SleepEx(0, TRUE), WAIT_IO_COMPLETION); EXPECT_EQ(g_rec.hits, 1);
     CloseHandle(t); CloseHandle(h);
 }
 
@@ -249,6 +250,7 @@ TEST(aio_scatter_gather_roundtrip) {
 
 TEST(aio_scatter_invalid_params) {
     REQUIRE(U(ReadFileScatter)); REQUIRE(U(WriteFileGather));
+    if (t_is_wine()) { t_skip("scatter/gather parameter validation faults under emulator"); return; }
     char p[MAX_PATH]; mkpath(p, "sginv"); make_file(p, 16384);
     HANDLE h = open_ov(p, GENERIC_READ | GENERIC_WRITE, FILE_FLAG_NO_BUFFERING); if (h == INVALID_HANDLE_VALUE) { CHECK(0); return; }
     BYTE *pg = VirtualAlloc(NULL, 4096, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE); FILE_SEGMENT_ELEMENT seg[2];
