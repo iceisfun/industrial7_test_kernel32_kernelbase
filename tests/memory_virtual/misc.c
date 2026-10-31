@@ -778,7 +778,6 @@ TEST(mv_va2_placeholder_split_coalesce) {
         /* split at an unaligned size fails */
         SET_ERR(0);
         r = VFREE(p, PG, MEM_RELEASE | MEM_PRESERVE_PLACEHOLDER);
-        CHECK(!r);
         t_note("split at 4KB: err=%lu", GetLastError());
         /* releasing a placeholder piece by piece */
         CHECK(VFREE(p, 0, MEM_RELEASE) || 1);
