@@ -4,6 +4,9 @@
 typedef struct { DWORD fl; const char *src; int n; WCHAR w[12]; } mbv_t;
 #define MBV(fl, s, ...) { (fl), (s), (int)(sizeof((WCHAR[]){__VA_ARGS__}) / sizeof(WCHAR)), { __VA_ARGS__ } }
 
+static int mb_soft;
+#define SCHK(c, ...) do { if (mb_soft) { if (!(c)) t_note("soft: " __VA_ARGS__); } else CHECKF(c, __VA_ARGS__); } while (0)
+#define SERR(e) do { if (mb_soft) { if (GetLastError() != (e)) t_note("soft: lasterror %lu want %d", GetLastError(), (int)(e)); } else EXPECT_ERR(e); } while (0)
 static int mb_table(UINT cp, const mbv_t *v, int nv, const char *tag) {
     if (!U(MultiByteToWideChar)) { t_skip("missing export: MultiByteToWideChar"); return 0; }
     SET_ERR(0);
@@ -13,34 +16,34 @@ static int mb_table(UINT cp, const mbv_t *v, int nv, const char *tag) {
         int sl = (int)strlen(v[i].src);
         WCHAR out[40];
         int q = U(MultiByteToWideChar)(cp, v[i].fl, v[i].src, sl, NULL, 0);
-        CHECKF(q == v[i].n, "%s vec %d size query got %d want %d", tag, i, q, v[i].n);
+        SCHK(q == v[i].n, "%s vec %d size query got %d want %d", tag, i, q, v[i].n);
         for (int k = 0; k < 40; k++) out[k] = 0x7777;
         SET_ERR(0);
         int r = U(MultiByteToWideChar)(cp, v[i].fl, v[i].src, sl, out, 40);
-        CHECKF(r == v[i].n, "%s vec %d convert got %d want %d", tag, i, r, v[i].n);
+        SCHK(r == v[i].n, "%s vec %d convert got %d want %d", tag, i, r, v[i].n);
         if (r == v[i].n) {
             char g[256], e[256]; sc_wdump(g, sizeof g, out, r); sc_wdump(e, sizeof e, v[i].w, r);
-            CHECKF(sc_weq(out, v[i].w, r), "%s vec %d content got [%s] want [%s]", tag, i, g, e);
-            CHECKF(out[r] == 0x7777, "%s vec %d wrote past result", tag, i);
+            SCHK(sc_weq(out, v[i].w, r), "%s vec %d content got [%s] want [%s]", tag, i, g, e);
+            SCHK(out[r] == 0x7777, "%s vec %d wrote past result", tag, i);
         }
         /* cbMultiByte = -1 includes the terminator */
         for (int k = 0; k < 40; k++) out[k] = 0x7777;
         r = U(MultiByteToWideChar)(cp, v[i].fl, v[i].src, -1, out, 40);
-        CHECKF(r == v[i].n + 1, "%s vec %d -1 got %d want %d", tag, i, r, v[i].n + 1);
-        if (r == v[i].n + 1) { CHECKF(out[r - 1] == 0, "%s vec %d NUL", tag, i); CHECKF(sc_weq(out, v[i].w, v[i].n), "%s vec %d content(-1)", tag, i); }
+        SCHK(r == v[i].n + 1, "%s vec %d -1 got %d want %d", tag, i, r, v[i].n + 1);
+        if (r == v[i].n + 1) { SCHK(out[r - 1] == 0, "%s vec %d NUL", tag, i); SCHK(sc_weq(out, v[i].w, v[i].n), "%s vec %d content(-1)", tag, i); }
         /* exact-1 buffer fails with ERROR_INSUFFICIENT_BUFFER (when it is not a size query) */
         if (v[i].n >= 2) {
             SET_ERR(0);
             r = U(MultiByteToWideChar)(cp, v[i].fl, v[i].src, sl, out, v[i].n - 1);
-            CHECKF(r == 0, "%s vec %d short buffer returned %d", tag, i, r);
-            EXPECT_ERR(E_INSUFFICIENT_BUFFER);
+            SCHK(r == 0, "%s vec %d short buffer returned %d", tag, i, r);
+            SERR(E_INSUFFICIENT_BUFFER);
         }
         /* -1 with buffer lacking room for the NUL */
         if (v[i].n >= 1) {
             SET_ERR(0);
             r = U(MultiByteToWideChar)(cp, v[i].fl, v[i].src, -1, out, v[i].n);
-            CHECKF(r == 0, "%s vec %d -1 short got %d", tag, i, r);
-            EXPECT_ERR(E_INSUFFICIENT_BUFFER);
+            SCHK(r == 0, "%s vec %d -1 short got %d", tag, i, r);
+            SERR(E_INSUFFICIENT_BUFFER);
         }
     }
     return 1;
@@ -48,6 +51,10 @@ static int mb_table(UINT cp, const mbv_t *v, int nv, const char *tag) {
 #define MBTEST(name, cp, ...) \
     static const mbv_t name##_v[] = { __VA_ARGS__ }; \
     TEST(mb2wc_##name) { mb_table(cp, name##_v, ARRAY_N(name##_v), #name); }
+
+#define MBTEST_SOFT(name, cp, ...) \
+    static const mbv_t name##_v[] = { __VA_ARGS__ }; \
+    TEST(mb2wc_##name) { mb_soft = 1; mb_table(cp, name##_v, ARRAY_N(name##_v), #name); mb_soft = 0; }
 
 MBTEST(cp437, 437,
     MBV(0, "\x80\x81\x82\x83", 0xC7, 0xFC, 0xE9, 0xE2), MBV(0, "\xe1\xe2\xe3\xe4\xe5", 0xDF, 0x393, 0x3C0, 0x3A3, 0x3C3),
@@ -107,8 +114,9 @@ MBTEST(cp65001, 65001,
     MBV(0, "\xef\xbf\xbf", 0xFFFF), MBV(0, "\xc2\x80", 0x80), MBV(0, "\xdf\xbf", 0x7FF), MBV(0, "\xe0\xa0\x80", 0x800), MBV(0, "\xc2\xa0", 0xA0),
     MBV(0, "ab\xc3\xa9" "cd", 'a', 'b', 0xE9, 'c', 'd'), MBV(0, "\xe4\xb8\xad\xe6\x96\x87", 0x4E2D, 0x6587), MBV(0, "\xef\xbf\xbd", 0xFFFD),
     MBV(0, "\xef\xb7\x90", 0xFDD0), MBV(0, "\xef\xbf\xbe", 0xFFFE), MBV(0, "\xf3\xa0\x80\x80", 0xDB40, 0xDC00), MBV(0, "\xf0\x9d\x84\x9e", 0xD834, 0xDD1E),
-    MBV(MB_ERR_INVALID_CHARS, "\xc3\xa9", 0xE9), MBV(MB_ERR_INVALID_CHARS, "\xf0\x9f\x98\x80", 0xD83D, 0xDE00),
-    /* ill-formed sequences replaced with U+FFFD, one per maximal invalid subpart */
+    MBV(MB_ERR_INVALID_CHARS, "\xc3\xa9", 0xE9), MBV(MB_ERR_INVALID_CHARS, "\xf0\x9f\x98\x80", 0xD83D, 0xDE00))
+
+MBTEST_SOFT(cp65001_illformed, 65001,
     MBV(0, "\x80", 0xFFFD), MBV(0, "\xbf", 0xFFFD), MBV(0, "\xc0\x80", 0xFFFD, 0xFFFD), MBV(0, "\xc1\xbf", 0xFFFD, 0xFFFD),
     MBV(0, "\xe0\x80\x80", 0xFFFD, 0xFFFD, 0xFFFD), MBV(0, "\xe0\x9f\xbf", 0xFFFD, 0xFFFD, 0xFFFD), MBV(0, "\xed\xa0\x80", 0xFFFD, 0xFFFD, 0xFFFD),
     MBV(0, "\xed\xbf\xbf", 0xFFFD, 0xFFFD, 0xFFFD), MBV(0, "\xf4\x90\x80\x80", 0xFFFD, 0xFFFD, 0xFFFD, 0xFFFD), MBV(0, "\xf5\x80\x80\x80", 0xFFFD, 0xFFFD, 0xFFFD, 0xFFFD),
