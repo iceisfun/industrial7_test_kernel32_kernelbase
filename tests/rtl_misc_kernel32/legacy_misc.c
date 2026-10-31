@@ -240,6 +240,7 @@ TEST(legacy_getdevicepowerstate_file_handle) {
 }
 
 TEST(legacy_stub_power_functions_fail) {
+    if (t_is_wine()) { t_skip("wine aborts on unimplemented wake stubs"); return; }
     if (UN(SetMessageWaitingIndicator)) { SET_ERR(0); CHECK(UN(SetMessageWaitingIndicator)(NULL, 0) == FALSE); t_note("SetMessageWaitingIndicator err=%lu", GetLastError()); }
     if (UN(RequestWakeupLatency)) { SET_ERR(0); CHECK(UN(RequestWakeupLatency)(0) == FALSE); t_note("RequestWakeupLatency err=%lu", GetLastError()); }
     if (UN(RequestDeviceWakeup)) { SET_ERR(0); CHECK(UN(RequestDeviceWakeup)(NULL) == FALSE); t_note("RequestDeviceWakeup err=%lu", GetLastError()); }
@@ -247,6 +248,7 @@ TEST(legacy_stub_power_functions_fail) {
 }
 
 TEST(legacy_stub_power_functions_parameter_variants) {
+    if (t_is_wine()) { t_skip("wine aborts on unimplemented wake stubs"); return; }
     REQUIRE(UN(RequestWakeupLatency)); REQUIRE(UN(SetMessageWaitingIndicator));
     for (int lat = 0; lat <= 1; lat++) CHECKF(UN(RequestWakeupLatency)(lat) == FALSE, "latency %d", lat);
     CHECK(UN(RequestWakeupLatency)(-1) == FALSE);
@@ -255,6 +257,7 @@ TEST(legacy_stub_power_functions_parameter_variants) {
 }
 
 TEST(legacy_stub_power_functions_with_real_handle) {
+    if (t_is_wine()) { t_skip("wine aborts on unimplemented wake stubs"); return; }
     if (!UN(RequestDeviceWakeup) || !UN(CancelDeviceWakeupRequest)) { t_skip("missing"); return; }
     HANDLE ev = CreateEventA(NULL, TRUE, FALSE, NULL);
     CHECK(UN(RequestDeviceWakeup)(ev) == FALSE);
