@@ -362,15 +362,16 @@ static void scn_procinfo(void) {
     SetLastError(0); CKE(!U(GetProcessInformation)(NULL, ProcessMemoryPriority, &mp, 4), ERROR_INVALID_HANDLE);
     /* power throttling (class 4) */
     memset(&t, 0, sizeof t); t.Version = 1;
-    CK(U(GetProcessInformation)(self, ProcessPowerThrottling, &t, sizeof t)); NOTE("initial throttling control=%lu state=%lu", t.ControlMask, t.StateMask);
+    /* kernelbase!GetProcessInformation only dispatches classes 0,2,3,7,8; class 4 falls to STATUS_INVALID_INFO_CLASS (87), so Get is optional */
+    if (U(GetProcessInformation)(self, ProcessPowerThrottling, &t, sizeof t)) NOTE("initial throttling control=%lu state=%lu", t.ControlMask, t.StateMask); else NOTE("power throttling get err %lu", GetLastError());
     t.Version = 1; t.ControlMask = 1; t.StateMask = 1;
     CK(U(SetProcessInformation)(self, ProcessPowerThrottling, &t, sizeof t));
     memset(&t, 0, sizeof t); t.Version = 1;
-    CK(U(GetProcessInformation)(self, ProcessPowerThrottling, &t, sizeof t)); CK(t.ControlMask & 1); CK(t.StateMask & 1);
+    if (U(GetProcessInformation)(self, ProcessPowerThrottling, &t, sizeof t)) { CK(t.ControlMask & 1); CK(t.StateMask & 1); }
     t.Version = 1; t.ControlMask = 1; t.StateMask = 0;
     CK(U(SetProcessInformation)(self, ProcessPowerThrottling, &t, sizeof t));
     memset(&t, 0, sizeof t); t.Version = 1;
-    CK(U(GetProcessInformation)(self, ProcessPowerThrottling, &t, sizeof t)); CK(t.ControlMask & 1); CK(!(t.StateMask & 1));
+    if (U(GetProcessInformation)(self, ProcessPowerThrottling, &t, sizeof t)) { CK(t.ControlMask & 1); CK(!(t.StateMask & 1)); }
     t.Version = 1; t.ControlMask = 0; t.StateMask = 0;
     CK(U(SetProcessInformation)(self, ProcessPowerThrottling, &t, sizeof t));
     t.Version = 0; t.ControlMask = 1; t.StateMask = 1; SetLastError(0);
