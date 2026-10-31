@@ -348,7 +348,7 @@ TEST(ld_image_refcount_three) {
     CHECK(U(FreeLibrary)(h1)); CHECK(!ml_is_loaded(h1));
     SET_ERR(0);
     CHECK(!U(FreeLibrary)(h1));                 /* no longer loaded */
-    CHECK(GetLastError() != 0);
+    EXPECT_ERR(ERROR_MOD_NOT_FOUND);
 }
 TEST(ld_image_refcount_getmodulehandleex) {
     REQUIRE(U(LoadLibraryA)); REQUIRE(U(FreeLibrary)); REQUIRE(U(GetModuleHandleExA));
@@ -638,7 +638,7 @@ TEST(ld_freelibrary_bogus_handles) {
     for (int i = 0; i < 5; i++) {
         SET_ERR(0);
         CHECKF(!U(FreeLibrary)((HMODULE)h[i]), "h=%p", (void *)h[i]);
-        CHECK(GetLastError() != 0);
+        EXPECT_ERR(ERROR_MOD_NOT_FOUND);
     }
 }
 TEST(ld_freelibrary_unaligned_tagged_invalid) {
@@ -658,7 +658,7 @@ TEST(ld_freelibrary_not_a_module_address) {
     static char buf[0x2000];
     SET_ERR(0);
     CHECK(!U(FreeLibrary)((HMODULE)(((ULONG_PTR)buf + 0xFFFF) & ~(ULONG_PTR)0xFFFF)));
-    CHECK(GetLastError() != 0);
+    EXPECT_ERR(ERROR_MOD_NOT_FOUND);
 }
 TEST(ld_freelibrary_exe_module_survives) {
     REQUIRE(U(FreeLibrary));

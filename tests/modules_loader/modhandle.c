@@ -579,11 +579,20 @@ TEST(gmfn_long_path_module) {
     wcscat(full, L"k32m_long.dll");
     size_t n; const unsigned char *d = ml_blob(ML_A, &n);
     HANDLE f = CreateFileW(full, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
-    if (f == INVALID_HANDLE_VALUE) { t_skip("cannot create long file"); return; }
+    if (f == INVALID_HANDLE_VALUE) {
+        t_skip("cannot create long file");
+        for (int i = 0; i < 5; i++) { WCHAR *bs = wcsrchr(full, L'\\'); if (!bs) break; *bs = 0; RemoveDirectoryW(full); }
+        return;
+    }
     DWORD wr; WriteFile(f, d, (DWORD)n, &wr, NULL); CloseHandle(f);
     CHECK(lstrlenW(full) > MAX_PATH);
     HMODULE m = U(LoadLibraryW)(full);
-    if (!m) { t_note("long path LoadLibraryW failed err %lu", GetLastError()); return; }
+    if (!m) {
+        t_note("long path LoadLibraryW failed err %lu", GetLastError());
+        DeleteFileW(full);
+        for (int i = 0; i < 4; i++) { WCHAR *bs = wcsrchr(full, L'\\'); if (!bs) break; *bs = 0; RemoveDirectoryW(full); }
+        return;
+    }
     WCHAR out[1200];
     DWORD r = U(GetModuleFileNameW)(m, out, 1200);
     CHECK(r > MAX_PATH);
