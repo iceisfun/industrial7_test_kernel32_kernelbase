@@ -6,6 +6,7 @@
 
 #define VD_ERR_INVALID_NAME 123
 #define VD_GUID_LEN 49
+#define SENT_U 0x13572468u
 
 /* DISK_SPACE_INFORMATION (Win10 2004+), declared locally. */
 typedef struct {
