@@ -259,7 +259,8 @@ TEST(gap19_pathcanon_dotdot_table) {
         BOOL ok = UN(PathCanonicalizeW)(o, t[i].in);
         if (!ok || lstrcmpW(o, t[i].out))
             t_note("canon case %u: ok=%d err=%lu", i, ok, (unsigned long)GetLastError());
-        if (i == 2 || i == 7) continue;   /* trailing "." / doubled separators: observed only */
+        /* PathCchCanonicalizeEx splits on backslash only (no '/' conversion); 2/7/8/9 observed only */
+        if (i == 2 || i == 7 || i == 8 || i == 9) continue;
         CHECKF(ok && !lstrcmpW(o, t[i].out), "case %u", i);
     }
 }

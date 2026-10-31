@@ -305,8 +305,9 @@ TEST(gap19_enumcalex_stop_early_all_calendars) {
 }
 TEST(gap19_enumcalex_invalid_caltype) {
     REQUIRE(UN(EnumCalendarInfoExA));
-    CALTYPE bad[] = { 0x38, 0x39, 0x100, 0xffff, 0x10000001, 0x1fffffff };
-    for (unsigned i = 0; i < 6; i++) {
+    /* Internal_EnumCalendarInfo: 0x38/0x39/0x3a are valid, 0x10000001 is genitive|ICALINTVALUE; unknown masked types -> 0x3ec */
+    CALTYPE bad[] = { 0x100, 0xffff, 0x1fffffff };
+    for (unsigned i = 0; i < 3; i++) {
         struct g19_cal c;
         SET_ERR(0);
         EXPECT_EQ(g19_runcal(&c, 0x0409, CAL_GREGORIAN, bad[i]), FALSE);
@@ -412,7 +413,8 @@ TEST(gap19_enumdatefmtex_invalid_flags) {
         struct g19_dt d;
         SET_ERR(0);
         BOOL ok = g19_rundt(&d, 0x0409, bad[i]);
-        if (bad[i] == 3 || bad[i] == 4 || bad[i] == 5 || bad[i] == 0x10 || bad[i] == 0x100 || bad[i] == 0xff) {
+        /* Internal_EnumDateFormats: only 0,1,2,8,0x80 (masked 0xbfffffff) valid, else 0x3ec */
+        if (1) {
             EXPECT_EQ(ok, FALSE);
             EXPECT_ERR(ERROR_INVALID_FLAGS);
             EXPECT_EQ(d.count, 0);
@@ -547,7 +549,7 @@ TEST(gap19_gsteA_invalid_info_type) {
     for (unsigned i = 0; i < 6; i++) {
         SET_ERR(0);
         EXPECT_EQ(UN(GetStringTypeExA)(0x0409, bad[i], "a", 1, out), FALSE);
-        EXPECT_ERR(ERROR_INVALID_PARAMETER);
+        EXPECT_ERR(ERROR_INVALID_FLAGS);   /* kernelbase GetStringTypeW: infotype not 1/2/4 -> 0x3ec */
     }
 }
 TEST(gap19_gsteA_null_params) {
