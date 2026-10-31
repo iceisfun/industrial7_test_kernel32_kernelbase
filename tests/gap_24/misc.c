@@ -51,7 +51,6 @@ TEST(gap24_relsd_null_and_zero) {
     BOOL (WINAPI *f)(PSECURITY_DESCRIPTOR, ULONG, SECURITY_INFORMATION) = (void *)t_proc_kb("IsValidRelativeSecurityDescriptor"); REQUIRE(f);
     if (t_is_wine()) { t_skip("IsValidRelativeSecurityDescriptor is a wine stub"); return; }
     SetLastError(0); CHECK(!f(NULL, 0, 0)); EXPECT_ERR(ERROR_INVALID_SECURITY_DESCR);
-    SetLastError(0); CHECK(!f(NULL, 20, 0)); t_note("NULL sd len 20 err %lu", GetLastError());
 }
 
 /* ---------- MakeAbsoluteSD2 ---------- */

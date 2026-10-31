@@ -73,7 +73,8 @@ TEST(gap24_forwarders_resolve_to_kernelbase) {
         if (!find_export(k, ex24[i].n, &o, &f)) continue;
         FARPROC a = t_proc_k32(ex24[i].n), b = t_proc_kb(ex24[i].n);
         if (f) {
-            CHECKF(_strnicmp(f, "KERNELBASE.", 11) == 0, "forwarder of %s is '%s'", ex24[i].n, f);
+            /* real kernel32 forwards some of these via api-ms-win-core-timezone-l1-1-1 */
+            CHECKF(_strnicmp(f, "KERNELBASE.", 11) == 0 || _strnicmp(f, "api-ms-win-", 11) == 0, "forwarder of %s is '%s'", ex24[i].n, f);
             CHECKF(a == b, "forwarded %s resolves to the kernelbase address", ex24[i].n);
         } else t_note("kernel32!%s is not a forwarder (local impl %p vs kb %p)", ex24[i].n, (void *)a, (void *)b);
     }
