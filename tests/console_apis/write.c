@@ -492,6 +492,13 @@ static HANDLE vtbuf(void) {
     }
     return b;
 }
+/* attributes in effect after SGR 0 (the console's default colours, which a user may have customised) */
+static WORD vt_dflt(HANDLE b) {
+    DWORD n_ = 0; WriteConsoleW(b, L"\x1b[0m\x1b[1;1H ", 11, &n_, NULL);
+    WORD a = cellattr(b, 0, 0);
+    WriteConsoleW(b, L"\x1b[1;1H", 6, &n_, NULL);
+    return a;
+}
 #define VTW(h, s) do { DWORD n_ = 0; BOOL r_ = WriteConsoleW((h), (s), lstrlenW(s), &n_, NULL); CC(r_); CCF(n_ == (DWORD)lstrlenW(s), "wrote %lu", n_); } while (0)
 
 CT(con_vt_mode_settable_and_readable) {
@@ -575,13 +582,15 @@ CT(con_vt_sgr_foreground) {
         { L"\x1b[92m", FOREGROUND_GREEN | FOREGROUND_INTENSITY }, { L"\x1b[93m", 14 }, { L"\x1b[94m", FOREGROUND_BLUE | FOREGROUND_INTENSITY },
         { L"\x1b[95m", 13 }, { L"\x1b[96m", 11 }, { L"\x1b[97m", 15 },
     };
+    WORD dfl = vt_dflt(b);
     for (size_t i = 0; i < sizeof t / sizeof t[0]; i++) {
         clear_buf(b);
+        VTW(b, L"\x1b[0m");
         VTW(b, t[i].seq);
         VTW(b, L"X");
         WORD a = cellattr(b, 0, 0);
         CCF((a & 0xF) == t[i].fg, "case %zu attr=0x%x want fg 0x%x", i, a, t[i].fg);
-        CCF((a & 0xF0) == 0, "case %zu bg changed attr=0x%x", i, a);
+        CCF((a & 0xF0) == (dfl & 0xF0), "case %zu bg changed attr=0x%x", i, a);
         VTW(b, L"\x1b[0m");
     }
     CloseHandle(b);
@@ -596,13 +605,15 @@ CT(con_vt_sgr_background) {
         { L"\x1b[47m", 0x70 }, { L"\x1b[100m", BACKGROUND_INTENSITY }, { L"\x1b[101m", BACKGROUND_RED | BACKGROUND_INTENSITY },
         { L"\x1b[107m", 0xF0 },
     };
+    WORD dfl = vt_dflt(b);
     for (size_t i = 0; i < sizeof t / sizeof t[0]; i++) {
         clear_buf(b);
+        VTW(b, L"\x1b[0m");
         VTW(b, t[i].seq);
         VTW(b, L"X");
         WORD a = cellattr(b, 0, 0);
         CCF((a & 0xF0) == t[i].bg, "case %zu attr=0x%x want bg 0x%x", i, a, t[i].bg);
-        CCF((a & 0xF) == 7, "case %zu fg changed attr=0x%x", i, a);
+        CCF((a & 0xF) == (dfl & 0xF), "case %zu fg changed attr=0x%x", i, a);
         VTW(b, L"\x1b[0m");
     }
     CloseHandle(b);
@@ -611,19 +622,21 @@ CT(con_vt_sgr_background) {
 CT(con_vt_sgr_bold_and_reset) {
     CREQ(WriteConsoleW);
     HANDLE b = vtbuf(); if (!b) return;
+    WORD dfl = vt_dflt(b) & 0xFF;
+    WORD dfg = dfl & 0xF, dbg = dfl & 0xF0;
     VTW(b, L"\x1b[1mA");
-    CEQ(cellattr(b, 0, 0) & 0xF, 7 | FOREGROUND_INTENSITY);
+    CEQ(cellattr(b, 0, 0) & 0xF, dfg | FOREGROUND_INTENSITY);
     VTW(b, L"\x1b[31mB");
-    CEQ(cellattr(b, 1, 0) & 0xF, FOREGROUND_RED | FOREGROUND_INTENSITY);
+    CEQ(cellattr(b, 1, 0) & 0xF, FOREGROUND_RED | FOREGROUND_INTENSITY); (void)dbg;
     VTW(b, L"\x1b[22mC");
     CEQ(cellattr(b, 2, 0) & FOREGROUND_INTENSITY, 0);
     VTW(b, L"\x1b[44;33mD");
     CEQ(cellattr(b, 3, 0) & 0xFF, BACKGROUND_BLUE | FOREGROUND_RED | FOREGROUND_GREEN);
     VTW(b, L"\x1b[0mE");
-    CEQ(cellattr(b, 4, 0) & 0xFF, 7);
+    CEQ(cellattr(b, 4, 0) & 0xFF, dfl);
     VTW(b, L"\x1b[1;42;30mF\x1b[mG");
     CEQ(cellattr(b, 5, 0) & 0xFF, BACKGROUND_GREEN | FOREGROUND_INTENSITY);
-    CEQ(cellattr(b, 6, 0) & 0xFF, 7);
+    CEQ(cellattr(b, 6, 0) & 0xFF, dfl);
     CloseHandle(b);
 }
 
@@ -633,10 +646,12 @@ CT(con_vt_sgr_default_colors) {
     CC(SetConsoleTextAttribute(b, 0x1E));
     VTW(b, L"\x1b[39mA");
     CEQ(cellattr(b, 0, 0) & 0xF0, 0x10);
+    WORD dflbg = vt_dflt(b) & 0xF0; CC(SetConsoleTextAttribute(b, 0x1E));
+    VTW(b, L"\x1b[39mA");
     cnote("39m default fg -> attr 0x%x", cellattr(b, 0, 0));
     VTW(b, L"\x1b[49mB");
     cnote("49m default bg -> attr 0x%x", cellattr(b, 1, 0));
-    CC((cellattr(b, 1, 0) & 0xF0) == 0);
+    CC((cellattr(b, 1, 0) & 0xF0) == dflbg);
     CloseHandle(b);
 }
 
