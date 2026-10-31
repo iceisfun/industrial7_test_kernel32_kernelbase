@@ -56,15 +56,15 @@ TEST(path_names_fullpath_cwd_root_child) { EXPECT_EQ(t_run_child("fp_cwd_root", 
 CHILD(fp_drive_vars) {
     char got[MAX_PATH]; WCHAR gw[MAX_PATH];
     SetEnvironmentVariableA("=Q:", "Q:\\k32\\dir");
-    CK(U(GetFullPathNameA)("Q:foo", sizeof got, got, NULL) == 15 && !strcmp(got, "Q:\\k32\\dir\\foo"), 10);
-    CK(U(GetFullPathNameA)("q:foo", sizeof got, got, NULL) == 15 && !_stricmp(got, "Q:\\k32\\dir\\foo"), 11);
+    CK(U(GetFullPathNameA)("Q:foo", sizeof got, got, NULL) == 14 && !strcmp(got, "Q:\\k32\\dir\\foo"), 10);
+    CK(U(GetFullPathNameA)("q:foo", sizeof got, got, NULL) == 14 && !_stricmp(got, "Q:\\k32\\dir\\foo"), 11);
     CK(U(GetFullPathNameA)("Q:", sizeof got, got, NULL) == 10 && !strcmp(got, "Q:\\k32\\dir"), 12);
     CK(U(GetFullPathNameA)("Q:..\\x", sizeof got, got, NULL) && !strcmp(got, "Q:\\k32\\x"), 13);
     CK(U(GetFullPathNameA)("Q:.\\x\\..\\y", sizeof got, got, NULL) && !strcmp(got, "Q:\\k32\\dir\\y"), 14);
     CK(U(GetFullPathNameA)("Q:\\foo", sizeof got, got, NULL) == 6 && !strcmp(got, "Q:\\foo"), 15);
     char *fp = (char *)SENT;
     CK(U(GetFullPathNameA)("Q:foo.txt", sizeof got, got, &fp) && fp && !strcmp(fp, "foo.txt"), 16);
-    CK(U(GetFullPathNameW)(L"Q:w", MAX_PATH, gw, NULL) == 14 && pn_weq(gw, "Q:\\k32\\dir\\w"), 17);
+    CK(U(GetFullPathNameW)(L"Q:w", MAX_PATH, gw, NULL) == 12 && pn_weq(gw, "Q:\\k32\\dir\\w"), 17);
     /* trailing backslash in the variable must not be doubled; a root value works */
     SetEnvironmentVariableA("=Q:", "Q:\\k32\\dir\\");
     CK(U(GetFullPathNameA)("Q:foo", sizeof got, got, NULL) && !strcmp(got, "Q:\\k32\\dir\\foo"), 20);
