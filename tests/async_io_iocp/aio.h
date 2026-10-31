@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <winioctl.h>
 
+typedef struct { DWORD NamedPipeState; DWORD ReadDataAvailable; DWORD NumberOfMessages; DWORD MessageLength; CHAR Data[1]; } FILE_PIPE_PEEK_BUFFER_;
 #define NTS_PENDING   0x103u
 #define NTS_CANCELLED 0xC0000120u
 #define NTS_EOF       0xC0000011u
