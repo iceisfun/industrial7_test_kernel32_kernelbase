@@ -383,13 +383,13 @@ TEST(regkb_getvalue_predefined_key_with_subkey_path) {
 
 /* ---------------- RegQueryMultipleValues ---------------- */
 TEST(regkb_multiple_values_basic) {
-    REQUIRE(U(RegQueryMultipleValuesW));
+    REQUIRE(UA(RegQueryMultipleValuesW));
     HKEY h = FRESH(); REQUIRE(h);
     sc_sz(h, L"alpha", L"first"); sc_dw(h, L"beta", 0x12345678);
     BYTE bin[3] = { 7, 8, 9 }; sc_raw(h, L"gamma", REG_BINARY, bin, 3);
     VALENTW ve[3] = { { L"alpha" }, { L"beta" }, { L"gamma" } };
     WCHAR buf[128]; DWORD tot = sizeof buf; memset(buf, 0, sizeof buf);
-    EQ(U(RegQueryMultipleValuesW)(h, ve, 3, buf, &tot), 0);
+    EQ(UA(RegQueryMultipleValuesW)(h, ve, 3, buf, &tot), 0);
     EQ(ve[0].ve_type, REG_SZ); EQ(ve[0].ve_valuelen, 12);
     EQ(ve[1].ve_type, REG_DWORD); EQ(ve[1].ve_valuelen, 4);
     EQ(ve[2].ve_type, REG_BINARY); EQ(ve[2].ve_valuelen, 3);
@@ -401,52 +401,52 @@ TEST(regkb_multiple_values_basic) {
     RegCloseKey(h);
 }
 TEST(regkb_multiple_values_missing_value) {
-    REQUIRE(U(RegQueryMultipleValuesW));
+    REQUIRE(UA(RegQueryMultipleValuesW));
     HKEY h = FRESH(); REQUIRE(h); sc_dw(h, L"here", 1);
     VALENTW ve[2] = { { L"here" }, { L"gone" } }; WCHAR buf[32]; DWORD tot = sizeof buf;
-    EQ(U(RegQueryMultipleValuesW)(h, ve, 2, buf, &tot), ERROR_FILE_NOT_FOUND);
+    EQ(UA(RegQueryMultipleValuesW)(h, ve, 2, buf, &tot), ERROR_FILE_NOT_FOUND);
     RegCloseKey(h);
 }
 TEST(regkb_multiple_values_small_buffer_reports_size) {
-    REQUIRE(U(RegQueryMultipleValuesW));
+    REQUIRE(UA(RegQueryMultipleValuesW));
     HKEY h = FRESH(); REQUIRE(h); sc_sz(h, L"s1", L"0123456789"); sc_sz(h, L"s2", L"abcdefghij");
     VALENTW ve[2] = { { L"s1" }, { L"s2" } }; WCHAR buf[64]; DWORD tot = 8;
-    EQ(U(RegQueryMultipleValuesW)(h, ve, 2, buf, &tot), ERROR_MORE_DATA);
+    EQ(UA(RegQueryMultipleValuesW)(h, ve, 2, buf, &tot), ERROR_MORE_DATA);
     CHECK(tot >= 44);
     DWORD need = tot; tot = need;
-    EQ(U(RegQueryMultipleValuesW)(h, ve, 2, buf, &tot), 0);
+    EQ(UA(RegQueryMultipleValuesW)(h, ve, 2, buf, &tot), 0);
     CHECK(!lstrcmpW((WCHAR *)ve[1].ve_valueptr, L"abcdefghij"));
     RegCloseKey(h);
 }
 TEST(regkb_multiple_values_size_query_null_buffer) {
-    REQUIRE(U(RegQueryMultipleValuesW));
+    REQUIRE(UA(RegQueryMultipleValuesW));
     HKEY h = FRESH(); REQUIRE(h); sc_dw(h, L"a", 1); sc_dw(h, L"b", 2);
     VALENTW ve[2] = { { L"A" }, { L"B" } }; DWORD tot = 0;
-    LSTATUS s = U(RegQueryMultipleValuesW)(h, ve, 2, NULL, &tot);
+    LSTATUS s = UA(RegQueryMultipleValuesW)(h, ve, 2, NULL, &tot);
     CHECK(s == ERROR_MORE_DATA || s == 0);
     CHECK(tot >= 8);
     t_note("size query: status %ld total %lu", (long)s, tot);
     RegCloseKey(h);
 }
 TEST(regkb_multiple_values_a_variant) {
-    REQUIRE(U(RegQueryMultipleValuesA));
+    REQUIRE(UA(RegQueryMultipleValuesA));
     HKEY h = FRESH(); REQUIRE(h); sc_sz(h, L"s", L"txt"); sc_dw(h, L"d", 3);
     VALENTA ve[2] = { { "s" }, { "d" } }; char buf[64]; DWORD tot = sizeof buf;
-    EQ(U(RegQueryMultipleValuesA)(h, ve, 2, buf, &tot), 0);
+    EQ(UA(RegQueryMultipleValuesA)(h, ve, 2, buf, &tot), 0);
     EQ(ve[0].ve_type, REG_SZ); EQ(ve[1].ve_type, REG_DWORD);
     CHECK(!strcmp((char *)ve[0].ve_valueptr, "txt"));
     EQ(*(DWORD *)ve[1].ve_valueptr, 3);
     RegCloseKey(h);
 }
 TEST(regkb_multiple_values_invalid_handle) {
-    REQUIRE(U(RegQueryMultipleValuesW));
+    REQUIRE(UA(RegQueryMultipleValuesW));
     VALENTW ve[1] = { { L"x" } }; WCHAR buf[8]; DWORD tot = sizeof buf;
-    EQ(U(RegQueryMultipleValuesW)(NULL, ve, 1, buf, &tot), ERROR_INVALID_HANDLE);
+    EQ(UA(RegQueryMultipleValuesW)(NULL, ve, 1, buf, &tot), ERROR_INVALID_HANDLE);
 }
 TEST(regkb_multiple_values_zero_count_observed) {
-    REQUIRE(U(RegQueryMultipleValuesW));
+    REQUIRE(UA(RegQueryMultipleValuesW));
     HKEY h = FRESH(); REQUIRE(h); WCHAR buf[8]; DWORD tot = sizeof buf;
-    LSTATUS s = U(RegQueryMultipleValuesW)(h, NULL, 0, buf, &tot);
+    LSTATUS s = UA(RegQueryMultipleValuesW)(h, NULL, 0, buf, &tot);
     t_note("RegQueryMultipleValuesW(0 values) = %ld total %lu", (long)s, tot);
     RegCloseKey(h);
 }
