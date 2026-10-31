@@ -12,6 +12,9 @@
  */
 #ifndef CH_H
 #define CH_H
+#ifndef NTDDI_VERSION
+#define NTDDI_VERSION 0x0A000006
+#endif
 #include "t.h"
 #include <wincon.h>
 
