@@ -66,7 +66,7 @@ WCTEST(cp1252, 1252,
     WV(0, (0x7F, 0x1, 0x1F), "\x7f\x01\x1f"), WV(0, (0x81, 0x8D, 0x8F, 0x90, 0x9D), "\x81\x8d\x8f\x90\x9d"),
     WV(WC_COMPOSITECHECK, (0x65, 0x301), "\xe9"), WV(WC_COMPOSITECHECK, (0x41, 0x30A), "\xc5"), WV(WC_COMPOSITECHECK, (0x6E, 0x303), "\xf1"),
     WV(WC_COMPOSITECHECK, (0x41, 0x42), "AB"), WV(WC_COMPOSITECHECK, (0xE9), "\xe9"),
-    WV(WC_COMPOSITECHECK | WC_DISCARDNS, (0x78, 0x301), "x"), WV(WC_COMPOSITECHECK | WC_DEFAULTCHAR, (0x78, 0x301), "x?"),
+    WV(WC_COMPOSITECHECK | WC_DISCARDNS, (0x78, 0x301), "x"), /* kernelbase GetMBCompSB: nonspacing char with 0x40 overwrites the previous byte with the default char (0 bytes added) */ WV(WC_COMPOSITECHECK | WC_DEFAULTCHAR, (0x78, 0x301), "?"),
     WV(WC_COMPOSITECHECK | WC_SEPCHARS, (0x65, 0x301), "\xe9"))
 WCTEST(cp1253, 1253, WV(0, (0x391, 0x3C9, 0x386, 0x385), "\xc1\xf9\xa2\xa1"), WV(0, (0x3042), "?"))
 WCTEST(cp1254, 1254, WV(0, (0x11E, 0x131, 0x15F, 0x130), "\xd0\xfd\xfe\xdd"))
@@ -158,6 +158,8 @@ TEST(wc2mb_flags_sbcs_valid_invalid) {
         WC_DISCARDNS | WC_SEPCHARS, WC_DEFAULTCHAR | WC_NO_BEST_FIT_CHARS, WC_ERR_INVALID_CHARS | WC_COMPOSITECHECK};
     static const UINT cps[] = {1252, 437, 932, 936};
     for (int c = 0; c < ARRAY_N(cps); c++) for (int i = 0; i < ARRAY_N(bad); i++) {
+        /* kernelbase WideCharToMultiByte: table-driven SBCS rejects 0x80; the handler-based path (DBCS) accepts exactly 0 or 0x80 */
+        if (bad[i] == 0x80 && cps[c] >= 932) continue;
         SET_ERR(0);
         int r = U(WideCharToMultiByte)(cps[c], bad[i], a, 1, o, 8, NULL, NULL);
         CHECKF(r == 0 && GetLastError() == E_INVALID_FLAGS, "cp %u flags %lx r=%d err=%lu", cps[c], bad[i], r, GetLastError());
