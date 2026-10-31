@@ -1,5 +1,7 @@
 #include "t.h"
-/* Non-public / undocumented exports: presence, module ownership, stability, and
+/* Export ownership table (k32/kb flags) cross-checked against decomp of both modules.
+ * SHExpand/Reg*Internal error paths verified from kernelbase decomp.
+ * Non-public / undocumented exports: presence, module ownership, stability, and
  * only the error paths and side-effect-free calls verified from decomp. */
 static const struct { const char *n; int k32, kb; } ex[] = {
 {"QueryGlobalizationUserSettingsStatus",0,1},{"QueryStateAtomValueInfo",0,1},{"QueryStateContainerCreatedNew",0,1},{"QueryStateContainerItemInfo",0,1},{"QuirkGetData",0,1},{"QuirkGetData2",0,1},{"QuirkIsEnabled",0,1},{"QuirkIsEnabled2",0,1},{"QuirkIsEnabled3",0,1},{"QuirkIsEnabledForPackage",0,1},{"QuirkIsEnabledForPackage2",0,1},{"QuirkIsEnabledForPackage3",0,1},{"QuirkIsEnabledForPackage4",0,1},{"QuirkIsEnabledForProcess",0,1},{"RaiseCustomSystemEventTrigger",0,1},{"ReadStateAtomValue",0,1},{"ReadStateContainerValue",0,1},{"RecordFeatureUsage2",0,1},{"RefreshPackageInfo",0,1},{"RegCreateKeyExInternalA",0,1},{"RegCreateKeyExInternalW",0,1},{"RegDeleteKeyExInternalA",0,1},{"RegDeleteKeyExInternalW",0,1},{"RegOpenKeyExInternalA",0,1},{"RegOpenKeyExInternalW",0,1},{"RegQueryMultipleValuesA",0,1},{"RegQueryMultipleValuesW",0,1},{"RegisterConsoleIME",1,0},{"RegisterConsoleOS2",1,0},{"RegisterConsoleVDM",1,0},{"RegisterStateChangeNotification",0,1},{"RegisterStateLock",0,1},{"RegisterWaitForInputIdle",1,0},{"RegisterWowBaseHandlers",1,0},{"RegisterWowExec",1,0},{"ReleaseStateLock",0,1},{"RemoveExtensionProgIds",0,1},{"RemoveLocalAlternateComputerNameA",1,0},{"RemoveLocalAlternateComputerNameW",1,0},{"RemovePackageFromFamilyXref",0,1},{"RemovePackageStatus",0,1},{"RemovePackageStatusForUser",0,1},{"ReplaceFileExInternal",0,1},{"ReplacePartitionUnit",1,0},{"ResetState",0,1},{"ResolveDelayLoadedAPI",1,1},{"ResolveDelayLoadsFromDll",1,1},{"RestoreThreadPreferredUILanguages",0,1},{"SHExpandEnvironmentStringsA",0,1},{"SHExpandEnvironmentStringsW",0,1},
@@ -211,6 +213,7 @@ TEST(gap26_reg_internal_roundtrip) {
   if (r == ERROR_SUCCESS) { __typeof__(&RegCloseKey) cl = U(RegCloseKey); if (cl) cl(k2); }
   r = de(HKEY_CURRENT_USER, name, 0, 0, NULL);
   CHECKF(r == ERROR_SUCCESS, "delete got %ld", r);
+  if (r != ERROR_SUCCESS) RegDeleteKeyW(HKEY_CURRENT_USER, name); /* cleanup */
   k2 = NULL;
   r = op(HKEY_CURRENT_USER, name, 0, KEY_READ, &k2, NULL);
   CHECKF(r == ERROR_FILE_NOT_FOUND, "open-after-delete got %ld", r);
