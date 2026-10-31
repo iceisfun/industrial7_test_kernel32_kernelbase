@@ -116,7 +116,8 @@ TEST(gap15_verfind_bare_name_a) {
     CHECKF(!(r & VFF_FILEINUSE), "file in use flag: 0x%lx", (unsigned long)r);
     CHECKF(cur[0] == 0 && cl == 1, "cur dir \"%s\" len %u", cur, cl);
     CHECKF(!strcmp(dst, expect), "dest \"%s\" want \"%s\"", dst, expect);
-    CHECKF(dl == strlen(expect) + 1, "dest len %u want %u", dl, (unsigned)strlen(expect) + 1);
+    /* VerFindFileW: required length is strlen(szAppDir)+1 taken before the trailing '\\' is stripped from the copy */
+    CHECKF(dl == strlen(app) + 1, "dest len %u want %u", dl, (unsigned)strlen(app) + 1);
     CHECKF(r & VFF_CURNEDEST, "CURNEDEST expected, r=0x%lx", (unsigned long)r);
 }
 TEST(gap15_verfind_bare_name_w) {
@@ -131,7 +132,7 @@ TEST(gap15_verfind_bare_name_w) {
     CHECKF(!(r & VFF_FILEINUSE), "file in use flag: 0x%lx", (unsigned long)r);
     CHECKF(cur[0] == 0 && cl == 1, "cur len %u", cl);
     CHECKF(g_waeq(dst, expect), "dest differs");
-    CHECKF(dl == strlen(expect) + 1, "dest len %u", dl);
+    CHECKF(dl == strlen(t_tmpdir()) + 1, "dest len %u", dl);
     CHECK(r & VFF_CURNEDEST);
 }
 TEST(gap15_verfind_same_dir) {
@@ -166,6 +167,10 @@ TEST(gap15_verfind_cur_buffer_small) {
     snprintf(file, sizeof file, "%sgap15_nofile.dll", t_tmpdir());
     char expect[MAX_PATH]; strcpy(expect, app); trimslash(expect);
     size_t curlen = strlen(expect);
+    /* GetDirOfFile only yields a directory when the file exists (CreateFileW OPEN_EXISTING), so create it */
+    HANDLE hf = CreateFileA(file, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (hf == INVALID_HANDLE_VALUE) { t_skip("cannot create file"); return; }
+    CloseHandle(hf);
     UINT cl = (UINT)curlen, dl = MAX_PATH;   /* no room for NUL */
     memset(cur, 0x7e, sizeof cur);
     DWORD r = U(VerFindFileA)(0, file, win, app, cur, &cl, dst, &dl);
@@ -183,6 +188,7 @@ TEST(gap15_verfind_cur_buffer_small) {
     r = U(VerFindFileW)(0, wfile, wwin, wapp, wcur, &cl, wdst, &dl);
     CHECKF(r & VFF_BUFFTOOSMALL, "W BUFFTOOSMALL expected r=0x%lx", (unsigned long)r);
     CHECKF(cl >= curlen + 1, "W required cur len %u", cl);
+    DeleteFileA(file);
     /* length 1 for bare name needs 1 -> fits when empty */
     char bare[] = "gap15_nofile.dll";
     cl = 1; dl = MAX_PATH;
@@ -663,7 +669,6 @@ TEST(gap15_badmem_register_unregister) {
 }
 TEST(gap15_badmem_unregister_null_child) {
     REQUIRE(U(UnregisterBadMemoryNotification));
-    if (t_is_wine()) { t_skip("not implemented under emulators"); return; }
     DWORD rc = t_run_child("gap15_badmem_null", "", 20000);
     t_note("Unregister(NULL) child exit 0x%lx (bit8=result, err<<12)", (unsigned long)rc);
     CHECKF(rc != 0xDEAD0000 && rc != 0xDEAD0001, "child spawn/timeout 0x%lx", (unsigned long)rc);
@@ -672,7 +677,7 @@ TEST(gap15_badmem_unregister_null_child) {
 /* ------------------------------------------------------------ UnregisterTraceGuids */
 TEST(gap15_unregtraceguids_stub) {
     REQUIRE(U(UnregisterTraceGuids));
-    if (t_is_wine()) { t_skip("stub behaviour is Windows specific"); return; }
+    /* decomp: UnregisterTraceGuids body is RtlSetLastWin32Error(0x7f); return 0x7f */
     /* kernelbase exports this as a stub that fails with ERROR_PROC_NOT_FOUND (127) */
     static const ULONG64 handles[] = { 0, 1, 0xdeadbeef, (ULONG64)-1 };
     for (size_t i = 0; i < 4; i++) {
