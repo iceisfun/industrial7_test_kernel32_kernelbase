@@ -3,7 +3,7 @@
 
 UDECL(HRESULT, GetMachineTypeAttributes, (USHORT Machine, DWORD *Attributes));
 
-TEST(legacy_sethandlecount_returns_argument) {
+TEST(wowleg_sethandlecount_returns_argument) {
     REQUIRE(U(SetHandleCount));
     UINT vals[] = { 0, 1, 20, 255, 256, 1000, 0x10000, 0x7FFFFFFF, 0x80000000u, 0xFFFFFFFFu };
     for (unsigned i = 0; i < sizeof vals / sizeof *vals; i++) {
@@ -104,7 +104,7 @@ TEST(wow64_revert_null_old_value_note) {
     CHECK(r <= 1);
 }
 
-TEST(wow64_guest_machine_supported_i386) {
+TEST(wowleg_guest_machine_supported_i386) {
     REQUIRE(UB(IsWow64GuestMachineSupported));
     BOOL sup = 0xCC;
     HRESULT hr = UB(IsWow64GuestMachineSupported)(IMAGE_FILE_MACHINE_I386, &sup);

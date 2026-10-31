@@ -413,7 +413,7 @@ TEST(slist_push_list_into_empty) {
     EXPECT_EQ(U(QueryDepthSList)(&g_sl), 2);
     EXPECT_EQ((ULONG_PTR)U(InterlockedFlushSList)(&g_sl), (ULONG_PTR)&it[0].e);
 }
-TEST(slist_push_list_single_entry) {
+TEST(slistx_push_list_single_entry) {
     NEED_SL(); REQUIRE(U(InterlockedPushListSListEx));
     item a __attribute__((aligned(16)));
     U(InitializeSListHead)(&g_sl);
