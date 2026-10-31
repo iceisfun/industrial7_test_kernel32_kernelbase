@@ -88,7 +88,11 @@ static inline char *ml_a(const WCHAR *s) {
     return b;
 }
 /* Fully unload a module whatever its refcount (bounded; scaffolding, not under test). */
-static inline void ml_unload(HMODULE h) { for (int i = 0; h && i < 64; i++) if (!FreeLibrary(h)) break; }
+static inline void ml_unload(HMODULE h) {
+    if (!h) return;
+    if ((ULONG_PTR)h & 3) { FreeLibrary(h); return; }      /* data-file / image-resource views: one release only */
+    for (int i = 0; i < 64; i++) if (!FreeLibrary(h)) break;
+}
 static inline HMODULE ml_load(const char *path) { return LoadLibraryA(path); }
 /* Is `m` currently loaded (by exact handle)? */
 static inline int ml_is_loaded(HMODULE m) {

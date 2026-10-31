@@ -593,4 +593,10 @@ TEST(gmfn_long_path_module) {
     CHECK(U(GetModuleFileNameW)(m, small, MAX_PATH) == MAX_PATH);
     EXPECT_ERR(ERROR_INSUFFICIENT_BUFFER);
     FreeLibrary(m);
+    /* remove the deep tree (the harness cleanup cannot handle > MAX_PATH) */
+    DeleteFileW(full);
+    for (int i = 0; i < 4; i++) {
+        WCHAR *bs = wcsrchr(full, L'\\'); if (!bs) break;
+        *bs = 0; RemoveDirectoryW(full);
+    }
 }
