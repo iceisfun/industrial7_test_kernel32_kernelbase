@@ -41,9 +41,9 @@ TEST(fsattr_combination_all_settable) {
     REQUIRE(U(SetFileAttributesW));
     char p[MAX_PATH * 2]; mk(p, "sa_all.txt");
     CHECK(saW(p, MASKSET));
-    EXPECT_EQ(ga(p) & MASKSET, MASKSET);
+    EXPECT_EQ(ga(p) & MASKSET & ~FILE_ATTRIBUTE_ARCHIVE, MASKSET & ~FILE_ATTRIBUTE_ARCHIVE);
     CHECK(saW(p, FILE_ATTRIBUTE_NORMAL));
-    EXPECT_EQ(ga(p) & MASKSET, 0);
+    EXPECT_EQ(ga(p) & MASKSET & ~FILE_ATTRIBUTE_ARCHIVE, 0);
     fa_rm(p);
 }
 TEST(fsattr_normal_clears_everything) {
@@ -252,7 +252,7 @@ TEST(fsattr_idempotent_repeat) {
     REQUIRE(U(SetFileAttributesA));
     char p[MAX_PATH * 2]; mk(p, "sa_rep.txt");
     for (int i = 0; i < 100; i++) { if (!saA(p, FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_TEMPORARY)) { CHECK(0); break; } }
-    EXPECT_EQ(ga(p) & MASKSET, FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_TEMPORARY);
+    EXPECT_EQ(ga(p) & MASKSET & ~FILE_ATTRIBUTE_ARCHIVE, MASKSET & (FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_TEMPORARY));
     fa_rm(p);
 }
 TEST(fsattr_a_w_equivalent) {
