@@ -144,3 +144,55 @@ CHILD(jo_countjob) {
     DWORD ids[16]; DWORD asg = 0; int n = jc_pids(h, ids, 16, &asg);
     return (DWORD)n < 0 ? 0x2000 : (asg & 0xFF);
 }
+
+/* allocate argv[1] bytes then hold argv[2] ms; exit code 0x1000+err if the allocation fails */
+CHILD(jo_allochold) {
+    SIZE_T n = (SIZE_T)strtoull(argv[1], NULL, 0);
+    void *p = VirtualAlloc(NULL, n, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    if (!p) return 0x1000 + GetLastError();
+    for (SIZE_T i = 0; i < n; i += 4096) ((volatile char *)p)[i] = 1;
+    Sleep(argn(argc, argv, 2, 20000));
+    return 0;
+}
+/* reserve argv[1] then commit argv[2] of it: 0 ok, (1<<16|err) reserve failed, (2<<16|err) commit failed */
+CHILD(jo_reserve_commit) {
+    SIZE_T r = (SIZE_T)strtoull(argv[1], NULL, 0), c = (SIZE_T)strtoull(argv[2], NULL, 0);
+    void *p = VirtualAlloc(NULL, r, MEM_RESERVE, PAGE_READWRITE);
+    if (!p) return (1 << 16) | GetLastError();
+    if (!VirtualAlloc(p, c, MEM_COMMIT, PAGE_READWRITE)) return (2 << 16) | GetLastError();
+    return 0;
+}
+/* SPI_SETBEEP with the current value (benign) */
+CHILD(jo_spi) {
+    typedef BOOL (WINAPI *spi_t)(UINT, UINT, PVOID, UINT);
+    HMODULE u = LoadLibraryA("user32.dll");
+    spi_t spi = u ? (spi_t)GetProcAddress(u, "SystemParametersInfoA") : NULL;
+    BOOL b = FALSE;
+    if (!spi) return 0x3000;
+    if (!spi(0x0001 /*SPI_GETBEEP*/, 0, &b, 0)) return 0x2000 + GetLastError();
+    SetLastError(0);
+    if (!spi(0x0002 /*SPI_SETBEEP*/, b, NULL, 0)) return 0x1000 + GetLastError();
+    return 0;
+}
+/* CDS_TEST of the current display mode: returns 100 + DISP_CHANGE_* (or 0x1000 if unavailable) */
+CHILD(jo_display) {
+    typedef BOOL (WINAPI *es_t)(LPCSTR, DWORD, DEVMODEA *);
+    typedef LONG (WINAPI *cd_t)(LPCSTR, DEVMODEA *, HWND, DWORD, LPVOID);
+    HMODULE u = LoadLibraryA("user32.dll");
+    es_t es = u ? (es_t)GetProcAddress(u, "EnumDisplaySettingsA") : NULL;
+    cd_t cd = u ? (cd_t)GetProcAddress(u, "ChangeDisplaySettingsExA") : NULL;
+    DEVMODEA dm; memset(&dm, 0, sizeof dm); dm.dmSize = sizeof dm;
+    if (!es || !cd || !es(NULL, (DWORD)-1, &dm)) return 0x1000;
+    return 100 + cd(NULL, &dm, NULL, 0x2 /*CDS_TEST*/, NULL);
+}
+/* try to read the foreign window handle argv[1] metadata: GetWindowThreadProcessId on it; returns 0 if call works */
+CHILD(jo_hwnd) {
+    typedef DWORD (WINAPI *g_t)(HWND, LPDWORD);
+    HMODULE u = LoadLibraryA("user32.dll");
+    g_t g = u ? (g_t)GetProcAddress(u, "GetWindowThreadProcessId") : NULL;
+    DWORD pid = 0; HWND h = (HWND)(ULONG_PTR)strtoull(argv[1], NULL, 16);
+    if (!g) return 0x3000;
+    SetLastError(0);
+    DWORD tid = g(h, &pid);
+    return tid ? 0 : 0x1000 + GetLastError();
+}
