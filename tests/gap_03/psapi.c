@@ -476,9 +476,13 @@ TEST(gap3_enumpagefiles_null_context) {
 TEST(gap3_enumpagefiles_callback_stop) {
     REQUIRE(U(EnumPageFilesW));
     if (t_is_wine()) { t_skip("wine"); return; }
+    /* kernelbase EnumPageFilesW ignores the callback's return value and keeps walking every entry */
+    PFCTX all = {0};
+    CHECK(U(EnumPageFilesW)(g3_pf_cb, &all));
     PFCTX c = {0}; c.stop_after = 1;
     SetLastError(0);
     BOOL r = U(EnumPageFilesW)(g3_pf_cb, &c);
-    t_note("callback returning FALSE after first: ret=%d count=%d", r, c.count);
-    CHECK(c.count <= 1);
+    t_note("callback returning FALSE after first: ret=%d count=%d (all=%d)", r, c.count, all.count);
+    CHECK(r == TRUE);
+    CHECK(c.count == all.count);
 }

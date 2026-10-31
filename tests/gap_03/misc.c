@@ -88,7 +88,8 @@ TEST(gap3_acceptlang_w_small_buffers) {
         for (int i = 0; i < 256; i++) b[i] = 0x7777;
         hr = U(GetAcceptLanguagesW)(b, &n);
         CHECKF(FAILED(hr), "cch %lu hr 0x%lx", cch, (unsigned long)hr);
-        CHECKF(b[0] == 0, "cch %lu buffer not terminated", cch);
+        /* kernelbase GetAcceptLanguagesW: *psz = 0 up front, a too-small buffer fails (MORE_DATA / locale-name failure) without writing */
+        if (!t_is_wine()) CHECKF(b[0] == 0, "cch %lu buffer not terminated", cch);
         CHECKF(b[cch] == 0x7777, "cch %lu overran buffer", cch);
     }
     WCHAR b[256]; DWORD n = nf + 1;

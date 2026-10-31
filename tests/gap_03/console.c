@@ -218,17 +218,17 @@ CHILD(gap3_con_fill_invalid) {
     int W = csbi.dwSize.X, H = csbi.dwSize.Y;
     DWORD n;
     COORD bad[] = { {(SHORT)W, 0}, {0, (SHORT)H}, {-1, 0}, {0, -1}, {(SHORT)0x7FFF, (SHORT)0x7FFF}, {(SHORT)0x8000, 0} };
+    /* conhost Fill*Impl: out-of-bounds start coordinate is not an error, it succeeds and writes 0 cells */
     for (unsigned i = 0; i < sizeof bad / sizeof bad[0]; i++) {
-        n = 0x77; SetLastError(0);
+        n = 0x77;
         BOOL r = U(FillConsoleOutputCharacterW)(o, L'x', 5, bad[i], &n);
-        CK(r == FALSE);
-        CK(GetLastError() != 0);
-        n = 0x77; SetLastError(0);
+        CK(r == TRUE && n == 0);
+        n = 0x77;
         r = U(FillConsoleOutputAttribute)(o, 7, 5, bad[i], &n);
-        CK(r == FALSE);
-        n = 0x77; SetLastError(0);
+        CK(r == TRUE && n == 0);
+        n = 0x77;
         r = U(FillConsoleOutputCharacterA)(o, 'x', 5, bad[i], &n);
-        CK(r == FALSE);
+        CK(r == TRUE && n == 0);
     }
     /* input buffer / event / null handles are not screen buffers */
     HANDLE ev = CreateEventA(NULL, TRUE, FALSE, NULL);
@@ -335,6 +335,7 @@ static BOOL WINAPI g3_handler(DWORD t) { g3_last_type = t; InterlockedIncrement(
 
 CHILD(gap3_con_ctrl) {
     CK(U(GenerateConsoleCtrlEvent));
+    CK(SetConsoleCtrlHandler(NULL, FALSE));   /* make sure CTRL+C is not inherited as ignored */
     CK(SetConsoleCtrlHandler(g3_handler, TRUE));
     /* invalid event types */
     SetLastError(0);
@@ -410,6 +411,8 @@ TEST(gap3_freeconsole_when_detached) {
     DWORD c = g3_run("gap3_con_freeconsole_detached", DETACHED_PROCESS, 30000);
     t_note("FreeConsole without a console: exit=0x%lx (ret=%lu err=%lu)", c, c & 1 ? 1 : 0, c >> 8);
     CHECK((c & 0xFF) == 100 || (c & 0xFF) == 101);
+    /* kernelbase FreeConsole returns 1 unconditionally, even when no console is attached */
+    if (!t_is_wine()) EXPECT_EQ(c, 101);
 }
 TEST(gap3_console_exports_in_kernel32) {
     CHECK(UK(FillConsoleOutputAttribute) != NULL);
