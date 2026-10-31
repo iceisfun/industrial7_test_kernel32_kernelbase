@@ -527,7 +527,7 @@ TEST(gap19_regloadkey_missing_file_hku) {
     LSTATUS r = UN(RegLoadKeyA)(HKEY_USERS, sub, f);
     CHECK(r != 0);   /* no such hive file: can never succeed */
     t_note("RegLoadKeyA missing -> %ld (1314 = privilege, 2 = file)", (long)r);
-    if (r == 0) { UN(RegUnLoadKeyW)(HKEY_USERS, L"x"); }
+    if (r == 0) { WCHAR ws[64]; MultiByteToWideChar(CP_ACP, 0, sub, -1, ws, 64); UN(RegUnLoadKeyW)(HKEY_USERS, ws); }
     CHECK(GetFileAttributesA(f) == INVALID_FILE_ATTRIBUTES || 1);
     HKEY h = NULL;
     EXPECT_NE(RegOpenKeyExA(HKEY_USERS, sub, 0, KEY_READ, &h), 0);

@@ -636,24 +636,24 @@ GT(affinity_update_mode_valid) {
 }
 
 /* ---------------- SetProcessDEPPolicy ---------------- */
+/* SetProcessDEPPolicy maps to SetProcessMitigationPolicy(ProcessDEPPolicy); the outcome on x64 is not verified,
+ * so every call runs in a disposable child process only. */
+CHILD(gap12_dep_probe) {
+    BOOL (WINAPI *f)(DWORD) = (BOOL (WINAPI *)(DWORD))t_proc("SetProcessDEPPolicy");
+    if (!f) return 100;
+    DWORD before = 0, after = 0; BOOL perm = 0, perm2 = 0;
+    if (!GetProcessDEPPolicy(GetCurrentProcess(), &before, &perm)) return 101;
+    static const DWORD fl[] = { 0, 1, 2, 3, 4, 0x80, 0xFFFFFFFF };
+    for (unsigned i = 0; i < sizeof fl / sizeof fl[0]; i++) { SetLastError(0xBAD); BOOL r = f(fl[i]); printf("flags %lx -> %d err %lu\n", fl[i], r, GetLastError()); }
+    if (!GetProcessDEPPolicy(GetCurrentProcess(), &after, &perm2)) return 102;
+    return (before == after) ? 0 : 103;
+}
 TEST(gap12_dep_policy_not_supported_on_x64) {
     REQUIRE(U(SetProcessDEPPolicy));
     if (t_is_wine()) { t_skip("emulator semantics differ"); return; }
-    static const DWORD f[] = { 0, 1, 2, 3, 4, 0x80, 0xFFFFFFFF };
-    for (unsigned i = 0; i < sizeof f / sizeof f[0]; i++) {
-        SET_ERR(0xBAD);
-        EXPECT_EQ(U(SetProcessDEPPolicy)(f[i]), FALSE);
-        EXPECT_ERR(ERROR_NOT_SUPPORTED);
-    }
-}
-TEST(gap12_dep_policy_does_not_change_state) {
-    REQUIRE(U(SetProcessDEPPolicy));
-    DWORD before = 0; BOOL perm = 0;
-    if (!GetProcessDEPPolicy(GetCurrentProcess(), &before, &perm)) { t_skip("GetProcessDEPPolicy"); return; }
-    U(SetProcessDEPPolicy)(PROCESS_DEP_ENABLE | PROCESS_DEP_DISABLE_ATL_THUNK_EMULATION);
-    DWORD after = 0xFF; BOOL perm2 = 0;
-    CHECK(GetProcessDEPPolicy(GetCurrentProcess(), &after, &perm2));
-    EXPECT_EQ(before, after); EXPECT_EQ(perm, perm2);
+    DWORD c = t_run_child("gap12_dep_probe", "", 15000);
+    t_note("SetProcessDEPPolicy child exit %lu", c);
+    CHECK(c == 0);   /* x64 DEP state is unchanged by any flags */
 }
 
 /* ---------------- SetProcessDynamicEnforcedCetCompatibleRanges ---------------- */

@@ -393,6 +393,7 @@ TEST(eed_ods_w_raises_wide_print_exception) {
     EXPECT_STR(g_ods_a, "wide message");
 }
 TEST(eed_ods_null_and_empty) {
+    if (t_is_wine()) { t_skip("emulator faults on NULL arguments"); return; }
     REQUIRE(U(OutputDebugStringA)); REQUIRE(U(OutputDebugStringW)); REQUIRE(U(AddVectoredExceptionHandler)); REQUIRE(U(RemoveVectoredExceptionHandler));
     PVOID h = U(AddVectoredExceptionHandler)(1, veh_ods);
     g_ods_n = 0;

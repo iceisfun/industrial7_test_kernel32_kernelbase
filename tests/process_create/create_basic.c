@@ -132,7 +132,7 @@ TEST(pcreate_detached_and_new_console_conflict_87) {
     REQUIRE(UK(CreateProcessW));
     pc_opts o; PROCESS_INFORMATION pi;
     memset(&o, 0, sizeof o); o.child = "pc_exit77"; o.flags = DETACHED_PROCESS | CREATE_NEW_CONSOLE;
-    SET_ERR(0); CHECK(!pc_launch(&o, &pi)); EXPECT_ERR(ERROR_INVALID_PARAMETER);
+    SET_ERR(0); { BOOL ok_ = pc_launch(&o, &pi); DWORD e_ = GetLastError(); CHECK(!ok_); if (ok_) { WaitForSingleObject(pi.hProcess, 5000); pc_kill(&pi); } SET_ERR(e_); } EXPECT_ERR(ERROR_INVALID_PARAMETER);
 }
 TEST(pcreate_shared_and_separate_wow_vdm_conflict_87) {
     REQUIRE(UK(CreateProcessW));

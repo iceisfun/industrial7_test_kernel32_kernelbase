@@ -369,7 +369,7 @@ TEST(pcattr_handle_list_requires_inherit_handles_true) {
     hl_fill(); e1 = hl_mk(TRUE); lst[0] = e1;
     CHECK(upd(l, A_HANDLES, lst, sizeof lst));
     exopts(&o, &sx, l, "pc_exit77", "", CREATE_SUSPENDED); o.inherit = FALSE;
-    SET_ERR(0); CHECK(!pc_launch(&o, &pi)); EXPECT_ERR(ERROR_INVALID_PARAMETER);
+    SET_ERR(0); { BOOL ok_ = pc_launch(&o, &pi); DWORD e_ = GetLastError(); CHECK(!ok_); if (ok_) pc_kill(&pi); SET_ERR(e_); } EXPECT_ERR(ERROR_INVALID_PARAMETER);
     rel(l); hl_free();
 }
 TEST(pcattr_handle_list_rejects_non_inheritable_handle) {
@@ -378,7 +378,7 @@ TEST(pcattr_handle_list_rejects_non_inheritable_handle) {
     hl_fill(); e1 = hl_mk(FALSE); lst[0] = e1;
     CHECK(upd(l, A_HANDLES, lst, sizeof lst));
     exopts(&o, &sx, l, "pc_exit77", "", CREATE_SUSPENDED); o.inherit = TRUE;
-    SET_ERR(0); CHECK(!pc_launch(&o, &pi)); EXPECT_ERR(ERROR_INVALID_PARAMETER);
+    SET_ERR(0); { BOOL ok_ = pc_launch(&o, &pi); DWORD e_ = GetLastError(); CHECK(!ok_); if (ok_) pc_kill(&pi); SET_ERR(e_); } EXPECT_ERR(ERROR_INVALID_PARAMETER);
     rel(l); hl_free();
 }
 TEST(pcattr_handle_list_invalid_handle_value_observed) {

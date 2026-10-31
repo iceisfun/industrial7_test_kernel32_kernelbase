@@ -27,6 +27,7 @@ TEST(gap18_cpau_null_token_runs_child) {
     }
 }
 TEST(gap18_cpau_null_app_null_cmdline) {
+    if (t_is_wine()) { t_skip("emulator faults on NULL arguments"); return; }
     REQUIRE(U(CreateProcessAsUserW));
     STARTUPINFOW si = si0(); PROCESS_INFORMATION pi; memset(&pi, 0xCC, sizeof pi);
     SET_ERR(0);

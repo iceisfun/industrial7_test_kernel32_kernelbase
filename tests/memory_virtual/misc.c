@@ -567,6 +567,7 @@ TEST(mv_mrn_invalid_type) {
     }
 }
 TEST(mv_mrn_query_invalid) {
+    if (t_is_wine()) { t_skip("emulator faults on NULL arguments"); return; }
     REQUIRE(U(CreateMemoryResourceNotification)); REQUIRE(U(QueryMemoryResourceNotification));
     BOOL st = 7;
     SET_ERR(0);

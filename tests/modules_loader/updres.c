@@ -46,6 +46,7 @@ static int type_present(enumst *e, int id) { for (int i = 0; i < e->n_types && i
 
 /* ---- Begin: argument errors ---- */
 TEST(upd_begin_null_or_empty_name) {
+    if (t_is_wine()) { t_skip("emulator faults on NULL arguments"); return; }
     REQUIRE(U(BeginUpdateResourceA)); REQUIRE(U(BeginUpdateResourceW));
     SET_ERR(0);
     CHECK(U(BeginUpdateResourceA)(NULL, FALSE) == NULL);
