@@ -2,7 +2,7 @@
  * NULL / INVALID_HANDLE_VALUE -> ERROR_TRANSACTION_NOT_ACTIVE (6700), before touching the file system. */
 #include "t.h"
 
-#define ERR_TXN_NOT_ACTIVE 6700
+#define ERR_TXN_NOT_ACTIVE 6700  /* really ERROR_INVALID_TRANSACTION; kernel32 wrappers set 0x1a2c for NULL/-1 (decomp) */
 
 static void tx_path(char *out, size_t cap, const char *leaf) { t_tmpfile(out, cap, leaf); }
 static void tx_wpath(WCHAR *out, size_t cap, const char *leaf) {
