@@ -211,6 +211,7 @@ static void prun_ex(const char *cname, DWORD flags, const char *title) {
     /* the emulator's windowed console host needs a working display; its headless host behaves like a console */
     if (t_is_wine() && (flags & CREATE_NEW_CONSOLE)) flags = (flags & ~CREATE_NEW_CONSOLE) | CREATE_NO_WINDOW;
     HANDLE h = pspawn(cname, NULL, flags, title, res, sizeof res, &pi);
+    for (int retry = 0; !h && retry < 3; retry++) { Sleep(300); h = pspawn(cname, NULL, flags, title, res, sizeof res, &pi); }
     if (!h) { t_check(0, "parent", 0, "CreateProcess child", "err=%lu", GetLastError()); return; }
     if (WaitForSingleObject(h, 25000) != WAIT_OBJECT_0) { TerminateProcess(h, 1); WaitForSingleObject(h, 5000); to = 1; }
     GetExitCodeProcess(h, &code);
