@@ -7,7 +7,8 @@ CFLAGS  ?= -O1 -Wall -Wno-unused-function -Wno-unused-variable -Wno-unused-but-s
 AREAS   := $(notdir $(wildcard tests/*))
 EXES    := $(addprefix build/,$(addsuffix .exe,$(AREAS)))
 all: $(EXES)
-build/%.exe: $(wildcard tests/%/*.c) common/t.c common/t.h
+.SECONDEXPANSION:
+build/%.exe: $$(wildcard tests/$$*/*.c) common/t.c common/t.h
 	@mkdir -p build
 	$(CC) $(CFLAGS) -Icommon -o $@ $(wildcard tests/$*/*.c) common/t.c -static -lkernel32 -ladvapi32 -lntdll -lshell32
 clean: ; rm -rf build
