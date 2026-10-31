@@ -290,7 +290,7 @@ TEST(pcwd_empty_cwd_observed) {
     SET_ERR(0);
     if (pc_launch(&o, &pi)) { t_note("empty lpCurrentDirectory accepted"); pc_kill(&pi); } else t_note("empty lpCurrentDirectory rejected err %lu", GetLastError());
 }
-TEST(pcwd_cwd_of_failed_launch_leaves_parent_cwd_alone) {
+TEST(pcwd_cwd_argument_does_not_change_parent_cwd) {
     REQUIRE(UK(CreateProcessW));
     WCHAR before[MAX_PATH * 2], after[MAX_PATH * 2]; pc_opts o; PROCESS_INFORMATION pi;
     GetCurrentDirectoryW(MAX_PATH * 2, before);

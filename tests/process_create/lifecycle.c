@@ -43,6 +43,7 @@ TEST(pexit_exitprocess_from_secondary_thread) {
 }
 TEST(pexit_main_thread_exitthread_with_other_thread_running) {
     REQUIRE(UK(ExitThread));
+    if (t_is_wine()) { t_skip("process lingers under wine"); return; }
     DWORD c = pc_exit_of("pc_main_exitthread", "", 0);
     t_note("process exit code when last thread calls ExitThread(7) after main ExitThread(3): %lu", c);
     CHECK(c != 0xDEAD0001);
