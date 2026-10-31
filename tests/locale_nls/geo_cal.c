@@ -222,7 +222,7 @@ TEST(calinfo_gregorian_enus_names) {
         { L"en-US", 1, CAL_SCALNAME, L"Gregorian Calendar", 0 },
         { L"en-US", 1, CAL_SSHORTDATE, L"M/d/yyyy", 1 }, { L"en-US", 1, CAL_SLONGDATE, L"dddd, MMMM d, yyyy", 1 },
         { L"en-US", 1, CAL_SYEARMONTH, L"MMMM yyyy", 1 }, { L"en-US", 1, CAL_SMONTHDAY, L"MMMM d", 1 },
-        { L"en-US", 1, CAL_ITWODIGITYEARMAX, L"2029", 1 },
+        { L"en-US", 1, CAL_ITWODIGITYEARMAX, L"2049", 1 },
         { L"de-DE", 1, CAL_SMONTHNAME3, L"März", 1 }, { L"de-DE", 1, CAL_SDAYNAME2, L"Dienstag", 1 }, { L"fr-FR", 1, CAL_SMONTHNAME2, L"février", 1 },
         { L"fr-FR", 1, CAL_SDAYNAME1, L"lundi", 1 }, { L"ja-JP", 1, CAL_SDAYNAME1, L"月曜日", 1 }, { L"ja-JP", 1, CAL_SMONTHNAME1, L"1月", 1 },
         { L"zh-CN", 1, CAL_SDAYNAME7, L"星期日", 1 }, { L"ru-RU", 1, CAL_SMONTHNAME1, L"январь", 1 },
@@ -259,7 +259,7 @@ TEST(calinfo_return_number) {
     int r = ci(L"en-US", 1, CAL_ICALINTVALUE | CAL_RETURN_NUMBER, NULL, 0, &v);
     CHECKF(r > 0 && v == 1, "r=%d v=%lu err=%lu", r, v, GetLastError());
     v = 0; r = ci(L"en-US", 1, CAL_ITWODIGITYEARMAX | CAL_RETURN_NUMBER, NULL, 0, &v);
-    CHECKF(r > 0 && v == 2029, "r=%d v=%lu", r, v);
+    CHECKF(r > 0 && v == 2049, "r=%d v=%lu", r, v);
     static const struct { const WCHAR *loc; CALID cal; } cals[] = {
         { L"en-US", 2 }, { L"ja-JP", 3 }, { L"zh-TW", 4 }, { L"ko-KR", 5 }, { L"ar-SA", 6 }, { L"th-TH", 7 }, { L"he-IL", 8 },
         { L"ar-SA", 23 }, { L"fa-IR", 22 }, { L"fr-FR", 9 }, { L"ar-SA", 10 },
@@ -363,7 +363,7 @@ TEST(calinfo_w_a_variants) {
     r = U(GetCalendarInfoW)(0x409, 1, CAL_ICALINTVALUE | CAL_RETURN_NUMBER | N_NOUSER, NULL, 0, &v);
     CHECK(r > 0); CHECK(v == 1);
     v = 0; r = U(GetCalendarInfoA)(0x409, 1, CAL_ITWODIGITYEARMAX | CAL_RETURN_NUMBER | N_NOUSER, NULL, 0, &v);
-    CHECK(r > 0); CHECK(v == 2029);
+    CHECK(r > 0); CHECK(v == 2049);
     r = U(GetCalendarInfoW)(0x407, 1, CAL_SMONTHNAME3 | N_NOUSER, w, 100, NULL);
     CHECK(r == 5); CHECK(!lstrcmpW(w, L"März"));
     SET_ERR(0); CHECK(U(GetCalendarInfoW)(0xDEAD, 1, CAL_SMONTHNAME3, w, 100, NULL) == 0); EXPECT_ERR(ERROR_INVALID_PARAMETER);

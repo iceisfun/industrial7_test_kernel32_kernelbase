@@ -160,11 +160,7 @@ TEST(datefmt_invalid_systemtime) {
         SYSTEMTIME st = nls_st(t[i].y, t[i].m, t[i].d, 0, 0, 0, 0);
         WCHAR b[100]; SET_ERR(0);
         int r = df(L"en-US", 0, &st, L"yyyy-MM-dd", b, 100);
-        int cal_impossible = t[i].m >= 1 && t[i].m <= 12 && t[i].d >= 1 && t[i].d <= 31 && t[i].y >= 1601 && t[i].y <= 30827;
-        if (cal_impossible) {     /* day-of-month vs month/leap validation is not visible in the front-end decomp */
-            if (r != 0) t_note("%s accepted (r=%d)", t[i].why, r);
-            continue;
-        }
+        /* IsValidDate -> RtlTimeFieldsToTime: year 1601..30827 and day <= days-in-month are enforced (ntdll RtlpTimeFieldsToTimeNoLeapSeconds) */
         CHECKF(r == 0, "%s r=%d (%ls)", t[i].why, r, b);
         EXPECT_ERR(ERROR_INVALID_PARAMETER);
     }
@@ -393,18 +389,18 @@ TEST(timefmt_enus_flags) {
         { L"en-US", N_NOUSER | TIME_NOSECONDS, 14, 7, 9, 0, NULL, L"2:07 PM", 1 },
         { L"en-US", N_NOUSER | TIME_NOMINUTESORSECONDS, 14, 7, 9, 0, NULL, L"2 PM", 1 },
         { L"en-US", N_NOUSER | TIME_NOTIMEMARKER, 14, 7, 9, 0, NULL, L"2:07:09", 1 },
-        { L"en-US", N_NOUSER | TIME_FORCE24HOURFORMAT, 14, 7, 9, 0, NULL, L"14:07:09", 1 },
+        { L"en-US", N_NOUSER | TIME_FORCE24HOURFORMAT, 14, 7, 9, 0, NULL, L"14:07:09 PM", 1 },
         { L"en-US", N_NOUSER | TIME_NOSECONDS | TIME_NOTIMEMARKER, 14, 7, 9, 0, NULL, L"2:07", 1 },
-        { L"en-US", N_NOUSER | TIME_NOSECONDS | TIME_FORCE24HOURFORMAT, 14, 7, 9, 0, NULL, L"14:07", 1 },
+        { L"en-US", N_NOUSER | TIME_NOSECONDS | TIME_FORCE24HOURFORMAT, 14, 7, 9, 0, NULL, L"14:07 PM", 1 },
         { L"en-US", N_NOUSER | TIME_NOMINUTESORSECONDS | TIME_NOTIMEMARKER, 14, 7, 9, 0, NULL, L"2", 1 },
-        { L"en-US", N_NOUSER | TIME_NOMINUTESORSECONDS | TIME_FORCE24HOURFORMAT, 14, 7, 9, 0, NULL, L"14", 1 },
+        { L"en-US", N_NOUSER | TIME_NOMINUTESORSECONDS | TIME_FORCE24HOURFORMAT, 14, 7, 9, 0, NULL, L"14 PM", 1 },
         { L"en-US", N_NOUSER | TIME_FORCE24HOURFORMAT | TIME_NOTIMEMARKER, 14, 7, 9, 0, NULL, L"14:07:09", 1 },
         { L"en-US", N_NOUSER, 0, 0, 0, 0, NULL, L"12:00:00 AM", 1 }, { L"en-US", N_NOUSER, 12, 0, 0, 0, NULL, L"12:00:00 PM", 1 },
         { L"en-US", N_NOUSER, 23, 59, 59, 0, NULL, L"11:59:59 PM", 1 },
-        { L"en-US", N_NOUSER | TIME_FORCE24HOURFORMAT, 0, 0, 0, 0, NULL, L"0:00:00", 0 },
-        { L"en-US", N_NOUSER | TIME_FORCE24HOURFORMAT, 9, 5, 3, 0, NULL, L"9:05:03", 0 },
+        { L"en-US", N_NOUSER | TIME_FORCE24HOURFORMAT, 0, 0, 0, 0, NULL, L"0:00:00 AM", 0 },
+        { L"en-US", N_NOUSER | TIME_FORCE24HOURFORMAT, 9, 5, 3, 0, NULL, L"9:05:03 AM", 0 },
         { L"en-US", TIME_NOSECONDS, 14, 7, 9, 0, L"h:mm:ss tt", L"2:07:09 PM", 0 },       /* flags other than format-select are accepted but ignored with a picture */
-        { L"en-US", TIME_FORCE24HOURFORMAT, 14, 7, 9, 0, L"h:mm tt", L"2:07 PM", 0 },
+        { L"en-US", TIME_FORCE24HOURFORMAT, 14, 7, 9, 0, L"h:mm tt", L"14:07 PM", 0 },
         { L"de-DE", N_NOUSER, 14, 7, 9, 0, NULL, L"14:07:09", 0 }, { L"de-DE", N_NOUSER | TIME_NOSECONDS, 14, 7, 9, 0, NULL, L"14:07", 0 },
         { L"fr-FR", N_NOUSER, 14, 7, 9, 0, NULL, L"14:07:09", 0 }, { L"ja-JP", N_NOUSER, 14, 7, 9, 0, NULL, L"14:07:09", 0 },
         { L"ja-JP", N_NOUSER, 9, 7, 9, 0, NULL, L"9:07:09", 0 }, { L"zh-CN", N_NOUSER, 9, 7, 9, 0, NULL, L"9:07:09", 0 },
@@ -420,8 +416,8 @@ TEST(timefmt_other_locale_pictures) {
         { L"ja-JP", 0, 14, 7, 9, 0, L"H'\u6642'm'\u5206'", L"14\u66427\u5206", 1 },
         { L"ar-SA", 0, 14, 7, 9, 0, L"HH:mm", L"14:07", 0 }, { L"th-TH", 0, 14, 7, 9, 0, L"HH:mm", L"14:07", 1 },
         { L"ru-RU", 0, 14, 7, 9, 0, L"HH:mm:ss", L"14:07:09", 1 }, { L"he-IL", 0, 14, 7, 9, 0, L"H:mm", L"14:07", 1 },
-        { L"de-DE", 0, 14, 7, 9, 0, L"h:mm tt", L"2:07 PM", 0 }, { L"de-DE", 0, 9, 7, 9, 0, L"h:mm tt", L"9:07 AM", 0 },
-        { L"fr-FR", 0, 14, 7, 9, 0, L"h:mm tt", L"2:07 PM", 0 },
+        { L"de-DE", 0, 14, 7, 9, 0, L"h:mm tt", L"14:07 PM", 0 }, { L"de-DE", 0, 9, 7, 9, 0, L"h:mm tt", L"9:07 AM", 0 },
+        { L"fr-FR", 0, 14, 7, 9, 0, L"h:mm tt", L"14:07 PM", 0 },
         { L"ja-JP", 0, 14, 7, 9, 0, L"tt h:mm", L"午後 2:07", 0 }, { L"ja-JP", 0, 9, 7, 9, 0, L"tt h:mm", L"午前 9:07", 0 },
         { L"zh-CN", 0, 14, 7, 9, 0, L"tt h:mm", L"下午2:07", 0 },
         { L"ko-KR", 0, 14, 7, 9, 0, L"tt h:mm", L"오후 2:07", 0 }, { L"ko-KR", 0, 9, 7, 9, 0, L"tt h:mm", L"오전 9:07", 0 },
@@ -559,7 +555,9 @@ TEST(timefmt_force24_all_locales_no_marker) {
         WCHAR b[200];
         int r = tf(FIXED_LOCALES[i], N_NOUSER | TIME_FORCE24HOURFORMAT, &st, NULL, b, 200);
         CHECKF(r > 0 && wcsstr(b, L"14") != NULL, "%ls: '%ls'", FIXED_LOCALES[i], b);
-        CHECKF(r > 0 && !wcsstr(b, L"PM"), "%ls: '%ls'", FIXED_LOCALES[i], b);
+        /* FORCE24HOURFORMAT only changes the hour: kernel32 DoFormatTime drops the marker only for TIME_NOTIMEMARKER */
+        r = tf(FIXED_LOCALES[i], N_NOUSER | TIME_FORCE24HOURFORMAT | TIME_NOTIMEMARKER, &st, NULL, b, 200);
+        CHECKF(r > 0 && wcsstr(b, L"14") != NULL && !wcsstr(b, L"PM"), "%ls: '%ls'", FIXED_LOCALES[i], b);
     }
 }
 TEST(timefmt_every_hour_en_us) {

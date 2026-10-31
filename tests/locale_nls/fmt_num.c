@@ -139,6 +139,8 @@ TEST(numfmt_invalid_numberfmt) {
         { { 2, 1, 3, L"", L",", 1 }, "empty decimal with digits" },
         { { 2, 1, 3, L"abcde", L",", 1 }, "decimal sep too long" },
         { { 2, 1, 3, L".", L"abcde", 1 }, "thousand sep too long" },
+        { { 2, 1, 3, L"abcd", L",", 1 }, "decimal sep 4 chars" },
+        { { 2, 1, 3, L"1", L",", 1 }, "digit in decimal sep" },
         { { 0xFFFFFFFF, 1, 3, L".", L",", 1 }, "NumDigits -1" },
     };
     for (int i = 0; i < ARRAYLEN(t); i++) {
@@ -156,7 +158,7 @@ TEST(numfmt_numfmt_boundaries_valid) {
     CHECK(nf(L"en-US", 0, L"1.5", &f1, b, 100) > 0);
     NUMBERFMTW f2 = { 0, 0, 0, L"", L"", 0 };
     CHECK(nf(L"en-US", 0, L"1.5", &f2, b, 100) > 0);
-    NUMBERFMTW f3 = { 2, 1, 3, L"abcd", L"wxyz", 1 };   /* 4 chars is the limit */
+    NUMBERFMTW f3 = { 2, 1, 3, L"abc", L"xyz", 1 };   /* IsValidSeparatorString: len < 4, no digits */
     SET_ERR(0);
     int r = nf(L"en-US", 0, L"1234.5", &f3, b, 100);
     CHECK(r > 0);
@@ -167,7 +169,7 @@ TEST(numfmt_flags_with_format) {
     WCHAR b[100];
     SET_ERR(0); CHECK(nf(L"en-US", N_NOUSER, L"1", &f, b, 100) == 0); EXPECT_ERR(ERROR_INVALID_FLAGS);
     SET_ERR(0); CHECK(nf(L"en-US", 1, L"1", NULL, b, 100) == 0); EXPECT_ERR(ERROR_INVALID_FLAGS);
-    SET_ERR(0); CHECK(nf(L"en-US", 0x40000000, L"1", NULL, b, 100) == 0); EXPECT_ERR(ERROR_INVALID_FLAGS);
+    CHECK(nf(L"en-US", 0x40000000, L"1", NULL, b, 100) > 0);   /* worker mask is 0x3fffffff: LOCALE_USE_CP_ACP is not rejected */
     SET_ERR(0); CHECK(nf(L"en-US", 0x20000000, L"1", NULL, b, 100) == 0); EXPECT_ERR(ERROR_INVALID_FLAGS);
     SET_ERR(0); CHECK(nf(L"en-US", 0x10, L"1", NULL, b, 100) == 0); EXPECT_ERR(ERROR_INVALID_FLAGS);
     CHECK(nf(L"en-US", N_NOUSER, L"1", NULL, b, 100) > 0);
@@ -377,7 +379,8 @@ TEST(curfmt_invalid_currencyfmt) {
         { { 2, 1, 3, NULL, L",", 0, 0, L"$" }, "NULL decimal" },
         { { 2, 1, 3, L".", NULL, 0, 0, L"$" }, "NULL thousand" },
         { { 2, 1, 3, L".", L",", 0, 0, NULL }, "NULL symbol" },
-        { { 2, 1, 3, L".", L",", 0, 0, L"1234567890123" }, "symbol too long" },
+        { { 2, 1, 3, L".", L",", 0, 0, L"1234567890123" }, "symbol with digits" },
+        { { 2, 1, 3, L".", L",", 0, 0, L"abcdefghijklm" }, "symbol 13 chars" },
     };
     for (int i = 0; i < ARRAYLEN(t); i++) {
         if (!t[i].f.lpDecimalSep || !t[i].f.lpThousandSep || !t[i].f.lpCurrencySymbol) { if (t_is_wine()) continue; }
