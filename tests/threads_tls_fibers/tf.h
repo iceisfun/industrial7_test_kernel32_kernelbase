@@ -61,6 +61,14 @@ static DWORD tf_run(LPTHREAD_START_ROUTINE f, LPVOID p) { return tf_join(tf_star
 extern DWORD WINAPI tf_regloop(LPVOID);
 extern char tf_regloop_end[];
 
+extern DWORD WINAPI tf_fault_av(LPVOID);
+extern DWORD WINAPI tf_fault_div(LPVOID);
+extern DWORD WINAPI tf_fault_ud(LPVOID);
+extern DWORD WINAPI tf_fault_hlt(LPVOID);
+extern DWORD WINAPI tf_fault_bp(LPVOID);
+extern char tf_fault_av_ins[], tf_fault_av_after[], tf_fault_div_ins[], tf_fault_div_after[];
+extern char tf_fault_ud_ins[], tf_fault_ud_after[], tf_fault_hlt_ins[], tf_fault_hlt_after[], tf_fault_bp_ins[];
+
 static inline int tf_in_module(HMODULE m, ULONG_PTR a) {
     if (!m) return 0;
     PIMAGE_DOS_HEADER d = (PIMAGE_DOS_HEADER)m;
