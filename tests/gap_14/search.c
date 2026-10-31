@@ -319,13 +319,14 @@ TEST(gap14_strcmpnw_basic) {
     EXPECT_EQ(U(StrCmpNW)(L"abcdef", L"abcxyz", 3), 0);
     EXPECT_EQ(sgn(U(StrCmpNW)(L"abcdef", L"abcxyz", 4)), -1);
     EXPECT_EQ(sgn(U(StrCmpNW)(L"abcxyz", L"abcdef", 4)), 1);
-    EXPECT_EQ(U(StrCmpNW)(L"abc", L"abc", 10), 0);
+    /* nChar past the NUL is compared literally by CompareStringW: use zero-padded buffers */
+    { wchar_t x[16] = L"abc", y[16] = L"abc"; EXPECT_EQ(U(StrCmpNW)(x, y, 10), 0); }
     EXPECT_EQ(U(StrCmpNW)(L"abc", L"abc", 3), 0);
     EXPECT_EQ(U(StrCmpNW)(L"abc", L"xyz", 0), 0);
     EXPECT_EQ(sgn(U(StrCmpNW)(L"abc", L"xyz", 1)), -1);
     EXPECT_EQ(sgn(U(StrCmpNW)(L"b", L"a", 1)), 1);
     EXPECT_EQ(sgn(U(StrCmpNW)(L"ab", L"abc", 3)), -1);
-    EXPECT_EQ(U(StrCmpNW)(L"", L"", 5), 0);
+    { wchar_t x[8] = {0}, y[8] = {0}; EXPECT_EQ(U(StrCmpNW)(x, y, 5), 0); }
     EXPECT_EQ(U(StrCmpNW)(L"abc", L"abc", -1), 0);
     EXPECT_EQ(sgn(U(StrCmpNW)(L"abc", L"abd", -1)), -1);
 }
