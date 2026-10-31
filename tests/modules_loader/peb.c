@@ -226,7 +226,8 @@ static void check_system_image(HMODULE m, const char *label, WORD subsystem, con
     CHECKF(nt->OptionalHeader.MajorOperatingSystemVersion == 10, "%s os major %u", label, nt->OptionalHeader.MajorOperatingSystemVersion);
     CHECKF(nt->OptionalHeader.MajorSubsystemVersion == 10, "%s subsystem major %u", label, nt->OptionalHeader.MajorSubsystemVersion);
     CHECKF(nt->OptionalHeader.NumberOfRvaAndSizes == 16, "%s", label);
-    CHECKF(nt->OptionalHeader.AddressOfEntryPoint != 0, "%s", label);
+    int has_entry = strcmp(label, "ntdll") != 0;   /* ntdll is linked without an entry point on Windows */
+    if (has_entry) CHECKF(nt->OptionalHeader.AddressOfEntryPoint != 0, "%s", label);
     CHECKF(nt->OptionalHeader.AddressOfEntryPoint < nt->OptionalHeader.SizeOfImage, "%s", label);
     /* the loader mapped it at an aligned address */
     CHECKF(((ULONG_PTR)m & 0xFFFF) == 0, "%s", label);
@@ -246,7 +247,7 @@ static void check_system_image(HMODULE m, const char *label, WORD subsystem, con
         CHECKF(text->Characteristics & IMAGE_SCN_CNT_CODE, "%s", label);
         CHECKF(text->Characteristics & IMAGE_SCN_MEM_EXECUTE, "%s", label);
         CHECKF(!(text->Characteristics & IMAGE_SCN_MEM_WRITE), "%s", label);
-        CHECKF(nt->OptionalHeader.AddressOfEntryPoint >= text->VirtualAddress, "%s", label);
+        if (has_entry) CHECKF(nt->OptionalHeader.AddressOfEntryPoint >= text->VirtualAddress, "%s", label);
         /* real page protection of the mapped section */
         MEMORY_BASIC_INFORMATION mbi; VirtualQuery((char *)m + text->VirtualAddress, &mbi, sizeof mbi);
         CHECKF(mbi.Protect == PAGE_EXECUTE_READ || mbi.Protect == PAGE_EXECUTE_READWRITE || mbi.Protect == PAGE_EXECUTE_WRITECOPY, "%s .text protect %lx", label, mbi.Protect);

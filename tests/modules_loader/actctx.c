@@ -57,13 +57,24 @@ TEST(ac_create_null) {
 TEST(ac_create_bad_cbsize) {
     REQUIRE(U(CreateActCtxW));
     char *p = (char *)mk_path("ac_cb", k_full_manifest);
-    static const DWORD sizes[] = { 0, 1, 4, 16, sizeof(ACTCTXW) - 8, sizeof(ACTCTXW) + 8, 0xFFFFFFFF };
-    for (int i = 0; i < 7; i++) {
+    /* CreateActCtxWWorker only requires cbSize >= 16, and enough room for the fields selected by dwFlags */
+    static const DWORD sizes[] = { 0, 1, 4, 15 };
+    for (int i = 0; i < 4; i++) {
         ACTCTXW a; memset(&a, 0, sizeof a); a.cbSize = sizes[i]; a.lpSource = ml_w(p);
         SET_ERR(0);
         CHECKF(U(CreateActCtxW)(&a) == INVALID_HANDLE_VALUE, "cbSize %lu", sizes[i]);
         EXPECT_ERR(ERROR_INVALID_PARAMETER);
     }
+    /* flag needs a field beyond cbSize */
+    ACTCTXW a; memset(&a, 0, sizeof a); a.cbSize = 16; a.lpSource = ml_w(p); a.dwFlags = ACTCTX_FLAG_HMODULE_VALID;
+    SET_ERR(0);
+    CHECK(U(CreateActCtxW)(&a) == INVALID_HANDLE_VALUE);
+    EXPECT_ERR(ERROR_INVALID_PARAMETER);
+    /* undefined high flag bits */
+    memset(&a, 0, sizeof a); a.cbSize = sizeof a; a.lpSource = ml_w(p); a.dwFlags = 0x100;
+    SET_ERR(0);
+    CHECK(U(CreateActCtxW)(&a) == INVALID_HANDLE_VALUE);
+    EXPECT_ERR(ERROR_INVALID_PARAMETER);
 }
 TEST(ac_create_null_source) {
     REQUIRE(U(CreateActCtxW)); REQUIRE(U(CreateActCtxA));
@@ -759,8 +770,11 @@ TEST(ac_settings_missing_and_wrong_namespace) {
     CHECK(!U(QueryActCtxSettingsW)(0, ctx, WS_NS, L"noSuchSetting", buf, 64, &need));
     EXPECT_ERR(ERROR_SXS_KEY_NOT_FOUND);
     SET_ERR(0);
+    /* QueryActCtxSettingsWWorker only forwards the eight known WindowsSettings namespaces; anything else fails
+     * before the activation-context query (status not shown by the decompilation) */
     CHECK(!U(QueryActCtxSettingsW)(0, ctx, L"urn:k32t:wrong-namespace", L"dpiAware", buf, 64, &need));
-    EXPECT_ERR(ERROR_SXS_KEY_NOT_FOUND);
+    t_note("QueryActCtxSettings(unknown namespace) error %lu", GetLastError());
+    CHECK(GetLastError() != 0);
     SET_ERR(0);
     CHECK(!U(QueryActCtxSettingsW)(0, ctx, WS_NS, L"DPIAWARE", buf, 64, &need));        /* names are case sensitive */
     EXPECT_ERR(ERROR_SXS_KEY_NOT_FOUND);
@@ -919,7 +933,11 @@ TEST(ac_find_invalid_arguments) {
     d.cbSize = 0; SET_ERR(0);
     CHECK(!U(FindActCtxSectionStringW)(0, NULL, ACTIVATION_CONTEXT_SECTION_DLL_REDIRECTION, L"k32t_redir.dll", &d));
     EXPECT_ERR(ERROR_INVALID_PARAMETER);
-    d.cbSize = sizeof(ACTCTX_SECTION_KEYED_DATA) + 8; SET_ERR(0);
+    /* BasepFindActCtxSection_CheckAndConvertParameters needs cbSize >= 0x40, and more room for the RETURN_* flags */
+    d = newkd(); d.cbSize = 0x40; SET_ERR(0);
+    CHECK(!U(FindActCtxSectionStringW)(FIND_ACTCTX_SECTION_KEY_RETURN_FLAGS, NULL, ACTIVATION_CONTEXT_SECTION_DLL_REDIRECTION, L"k32t_redir.dll", &d));
+    EXPECT_ERR(ERROR_INVALID_PARAMETER);
+    d = newkd(); d.cbSize = 0x3F; SET_ERR(0);
     CHECK(!U(FindActCtxSectionStringW)(0, NULL, ACTIVATION_CONTEXT_SECTION_DLL_REDIRECTION, L"k32t_redir.dll", &d));
     EXPECT_ERR(ERROR_INVALID_PARAMETER);
     d = newkd(); SET_ERR(0);

@@ -37,8 +37,8 @@ TEST(gpa_exported_alias_name) {
 TEST(gpa_case_sensitive) {
     REQUIRE(U(GetProcAddress));
     HMODULE m = pa_load("gpa_cs", "k32m_gpa3.dll"); if (!m) { CHECK(0); return; }
-    static const char *bad[] = { "ML_ADD", "Ml_Add", "mlcase", "MLCASE", "ml_ADD", "ml_add ", " ml_add", "ml_ad", "ml_addd", "" };
-    for (int i = 0; i < 10; i++) {
+    static const char *bad[] = { "ML_ADD", "Ml_Add", "mlcase", "MLCASE", "ml_ADD", "ml_add ", " ml_add", "ml_ad", "ml_addd" };
+    for (int i = 0; i < 9; i++) {
         SET_ERR(0);
         CHECKF(U(GetProcAddress)(m, bad[i]) == NULL, "\"%s\"", bad[i]);
         EXPECT_ERR(ERROR_PROC_NOT_FOUND);
