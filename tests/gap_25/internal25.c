@@ -95,13 +95,13 @@ static const unsigned never[] = {'/', '<', '>', '|'};
 
 TEST(gap25_pathisvalidcharw_letters) {
   pivw_t f = (pivw_t)t_proc_kb("PathIsValidCharW"); REQUIRE(f);
-  if (t_is_wine()) { t_skip("wine returns a different value for letters"); return; }
+  /* kernelbase PathIsValidChar{A,W}: letters return literal 1 (not the flag mask) */
   for (unsigned c = 'a'; c <= 'z'; c++) { CHECKF(f(c, 0) == 1, "c=%c", c); CHECKF(f(c, F_ALL) == 1, "c=%c all", c); }
   for (unsigned c = 'A'; c <= 'Z'; c++) { CHECKF(f(c, 0) == 1, "c=%c", c); CHECKF(f(c, F_ALL) == 1, "c=%c all", c); }
 }
 TEST(gap25_pathisvalidchara_letters) {
   piva_t f = (piva_t)t_proc_kb("PathIsValidCharA"); REQUIRE(f);
-  if (t_is_wine()) { t_skip("wine returns a different value for letters"); return; }
+  /* kernelbase PathIsValidChar{A,W}: letters return literal 1 (not the flag mask) */
   for (unsigned c = 'a'; c <= 'z'; c++) { CHECKF(f(c, 0) == 1, "c=%c", c); CHECKF(f(c, F_ALL) == 1, "c=%c all", c); }
   for (unsigned c = 'A'; c <= 'Z'; c++) { CHECKF(f(c, 0) == 1, "c=%c", c); CHECKF(f(c, F_ALL) == 1, "c=%c all", c); }
 }
@@ -148,7 +148,6 @@ TEST(gap25_pathisvalidchar_other_flag) {
   const char *others = "0123456789!#$%&'()+-=@[]^_`{}~";
   for (const char *p = others; *p; p++) {
     unsigned c = (unsigned char)*p;
-    if (c == '=') continue;   /* not reachable in verified decomp excerpt; checked via note below */
     CHECKF(w(c, F_OTHER) == F_OTHER, "W c=%c", c);
     CHECKF(a(c, F_OTHER) == F_OTHER, "A c=%c", c);
     CHECKF(w(c, F_ALL & ~F_OTHER) == 0, "W c=%c noother", c);
@@ -182,7 +181,7 @@ TEST(gap25_pathisvalidchar_ap_parity) {
 }
 TEST(gap25_pathisvalidchar_repeatable) {
   pivw_t w = (pivw_t)t_proc_kb("PathIsValidCharW"); REQUIRE(w);
-  if (t_is_wine()) { t_skip("wine returns a different value for letters"); return; }
+  /* kernelbase PathIsValidChar{A,W}: letters return literal 1 (not the flag mask) */
   for (int i = 0; i < 1000; i++) { CHECK(w('a', 0) == 1); CHECK(w('\\', F_BSL) == F_BSL); }
 }
 TEST(gap25_pathisvalidchar_no_lasterror) {
