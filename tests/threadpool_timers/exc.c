@@ -56,6 +56,12 @@ static VOID NTAPI x_disassoc_twice(PTP_CALLBACK_INSTANCE i, PVOID p) {
     f(i); f(i);
 }
 
+static DWORD WINAPI x_wi_av(LPVOID p) { *(volatile int *)0 = 1; return 0; }
+static VOID CALLBACK x_wot_av(PVOID p, BOOLEAN f) { *(volatile int *)0 = 1; }
+static VOID NTAPI x_timer_raise(PTP_CALLBACK_INSTANCE i, PVOID p, PTP_TIMER t) { RaiseException(0xE0004321, 0, 0, NULL); }
+static VOID NTAPI x_work_raise(PTP_CALLBACK_INSTANCE i, PVOID p, PTP_WORK w) { RaiseException(0xE0005678, 0, 0, NULL); }
+static VOID NTAPI x_exit7(PTP_CALLBACK_INSTANCE i, PVOID p) { ExitProcess(7); }
+
 /* Runs `cb` once on the default pool via TrySubmitThreadpoolCallback; survives -> falls through. */
 static void run_simple(PTP_SIMPLE_CALLBACK cb) {
     BOOL (WINAPI *ts)(PTP_SIMPLE_CALLBACK, PVOID, PTP_CALLBACK_ENVIRON) = (void *)t_proc("TrySubmitThreadpoolCallback");
@@ -139,6 +145,33 @@ CHILD(tp_exc) {
     else if (!strcmp(c, "cb_disassoc_twice")) { run_simple(x_disassoc_twice); }
     else if (!strcmp(c, "cb_av")) { run_simple(x_av); }
     else if (!strcmp(c, "cb_raise")) { run_simple(x_raise); }
+    else if (!strcmp(c, "cb_exit7")) { run_simple(x_exit7); }
+    else if (!strcmp(c, "qwi_av")) {
+        CALL(BOOL (WINAPI *)(LPTHREAD_START_ROUTINE, PVOID, ULONG), "QueueUserWorkItem")(x_wi_av, NULL, 0);
+        Sleep(6000);
+    }
+    else if (!strcmp(c, "tq_av")) {
+        HANDLE t;
+        CALL(BOOL (WINAPI *)(PHANDLE, HANDLE, WAITORTIMERCALLBACK, PVOID, DWORD, DWORD, ULONG), "CreateTimerQueueTimer")(&t, NULL, x_wot_av, NULL, 10, 0, 0);
+        Sleep(6000);
+    }
+    else if (!strcmp(c, "rw_av")) {
+        HANDLE w;
+        CALL(BOOL (WINAPI *)(PHANDLE, HANDLE, WAITORTIMERCALLBACK, PVOID, ULONG, ULONG), "RegisterWaitForSingleObject")(&w, ev, x_wot_av, NULL, 10, WT_EXECUTEONLYONCE);
+        Sleep(6000);
+    }
+    else if (!strcmp(c, "timer_raise")) {
+        PTP_TIMER t = CALL(PTP_TIMER (WINAPI *)(PTP_TIMER_CALLBACK, PVOID, PTP_CALLBACK_ENVIRON), "CreateThreadpoolTimer")(x_timer_raise, NULL, NULL);
+        CALL(void (WINAPI *)(PTP_TIMER, PFILETIME, DWORD, DWORD), "SetThreadpoolTimer")(t, &ft, 0, 0);
+        FILETIME soon; tp_rel_ft(&soon, 10);
+        CALL(void (WINAPI *)(PTP_TIMER, PFILETIME, DWORD, DWORD), "SetThreadpoolTimer")(t, &soon, 0, 0);
+        Sleep(6000);
+    }
+    else if (!strcmp(c, "work_raise")) {
+        PTP_WORK w = CALL(PTP_WORK (WINAPI *)(PTP_WORK_CALLBACK, PVOID, PTP_CALLBACK_ENVIRON), "CreateThreadpoolWork")(x_work_raise, NULL, NULL);
+        CALL(void (WINAPI *)(PTP_WORK), "SubmitThreadpoolWork")(w);
+        Sleep(6000);
+    }
     else return 0x7002;
     (void)f; (void)dummy;
     return TP_NO_EXC;
@@ -216,4 +249,23 @@ TEST(tp_exc_unhandled_exception_in_callback_terminates_process) {
     CHECKF(r == 0xC0000005, "exit 0x%08lx", r);
     r = tp_exc_run("cb_raise");
     CHECKF(r == 0xE0001234, "exit 0x%08lx", r);
+}
+
+TEST(tp_exc_unhandled_exception_in_other_callback_kinds) {
+    REQUIRE(U(QueueUserWorkItem)); REQUIRE(U(CreateThreadpoolWork));
+    DWORD r = tp_exc_run("qwi_av");
+    CHECKF(r == 0xC0000005, "QueueUserWorkItem: exit 0x%08lx", r);
+    r = tp_exc_run("tq_av");
+    CHECKF(r == 0xC0000005, "timer queue: exit 0x%08lx", r);
+    r = tp_exc_run("rw_av");
+    CHECKF(r == 0xC0000005, "registered wait: exit 0x%08lx", r);
+    r = tp_exc_run("timer_raise");
+    CHECKF(r == 0xE0004321, "threadpool timer: exit 0x%08lx", r);
+    r = tp_exc_run("work_raise");
+    CHECKF(r == 0xE0005678, "work object: exit 0x%08lx", r);
+}
+TEST(tp_exc_exit_process_from_callback) {
+    REQUIRE(U(TrySubmitThreadpoolCallback));
+    DWORD r = tp_exc_run("cb_exit7");
+    CHECKF(r == 7, "exit 0x%08lx", r);
 }
