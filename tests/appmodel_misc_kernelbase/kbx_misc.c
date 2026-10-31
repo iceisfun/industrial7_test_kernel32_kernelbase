@@ -279,6 +279,7 @@ static HANDLE np_server(const char *name) {
     return CreateNamedPipeA(full, PIPE_ACCESS_DUPLEX, PIPE_TYPE_BYTE | PIPE_WAIT, 1, 4096, 4096, 0, NULL);
 }
 TEST(npa_invalid_type) {
+    if (t_is_wine()) { t_skip("pipe attribute APIs are unimplemented stubs under wine"); return; }
     REQUIRE(UN(GetNamedPipeAttribute)); REQUIRE(UN(SetNamedPipeAttribute));
     HANDLE p = np_server("itype");
     CHECK(p != INVALID_HANDLE_VALUE);
@@ -296,6 +297,7 @@ TEST(npa_invalid_type) {
     CloseHandle(p);
 }
 TEST(npa_roundtrip_probe) {
+    if (t_is_wine()) { t_skip("pipe attribute APIs are unimplemented stubs under wine"); return; }
     REQUIRE(UN(GetNamedPipeAttribute)); REQUIRE(UN(SetNamedPipeAttribute));
     HANDLE p = np_server("rt");
     if (p == INVALID_HANDLE_VALUE) { CHECK(0); return; }
@@ -328,6 +330,7 @@ TEST(npa_roundtrip_probe) {
     CloseHandle(p);
 }
 TEST(npa_wrong_handles) {
+    if (t_is_wine()) { t_skip("pipe attribute APIs are unimplemented stubs under wine"); return; }
     REQUIRE(UN(GetNamedPipeAttribute)); REQUIRE(UN(SetNamedPipeAttribute));
     HANDLE ev = CreateEventA(NULL, TRUE, FALSE, NULL);
     char v[8] = "x"; SIZE_T len = 8;
@@ -352,6 +355,7 @@ TEST(npa_wrong_handles) {
     CloseHandle(ev);
 }
 TEST(npa_connection_attribute_probe) {
+    if (t_is_wine()) { t_skip("pipe attribute APIs are unimplemented stubs under wine"); return; }
     REQUIRE(UN(GetNamedPipeAttribute));
     HANDLE p = np_server("conn");
     if (p == INVALID_HANDLE_VALUE) { CHECK(0); return; }

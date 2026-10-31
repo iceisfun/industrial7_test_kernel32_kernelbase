@@ -527,7 +527,7 @@ TEST(recovery_finished_outside_callback) {
     CHECKF(code == 0, "child result %lu", code);
 }
 TEST(recovery_register_invalid) {
-    REQUIRE(U(RegisterApplicationRecoveryCallback));
+    REQUIRE(U(RegisterApplicationRecoveryCallback)); REQUIRE(U(UnregisterApplicationRecoveryCallback));
     /* NULL callback is rejected; nothing gets registered */
     HRESULT hr = U(RegisterApplicationRecoveryCallback)(NULL, NULL, 5000, 0);
     EXPECT_EQ((ULONG)hr, 0x80070057UL);
