@@ -68,18 +68,19 @@ TEST(locenum_systemlocalesw_early_stop) {
 }
 TEST(locenum_systemlocalesw_null_callback) {
     REQUIRE(U(EnumSystemLocalesW));
+    if (t_is_wine()) { t_skip("emulator faults on NULL callback"); return; }
     SET_ERR(0);
     BOOL r = U(EnumSystemLocalesW)(NULL, LCID_SUPPORTED);
     CHECK(!r); EXPECT_ERR(ERROR_INVALID_PARAMETER);
 }
 TEST(locenum_systemlocalesw_bad_flags) {
     REQUIRE(U(EnumSystemLocalesW));
-    static const DWORD f[] = { 0x80, 0x100, 0x10000, 0x80000000 };
+    static const DWORD f[] = { 3, 7, 8, 0x80, 0x100, 0x10000, 0x80000000 };
     for (int i = 0; i < ARRAYLEN(f); i++) {
         e_reset(0); SET_ERR(0);
         BOOL r = U(EnumSystemLocalesW)(cb_locw, f[i]);
-        if (r) t_note("flags 0x%lx accepted (%d items)", f[i], g_n);
-        else { CHECK(g_n == 0); t_note("flags 0x%lx rejected err=%lu", f[i], GetLastError()); }
+        CHECKF(!r && g_n == 0, "flags 0x%lx", f[i]);
+        if (!r) t_note("EnumSystemLocalesW flags 0x%lx err=%lu", f[i], GetLastError());
     }
 }
 TEST(locenum_systemlocalesw_flags_zero) {
@@ -99,6 +100,7 @@ TEST(locenum_systemlocalesa_matches_w) {
 }
 TEST(locenum_systemlocalesa_null_callback) {
     REQUIRE(U(EnumSystemLocalesA));
+    if (t_is_wine()) { t_skip("emulator faults on NULL callback"); return; }
     SET_ERR(0); CHECK(!U(EnumSystemLocalesA)(NULL, LCID_SUPPORTED)); EXPECT_ERR(ERROR_INVALID_PARAMETER);
 }
 TEST(locenum_systemlocalesa_early_stop) {
@@ -192,6 +194,7 @@ TEST(locenum_ex_early_stop) {
 }
 TEST(locenum_ex_null_callback) {
     REQUIRE(U(EnumSystemLocalesEx));
+    if (t_is_wine()) { t_skip("emulator faults on NULL callback"); return; }
     SET_ERR(0); CHECK(!U(EnumSystemLocalesEx)(NULL, LOCALE_ALL, 0, NULL)); EXPECT_ERR(ERROR_INVALID_PARAMETER);
 }
 TEST(locenum_ex_reserved_nonnull) {
@@ -242,17 +245,25 @@ TEST(locenum_langgroups_supported) {
     BOOL r = U(EnumSystemLanguageGroupsW)(cb_lgw, LGRPID_SUPPORTED, 77);
     CHECK(r); CHECKF(g_n >= 10, "n=%d", g_n);
     CHECK(g_lp_seen == 77);
-    CHECK(e_find(L"1|00000001") >= 0);
-    CHECK(e_find(L"7|00000007") >= 0);
-    t_note("supported language groups: %d", g_n);
+    int has1 = 0, has7 = 0;
+    for (int i = 0; i < g_n && i < MAXE; i++) {
+        unsigned long id = wcstoul(g_e[i].s, NULL, 10);
+        const WCHAR *bar = wcschr(g_e[i].s, '|');
+        CHECKF(bar && wcstoul(bar + 1, NULL, 16) == id, "group string mismatch %ls", g_e[i].s);
+        has1 |= id == 1; has7 |= id == 7;
+        CHECK(id >= 1 && id <= 17);
+    }
+    CHECK(has1); CHECK(has7);
+    t_note("supported language groups: %d first=%ls", g_n, g_e[0].s);
 }
 TEST(locenum_langgroups_installed) {
     REQUIRE(U(EnumSystemLanguageGroupsW));
     e_reset(0);
     CHECK(U(EnumSystemLanguageGroupsW)(cb_lgw, LGRPID_INSTALLED, 0));
     CHECK(g_n >= 1);
-    CHECK(e_find(L"1|00000001") >= 0);
-    for (int i = 0; i < g_n && i < MAXE; i++) CHECK(g_e[i].flags & LGRPID_INSTALLED);
+    int has1 = 0;
+    for (int i = 0; i < g_n && i < MAXE; i++) { CHECK(g_e[i].flags & LGRPID_INSTALLED); has1 |= wcstoul(g_e[i].s, NULL, 10) == 1; }
+    CHECK(has1);
 }
 TEST(locenum_langgroups_a_matches_w) {
     REQUIRE(U(EnumSystemLanguageGroupsA)); REQUIRE(U(EnumSystemLanguageGroupsW));
@@ -277,8 +288,8 @@ TEST(locenum_langgroups_bad_flags) {
     for (int i = 0; i < ARRAYLEN(f); i++) {
         e_reset(0); SET_ERR(0);
         BOOL r = U(EnumSystemLanguageGroupsW)(cb_lgw, f[i], 0);
-        if (r) t_note("lang group flags 0x%lx accepted", f[i]);
-        else t_note("lang group flags 0x%lx err=%lu", f[i], GetLastError());
+        CHECKF(!r && g_n == 0, "flags 0x%lx", f[i]);
+        if (!r) EXPECT_ERR(ERROR_INVALID_FLAGS);
     }
 }
 TEST(locenum_isvalidlanguagegroup) {
@@ -286,12 +297,13 @@ TEST(locenum_isvalidlanguagegroup) {
     CHECK(U(IsValidLanguageGroup)(LGRPID_WESTERN_EUROPE, LGRPID_SUPPORTED));
     CHECK(U(IsValidLanguageGroup)(LGRPID_WESTERN_EUROPE, LGRPID_INSTALLED));
     for (int g = 1; g <= 17; g++)
-        if (!U(IsValidLanguageGroup)(g, LGRPID_SUPPORTED)) t_note("language group %d unsupported", g);
+        CHECKF(U(IsValidLanguageGroup)(g, LGRPID_SUPPORTED), "group %d", g);
     SET_ERR(0);
     CHECK(!U(IsValidLanguageGroup)(0, LGRPID_SUPPORTED));
     CHECK(!U(IsValidLanguageGroup)(0xFFFF, LGRPID_SUPPORTED));
-    CHECK(!U(IsValidLanguageGroup)(18, LGRPID_SUPPORTED) || 1);
-    CHECK(!U(IsValidLanguageGroup)(1, 0));
+    CHECK(!U(IsValidLanguageGroup)(18, LGRPID_SUPPORTED));
+    CHECK(U(IsValidLanguageGroup)(17, LGRPID_SUPPORTED));
+    CHECK(U(IsValidLanguageGroup)(1, 0));
     CHECK(!U(IsValidLanguageGroup)(1, 3));
     CHECK(!U(IsValidLanguageGroup)(1, 0x80));
 }
@@ -476,13 +488,14 @@ TEST(locenum_codepages_errors) {
     if (!t_is_wine()) { SET_ERR(0); CHECK(!U(EnumSystemCodePagesW)(NULL, CP_SUPPORTED)); EXPECT_ERR(ERROR_INVALID_PARAMETER); }
     e_reset(0); SET_ERR(0);
     BOOL r = U(EnumSystemCodePagesW)(cb_cpw, 0);
-    t_note("EnumSystemCodePagesW flags 0: r=%d n=%d err=%lu", r, g_n, GetLastError());
-    e_reset(0); SET_ERR(0);
-    r = U(EnumSystemCodePagesW)(cb_cpw, 3);
-    t_note("flags 3: r=%d n=%d err=%lu", r, g_n, GetLastError());
-    e_reset(0); SET_ERR(0);
-    r = U(EnumSystemCodePagesW)(cb_cpw, 0x80);
-    t_note("EnumSystemCodePagesW flags 0x80: r=%d err=%lu", r, GetLastError());
+    CHECK(r);   /* flags 0 behaves like CP_SUPPORTED */
+    static const DWORD bad[] = { 3, 4, 0x80, 0x80000000 };
+    for (int i = 0; i < ARRAYLEN(bad); i++) {
+        e_reset(0); SET_ERR(0);
+        r = U(EnumSystemCodePagesW)(cb_cpw, bad[i]);
+        CHECKF(!r && g_n == 0, "flags 0x%lx", bad[i]);
+        if (!r) EXPECT_ERR(ERROR_INVALID_FLAGS);
+    }
 }
 
 /* ---- geo ---- */
