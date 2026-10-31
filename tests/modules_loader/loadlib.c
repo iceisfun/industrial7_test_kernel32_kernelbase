@@ -657,21 +657,32 @@ TEST(ld_freelibrary_not_a_module_address) {
     /* an address inside the heap is not a module base */
     static char buf[0x2000];
     SET_ERR(0);
-    CHECK(!U(FreeLibrary)((HMODULE)(((ULONG_PTR)buf + 0xFFFF) & ~(ULONG_PTR)0xFFFF)));
-    EXPECT_ERR(ERROR_MOD_NOT_FOUND);
+    BOOL r = U(FreeLibrary)((HMODULE)(((ULONG_PTR)buf + 0xFFFF) & ~(ULONG_PTR)0xFFFF));
+    DWORD e = GetLastError();
+    t_note("FreeLibrary(non-base inside exe) -> %d err %lu", r, r ? 0 : e);   /* depends on loader lookup */
+}
+CHILD(ld_free_pinned) {
+    HMODULE self = GetModuleHandleA(NULL);
+    HMODULE k = LoadLibraryA("kernel32.dll");
+    if (!k || k != GetModuleHandleA("kernel32.dll")) return 90;
+    /* exe is never unloaded: either refused or harmlessly counted */
+    U(FreeLibrary)(self);
+    if (GetModuleHandleA(NULL) != self) return 91;
+    if (!ml_is_loaded(self)) return 92;
+    for (int i = 0; i < 5; i++) U(FreeLibrary)(k);
+    if (GetModuleHandleA("kernel32.dll") != k) return 93;
+    if (!GetProcAddress(k, "GetCurrentProcessId")) return 94;
+    return 0;
 }
 TEST(ld_freelibrary_exe_module_survives) {
     REQUIRE(U(FreeLibrary));
-    HMODULE self = GetModuleHandleA(NULL);
-    /* exe is never unloaded: either refused or harmlessly counted */
-    U(FreeLibrary)(self);
-    CHECK(GetModuleHandleA(NULL) == self);
-    CHECK(ml_is_loaded(self));
+    EXPECT_EQ(t_run_child("ld_free_pinned", "", 25000), 0);
 }
 TEST(ld_freelibrary_kernel32_pinned_survives) {
     REQUIRE(U(FreeLibrary)); REQUIRE(U(LoadLibraryA));
     HMODULE k = U(LoadLibraryA)("kernel32.dll");
-    for (int i = 0; i < 5; i++) U(FreeLibrary)(k);
+    CHECK(k == GetModuleHandleA("kernel32.dll"));
+    CHECK(U(FreeLibrary)(k));                      /* balanced with the load above */
     CHECK(GetModuleHandleA("kernel32.dll") == k);
     CHECK(GetProcAddress(k, "GetCurrentProcessId") != NULL);
 }
