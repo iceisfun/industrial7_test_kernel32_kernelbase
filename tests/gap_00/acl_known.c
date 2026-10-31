@@ -228,6 +228,7 @@ TEST(gap0_known_fill_until_full) {
     }
 }
 
+/* ntdll!RtlpAddKnownAce: allowed rejects flags & ~0x3f, denied & ~0x1f, audit & ~0xdf (STATUS_INVALID_PARAMETER -> 1004 in kernelbase *Ex wrappers) */
 TEST(gap0_known_flag_matrix) {
     DWORD flags[] = {0, 1, 2, 3, 4, 8, 0x10, 0x1f, 0x20, 0x21, 0x3f, 0x40, 0x80, 0xc0, 0xdf, 0xe0, 0x100, 0x200, 0xff, 0x1000, 0x80000000, 0xFFFFFFFF};
     for (int i = 0; i < NADD; i++) {

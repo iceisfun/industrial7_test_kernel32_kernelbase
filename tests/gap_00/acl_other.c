@@ -539,14 +539,16 @@ TEST(gap0_scoped_errors) {
 /* ----------------------------------------------- AddResourceAttributeAce */
 static WCHAR g_attr_name[] = L"gap0.attr";
 static DWORD64 g_attr_val = 42;
-static CLAIM_SECURITY_ATTRIBUTE_V1 g_attr;
+static CLAIM_SECURITY_ATTRIBUTE_V1 g_attrs[2];   /* second slot keeps AttributeCount==2 readable; Windows requires exactly 1 */
+#define g_attr g_attrs[0]
 static CLAIM_SECURITY_ATTRIBUTES_INFORMATION g_info;
 static void mkinfo(void) {
-    memset(&g_attr, 0, sizeof g_attr);
+    memset(g_attrs, 0, sizeof g_attrs);
     g_attr.Name = g_attr_name;
     g_attr.ValueType = CLAIM_SECURITY_ATTRIBUTE_TYPE_UINT64;
     g_attr.ValueCount = 1;
     g_attr.Values.pUint64 = &g_attr_val;
+    g_attrs[1] = g_attrs[0];
     memset(&g_info, 0, sizeof g_info);
     g_info.Version = CLAIM_SECURITY_ATTRIBUTES_INFORMATION_VERSION_V1;
     g_info.AttributeCount = 1;
