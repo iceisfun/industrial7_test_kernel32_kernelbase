@@ -3,7 +3,7 @@
 #define ML_H
 #include "t.h"
 
-enum { ML_A = 1, ML_DEP = 2, ML_IMP = 3 };
+enum { ML_A = 1, ML_DEP = 2, ML_IMP = 3, ML_FAIL = 4, ML_BADIMP = 5 };
 const unsigned char *ml_blob(int which, size_t *n);
 
 /* Exports of the embedded k32m_a image */

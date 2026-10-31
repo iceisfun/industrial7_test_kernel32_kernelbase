@@ -1,0 +1,3 @@
+LIBRARY k32m_fail.dll
+EXPORTS
+  ml_f @1
