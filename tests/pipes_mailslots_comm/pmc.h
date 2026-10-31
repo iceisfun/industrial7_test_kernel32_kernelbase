@@ -20,6 +20,7 @@ BOOL pmc_err_in(DWORD e, ...);   /* 0-terminated list */
 #define CHECK_ERR_ONE_OF2(a, b) do { DWORD e_ = GetLastError(); t_check(e_ == (a) || e_ == (b), __FILE__, __LINE__, "err in {" #a "," #b "}", "got %lu", e_); } while (0)
 #define CHECK_ERR_ONE_OF3(a, b, c) do { DWORD e_ = GetLastError(); t_check(e_ == (a) || e_ == (b) || e_ == (c), __FILE__, __LINE__, "err in {" #a "," #b "," #c "}", "got %lu", e_); } while (0)
 
+#define CHECK_ERR_ONE_OF4(a, b, c, d) do { DWORD e_ = GetLastError(); t_check(e_ == (a) || e_ == (b) || e_ == (c) || e_ == (d), __FILE__, __LINE__, "err in {" #a "," #b "," #c "," #d "}", "got %lu", e_); } while (0)
 #ifndef ERROR_PIPE_LISTENING
 #define ERROR_PIPE_LISTENING 536
 #endif

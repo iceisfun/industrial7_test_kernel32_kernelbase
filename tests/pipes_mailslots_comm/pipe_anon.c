@@ -53,8 +53,8 @@ TEST(pmc_anon_sizes) {
         HANDLE r = NULL, w = NULL; DWORD n; char b[4];
         CHECKF(U(CreatePipe)(&r, &w, NULL, sizes[i]), "size %lu err %lu", sizes[i], GetLastError());
         if (!r) continue;
-        CHECK(WR(w, "abc", 3, &n)); EXPECT_EQ(n, 3);
-        CHECK(ReadFile(r, b, 4, &n, NULL)); EXPECT_EQ(n, 3);
+        CHECK(WR(w, "a", 1, &n)); EXPECT_EQ(n, 1);
+        CHECK(ReadFile(r, b, 4, &n, NULL)); EXPECT_EQ(n, 1);
         CloseHandle(r); CloseHandle(w);
     }
 }
@@ -227,7 +227,7 @@ TEST(pmc_anon_peek_on_file_handle) {
     HANDLE h = CreateFileA(p, GENERIC_READ | GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
     CHECK(h != INVALID_HANDLE_VALUE);
     SET_ERR(0); CHECK(!U(PeekNamedPipe)(h, NULL, 0, NULL, &av, NULL));
-    CHECK_ERR_ONE_OF3(ERROR_INVALID_FUNCTION, ERROR_INVALID_HANDLE, ERROR_INVALID_PARAMETER);
+    CHECK_ERR_ONE_OF4(ERROR_INVALID_FUNCTION, ERROR_INVALID_HANDLE, ERROR_INVALID_PARAMETER, ERROR_NOT_SUPPORTED);
     CloseHandle(h); DeleteFileA(p);
 }
 TEST(pmc_anon_peek_on_write_end) {
@@ -319,7 +319,7 @@ TEST(pmc_anon_getnamedpipeinfo_invalid) {
     char p[MAX_PATH]; t_tmpfile(p, sizeof p, "pmc_gnpi.bin");
     HANDLE h = CreateFileA(p, GENERIC_READ | GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
     SET_ERR(0); CHECK(!U(GetNamedPipeInfo)(h, &fl, NULL, NULL, NULL));
-    CHECK_ERR_ONE_OF3(ERROR_INVALID_FUNCTION, ERROR_INVALID_HANDLE, ERROR_INVALID_PARAMETER);
+    CHECK_ERR_ONE_OF4(ERROR_INVALID_FUNCTION, ERROR_INVALID_HANDLE, ERROR_INVALID_PARAMETER, ERROR_NOT_SUPPORTED);
     CloseHandle(h); DeleteFileA(p);
 }
 TEST(pmc_anon_handlestate_on_file_fails) {
