@@ -289,7 +289,7 @@ TEST(eed_wer_getflags_null_args_no_crash) {
     void (WINAPI *getf)(HANDLE, PDWORD) = (void (WINAPI *)(HANDLE, PDWORD))t_proc("WerGetFlags");
     if (!getf) { t_skip("missing WerGetFlags"); return; }
     DWORD f = 0x77;
-    getf(NULL, &f);                    /* decomp: invalid params are rejected before any memory access */
+    getf(NULL, &f);                    /* reference analysis: invalid params are rejected before any memory access */
     getf(GetCurrentProcess(), NULL);
     EXPECT_EQ(f, 0x77);
 }

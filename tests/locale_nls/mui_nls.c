@@ -259,7 +259,7 @@ TEST(uipref_null_out_params) {
             char a[8]; wsprintfA(a, "%d", k);
             DWORD rc = t_run_child("prefnull", a, 20000);
             t_note("NULL out-param probe %d: child exit 0x%lx", k, rc);
-            /* P1 audit: case 0 (System, NULL pcch) is decided by the decompile: '*param_5' is read first -> AV */
+            /* P1 audit: case 0 (System, NULL pcch) is decided by the reference analysis: '*param_5' is read first -> AV */
             if (k == 0) CHECKF(rc == 0xC0000005, "System NULL pcch: child exit 0x%lx", rc);
         }
     }

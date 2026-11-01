@@ -692,7 +692,7 @@ TEST(wow64_process2_null_native_machine) {
 TEST(wow64_process2_invalid_handle) {
     REQUIRE(U(IsWow64Process2));
     USHORT pm, nm; SET_ERR(0);
-    /* kernel handling of a NULL handle is not verifiable from the user-mode decomp */
+    /* kernel handling of a NULL handle is not verifiable from the user-mode reference analysis */
     BOOL r = U(IsWow64Process2)(NULL, &pm, &nm);
     t_note("IsWow64Process2(NULL) -> %d, last error %lu", (int)r, GetLastError());
 }

@@ -56,7 +56,7 @@ static void matrix(const WCHAR *loc)
         SET_ERR(0);
         int ra = U(GetLocaleInfoA)(lcid, t | N_NOUSER, ab, 1024);
         if (t >= 0x70 && t <= 0xFFF) {
-            /* P1: Win10 GetLocaleInfoA rejects LCTYPE 0x70..0xFFF (kernelbase decompile) */
+            /* P1: Win10 GetLocaleInfoA rejects LCTYPE 0x70..0xFFF (kernelbase reference analysis) */
             CHECKF(ra == 0, "GetLocaleInfoA type 0x%lx ra=%d", t, ra);
             EXPECT_ERR(ERROR_INVALID_FLAGS);
             ra = 0;

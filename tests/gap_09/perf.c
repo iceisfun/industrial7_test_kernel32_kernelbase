@@ -430,7 +430,7 @@ TEST(gap9_perf_custom_allocator) {
     g_alloc_n = g_free_n = 0; g_alloc_ctx_seen = NULL;
     G9_SETUP s; if (!g9_setup(&s, 27, &ctx)) { t_skip("setup failed"); return; }
     CHECKF(g_alloc_n > 0, "allocator not used by provider/counter set creation");
-    if (g_alloc_ctx_seen != &token) t_note("provider allocation context differs (decomp passes only size)");
+    if (g_alloc_ctx_seen != &token) t_note("provider allocation context differs (reference analysis passes only size)");
     int before = g_alloc_n;
     PPERF_COUNTERSET_INSTANCE i = U(PerfCreateInstance)(s.h, &s.cs, L"k", 0);
     CHECK(i != NULL);

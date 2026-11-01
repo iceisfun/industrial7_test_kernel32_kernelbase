@@ -1,7 +1,7 @@
 #include "t.h"
 /* Non-public / internal exports: presence, module ownership, export-table
  * shape (ordinals, forwarders) and the side-effect-free helpers whose
- * behaviour was verified from the kernelbase / kernel32 decompilation
+ * behaviour was verified from the kernelbase / kernel32 reference analysis
  * (SHTruncateString, StrCpyNX{A,W}, StrChrA_MB, TermsrvAppInstallMode).
  * Everything with system-wide side effects is only resolved, never called. */
 
@@ -83,7 +83,7 @@ TEST(gap27_export_table_entries) {
 }
 TEST(gap27_not_forwarders_when_implemented) {
   if (t_is_wine()) { t_skip("export layout differs on wine"); return; }
-  /* decomp shows real code bodies for these */
+  /* reference analysis shows real code bodies for these */
   static const char *kb[] = {"SHTruncateString","StrCpyNXA","StrCpyNXW","StrChrA_MB","SetProcessGroupAffinity","SetStateVersion"};
   static const char *k3[] = {"TermsrvAppInstallMode","SortGetHandle","SortCloseHandle","TermsrvGetWindowsDirectoryA","TermsrvGetWindowsDirectoryW"};
   expinfo e;
@@ -97,7 +97,7 @@ TEST(gap27_sort_close_handle_alias) {
   FARPROC a = t_proc_k32("SortCloseHandle"), b = t_proc_k32("BaseFreeAppCompatDataForProcessWorker");
   REQUIRE(a);
   if (!b) { t_note("BaseFreeAppCompatDataForProcessWorker not exported"); return; }
-  CHECK(a == b);   /* decomp: same RVA carries both names */
+  CHECK(a == b);   /* reference analysis: same RVA carries both names */
 }
 TEST(gap27_distinct_entry_points) {
   FARPROC a = t_proc("StrCpyNXA"), b = t_proc("StrCpyNXW"), c = t_proc("SHTruncateString"), d = t_proc("StrChrA_MB");

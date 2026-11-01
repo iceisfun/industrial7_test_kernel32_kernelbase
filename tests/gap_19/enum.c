@@ -582,7 +582,7 @@ TEST(gap19_gsteA_bad_count) {
     SET_ERR(0);
     BOOL r0 = UN(GetStringTypeExA)(0x0409, CT_CTYPE1, "a", 0, out);
     t_note("cchSrc 0 -> %d err %lu", r0, (unsigned long)GetLastError());
-    /* any negative count means "NUL-terminated" in the W worker (decomp) */
+    /* any negative count means "NUL-terminated" in the W worker (reference analysis) */
     WORD o2[8];
     SET_ERR(0);
     BOOL rm = UN(GetStringTypeExA)(0x0409, CT_CTYPE1, "a", -2, o2);

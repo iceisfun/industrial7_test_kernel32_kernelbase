@@ -1,6 +1,6 @@
 #include "t.h"
 /* Non-public / internal exports: presence, module ownership (from the Win10 export
- * tables) and the few calls whose decomp shows trivial, side-effect-free behaviour. */
+ * tables) and the few calls whose reference analysis shows trivial, side-effect-free behaviour. */
 static const struct { const char *n; int k32, kb; } ex[] = {
   {"TermsrvSetKeySecurity",1,0},
   {"TermsrvSetValueKey",1,0},
@@ -305,7 +305,7 @@ TEST(gap28_initterm_e_null_then_fail) {
   EXPECT_EQ(g_calls, 1);
 }
 
-/* ---- _invalid_parameter: only logs via DbgPrint and returns (decomp verified) ---- */
+/* ---- _invalid_parameter: only logs via DbgPrint and returns (reference analysis verified) ---- */
 TEST(gap28_invalid_parameter_returns) {
   typedef void (__cdecl *fn_t)(void);
   fn_t f = (fn_t)t_proc_kb("_invalid_parameter"); REQUIRE(f);

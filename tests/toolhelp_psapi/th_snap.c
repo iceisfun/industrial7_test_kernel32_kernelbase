@@ -530,7 +530,7 @@ TEST(th_thread_basic) {
     CloseHandle(s);
 }
 
-/* kernel32 decomp: bad dwSize skips NtMapViewOfSection and calls BaseSetLastNTError with stale status, so the error value is unspecified. */
+/* kernel32 reference analysis: bad dwSize skips NtMapViewOfSection and calls BaseSetLastNTError with stale status, so the error value is unspecified. */
 TEST(th_thread_bad_dwsize) {
     NEED_SNAP(); REQUIRE(U(Thread32First)); REQUIRE(U(Thread32Next));
     HANDLE s = snap(TH32CS_SNAPTHREAD, 0);

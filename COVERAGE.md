@@ -146,7 +146,7 @@ One corpus covers both DLLs: tests resolve each name with `U()` (kernel32 first,
 | PathSkipRootA | shlwapi.h | no direct call found by static scan (may be exercised through helper tables); see tests/gap_* presence checks |
 | PathStripPathA | shlwapi.h | no direct call found by static scan (may be exercised through helper tables); see tests/gap_* presence checks |
 | PathStripToRootA | shlwapi.h | no direct call found by static scan (may be exercised through helper tables); see tests/gap_* presence checks |
-| SetSystemTimeAdjustment | sysinfoapi.h | state-changing for the whole machine: only argument-validation failure paths (verified from decomp) or presence are tested |
+| SetSystemTimeAdjustment | sysinfoapi.h | state-changing for the whole machine: only argument-validation failure paths (verified from reference analysis) or presence are tested |
 | SetUserGeoID | winnls.h | no direct call found by static scan (may be exercised through helper tables); see tests/gap_* presence checks |
 | UrlCanonicalizeA | shlwapi.h | no direct call found by static scan (may be exercised through helper tables); see tests/gap_* presence checks |
 | WerRegisterAdditionalProcess | werapi.h | WER registration touches per-process crash-report state; presence and error paths only |

@@ -99,7 +99,7 @@ TEST(gap10_usk_create_flag_variants_hkcu) {
     }
     rmroot();
 }
-/* decomp SHRegCreateUSKeyW: (dwFlags & 0xf) == 0 -> ERROR_INVALID_PARAMETER, *phNewUSKey zeroed */
+/* reference analysis SHRegCreateUSKeyW: (dwFlags & 0xf) == 0 -> ERROR_INVALID_PARAMETER, *phNewUSKey zeroed */
 TEST(gap10_usk_create_invalid_flags) {
     NEED(SHRegCreateUSKeyW); NEED(SHRegCreateUSKeyA); ROOT();
     static const DWORD bad[] = { 0, 0x10, 0x20, 0x100, 0x80000000, 0xFFFFFFF0 };
@@ -133,7 +133,7 @@ TEST(gap10_usk_create_a_null_path) {
     LONG r = U(SHRegCreateUSKeyA)(NULL, KEY_ALL_ACCESS, NULL, &h, USK_FORCE_HKCU);
     EQ1(r, ERROR_INVALID_PARAMETER);
 }
-/* decomp SHRegCreateUSKeyA: MultiByteToWideChar(-1) into WCHAR[256]; overflow -> ERROR_INSUFFICIENT_BUFFER */
+/* reference analysis SHRegCreateUSKeyA: MultiByteToWideChar(-1) into WCHAR[256]; overflow -> ERROR_INSUFFICIENT_BUFFER */
 TEST(gap10_usk_create_a_path_length_limit) {
     NEED(SHRegCreateUSKeyA); NEED(SHRegCloseUSKey); ROOT();
     char p[400]; HUSKEY h = NULL; size_t pre;

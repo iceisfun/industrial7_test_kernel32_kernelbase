@@ -762,7 +762,7 @@ CG(redir_probe) {
         BOOL r = WriteConsoleW(h[1], L"x", 1, &n, NULL);
         /* P1 EXPECT-FIX: Win10 kernelbase WriteConsoleW issues the ConDrv ioctl directly on the handle; a pipe
            answers ERROR_INVALID_FUNCTION (observed 1), not ERROR_INVALID_HANDLE. UNVERIFIED-until-rerun */
-        /* P1b: kernelbase maps STATUS_INVALID_PARAMETER from the ioctl to ERROR_INVALID_HANDLE (WriteConsoleW decomp:
+        /* P1b: kernelbase maps STATUS_INVALID_PARAMETER from the ioctl to ERROR_INVALID_HANDLE (WriteConsoleW reference analysis:
            status 0xC000000D -> 0xC0000008); the baseline shows a disk file answers that way (6) while a pipe answers
            ERROR_INVALID_FUNCTION (1). UNVERIFIED-until-rerun */
         { DWORD e_ = GetLastError(); CEQ(r, 0); CERRV(e_, GetFileType(h[1]) == FILE_TYPE_DISK ? ERROR_INVALID_HANDLE : ERROR_INVALID_FUNCTION); }

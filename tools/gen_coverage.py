@@ -24,7 +24,7 @@ for d, _, fs in os.walk(os.path.join(root, 'tests')):
                     uses[n] += 1; areas[n].add(area)
 reasons = [
  (re.compile(r'^(SetSystemTime|SetLocalTime|SetTimeZoneInformation|SetDynamicTimeZoneInformation|SetSystemTimeAdjustment\w*|SetComputerName\w*|SetVolumeLabel\w*|SetSystemFileCacheSize|ExitWindowsEx|FatalAppExit\w*|Beep|SetSystemPowerState|SetSuspendState)$'),
-  'state-changing for the whole machine: only argument-validation failure paths (verified from decomp) or presence are tested'),
+  'state-changing for the whole machine: only argument-validation failure paths (verified from reference analysis) or presence are tested'),
  (re.compile(r'^(DefineDosDevice\w*|SetVolumeMountPoint\w*|DeleteVolumeMountPoint\w*)$'), 'only provably failing / self-cleaning unique-name paths'),
  (re.compile(r'^Wer'), 'WER registration touches per-process crash-report state; presence and error paths only'),
 ]

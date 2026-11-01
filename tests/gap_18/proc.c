@@ -106,7 +106,7 @@ TEST(gap18_cpau_impersonation_token_rejected) {
     t_note("impersonation token as process token -> ok %d err %lu", ok, e);
     if (!ok) {
         /* no token-type check exists on the kernel path, so only the environment-dependent privilege/access
-           refusals (as in gap18_cpau_primary_dup) are acceptable; ERROR_BAD_TOKEN_TYPE would contradict the decomp */
+           refusals (as in gap18_cpau_primary_dup) are acceptable; ERROR_BAD_TOKEN_TYPE would contradict the reference analysis */
         CHECKF(e == ERROR_PRIVILEGE_NOT_HELD || e == ERROR_ACCESS_DENIED, "err %lu", e);
     } else {
         /* Win10 22H2: the kernel does not reject the token type; the new process always gets a primary token */

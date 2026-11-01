@@ -58,10 +58,10 @@ The corpus is meant to be run on a machine that is also used for other things.
 - Files only under `%TEMP%\k32t_<pid>\` (and read-only system files); registry writes only under `HKCU\Software\k32t_<pid>`.
 - Process-global or irreversible state (current directory, DLL search path, error mode, environment, console, standard handles, affinity/priority, working-set limits) is changed only in a child process or restored exactly.
 - Console tests run only in children created with `CREATE_NEW_CONSOLE` or `DETACHED_PROCESS`, or through ConPTY. The main process never calls `GenerateConsoleCtrlEvent`, `AttachConsole`, `FreeConsole` or `AllocConsole`.
-- Never called (beyond argument-validation failure paths verified from the decompilation, or presence checks): `SetSystemTime`, `SetLocalTime`, `SetTimeZoneInformation`, `SetDynamicTimeZoneInformation`, `SetComputerName*`, `SetVolumeLabel`, `DefineDosDevice` on existing devices, `SetSystemTimeAdjustment`, `SetSystemFileCacheSize`, `FatalAppExit*`, `ExitWindowsEx`, `Beep`/`MessageBeep`. `SetProcessDEPPolicy` runs in a child only. `SetThreadExecutionState` is always restored to `ES_CONTINUOUS`.
+- Never called (beyond argument-validation failure paths verified from the reference analysis, or presence checks): `SetSystemTime`, `SetLocalTime`, `SetTimeZoneInformation`, `SetDynamicTimeZoneInformation`, `SetComputerName*`, `SetVolumeLabel`, `DefineDosDevice` on existing devices, `SetSystemTimeAdjustment`, `SetSystemFileCacheSize`, `FatalAppExit*`, `ExitWindowsEx`, `Beep`/`MessageBeep`. `SetProcessDEPPolicy` runs in a child only. `SetThreadExecutionState` is always restored to `ES_CONTINUOUS`.
 - Processes are only created, suspended, debugged or terminated if the test itself spawned them. Children have a hard timeout (30 s at most) and are killed on expiry.
 - Resource bounds: under 1 GB memory per test, files under 64 MB, at most 256 threads, 8192 handles, 100000 loop iterations; every handle, file, key, mapping and process created is cleaned up.
-- Behaviour that is version dependent or not verified against the decompilation/docs is reported with `t_note()` rather than a hard CHECK.
+- Behaviour that is version dependent or not verified against the reference analysis/docs is reported with `t_note()` rather than a hard CHECK.
 
 ## Running everything on Windows
 

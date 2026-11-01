@@ -1,6 +1,6 @@
 /* GetLocaleInfoEx / GetLocaleInfoW / GetLocaleInfoA value tables for fixed locales.
  * "R" rows are hard expectations; "S" rows are values we believe but cannot verify
- * against the decompilation (locale data lives in locale.nls) - they are only noted. */
+ * against the reference analysis (locale data lives in locale.nls) - they are only noted. */
 #include "nlsutil.h"
 
 typedef struct { DWORD type; const WCHAR *val; int hard; } row_t;

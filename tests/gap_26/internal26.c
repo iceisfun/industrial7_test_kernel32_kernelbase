@@ -1,8 +1,8 @@
 #include "t.h"
-/* Export ownership table (k32/kb flags) cross-checked against decomp of both modules.
- * SHExpand/Reg*Internal error paths verified from kernelbase decomp.
+/* Export ownership table (k32/kb flags) cross-checked against reference analysis of both modules.
+ * SHExpand/Reg*Internal error paths verified from kernelbase reference analysis.
  * Non-public / undocumented exports: presence, module ownership, stability, and
- * only the error paths and side-effect-free calls verified from decomp. */
+ * only the error paths and side-effect-free calls verified from reference analysis. */
 static const struct { const char *n; int k32, kb; } ex[] = {
 {"QueryGlobalizationUserSettingsStatus",0,1},{"QueryStateAtomValueInfo",0,1},{"QueryStateContainerCreatedNew",0,1},{"QueryStateContainerItemInfo",0,1},{"QuirkGetData",0,1},{"QuirkGetData2",0,1},{"QuirkIsEnabled",0,1},{"QuirkIsEnabled2",0,1},{"QuirkIsEnabled3",0,1},{"QuirkIsEnabledForPackage",0,1},{"QuirkIsEnabledForPackage2",0,1},{"QuirkIsEnabledForPackage3",0,1},{"QuirkIsEnabledForPackage4",0,1},{"QuirkIsEnabledForProcess",0,1},{"RaiseCustomSystemEventTrigger",0,1},{"ReadStateAtomValue",0,1},{"ReadStateContainerValue",0,1},{"RecordFeatureUsage2",0,1},{"RefreshPackageInfo",0,1},{"RegCreateKeyExInternalA",0,1},{"RegCreateKeyExInternalW",0,1},{"RegDeleteKeyExInternalA",0,1},{"RegDeleteKeyExInternalW",0,1},{"RegOpenKeyExInternalA",0,1},{"RegOpenKeyExInternalW",0,1},{"RegQueryMultipleValuesA",0,1},{"RegQueryMultipleValuesW",0,1},{"RegisterConsoleIME",1,0},{"RegisterConsoleOS2",1,0},{"RegisterConsoleVDM",1,0},{"RegisterStateChangeNotification",0,1},{"RegisterStateLock",0,1},{"RegisterWaitForInputIdle",1,0},{"RegisterWowBaseHandlers",1,0},{"RegisterWowExec",1,0},{"ReleaseStateLock",0,1},{"RemoveExtensionProgIds",0,1},{"RemoveLocalAlternateComputerNameA",1,0},{"RemoveLocalAlternateComputerNameW",1,0},{"RemovePackageFromFamilyXref",0,1},{"RemovePackageStatus",0,1},{"RemovePackageStatusForUser",0,1},{"ReplaceFileExInternal",0,1},{"ReplacePartitionUnit",1,0},{"ResetState",0,1},{"ResolveDelayLoadedAPI",1,1},{"ResolveDelayLoadsFromDll",1,1},{"RestoreThreadPreferredUILanguages",0,1},{"SHExpandEnvironmentStringsA",0,1},{"SHExpandEnvironmentStringsW",0,1},
 };
@@ -142,7 +142,7 @@ TEST(gap26_shexpand_matches_expandenvironmentstrings) {
   }
 }
 
-/* ---- RestoreThreadPreferredUILanguages: NULL context is a no-op (decomp) ---- */
+/* ---- RestoreThreadPreferredUILanguages: NULL context is a no-op (reference analysis) ---- */
 TEST(gap26_restore_thread_ui_langs_null_noop) {
   UDECL(void, RestoreThreadPreferredUILanguages, (PVOID));
   RestoreThreadPreferredUILanguages_pfn f = UN(RestoreThreadPreferredUILanguages); REQUIRE(f);
@@ -152,7 +152,7 @@ TEST(gap26_restore_thread_ui_langs_null_noop) {
   f(NULL);
 }
 
-/* ---- Reg*Internal error paths verified from decomp ---- */
+/* ---- Reg*Internal error paths verified from reference analysis ---- */
 #define HK_PERFDATA ((HKEY)(ULONG_PTR)0xffffffff80000004ull)
 #define HK_PERFTEXT ((HKEY)(ULONG_PTR)0xffffffff80000050ull)
 #define HK_PERFNLS  ((HKEY)(ULONG_PTR)0xffffffff80000060ull)
@@ -307,7 +307,7 @@ TEST(gap26_regquerymultiplevalues_too_many_values) {
   __typeof__(&RegQueryMultipleValuesW) q = U(RegQueryMultipleValuesW); REQUIRE(q);
   WCHAR kn[64]; HKEY k = mk_key(kn);
   if (!k) { t_skip("cannot create key"); return; }
-  /* decomp: num_vals >= 0x10000 rejected before touching val_list */
+  /* reference analysis: num_vals >= 0x10000 rejected before touching val_list */
   DWORD tot = 0;
   LONG r = q(k, NULL, 0x10000, NULL, &tot);
   t_note("0x10000 values: r=%ld", r);

@@ -396,7 +396,7 @@ TEST(clocks_idle_cycle_time_null_query_size) {
     REQUIRE(U(QueryIdleProcessorCycleTime));
     ULONG len = 0; SET_ERR(0);
     BOOL r = U(QueryIdleProcessorCycleTime)(&len, NULL);
-    /* decomp: failure with NULL buffer is reported as success */
+    /* reference analysis: failure with NULL buffer is reported as success */
     CHECK(r); t_note("size query returned len %lu", len);
     SYSTEM_INFO si; GetSystemInfo(&si); CHECK(len == 0 || len == si.dwNumberOfProcessors * 8);
 }

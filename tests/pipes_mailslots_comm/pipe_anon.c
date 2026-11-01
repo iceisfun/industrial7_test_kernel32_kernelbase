@@ -332,7 +332,7 @@ TEST(pmc_anon_handlestate_on_file_fails) {
     CloseHandle(h); DeleteFileA(p);
 }
 TEST(pmc_anon_handlestate_w_all_null_any_handle) {
-    /* kernelbase decomp: with every optional pointer NULL no query is made and TRUE is returned */
+    /* kernelbase reference analysis: with every optional pointer NULL no query is made and TRUE is returned */
     REQUIRE(U(GetNamedPipeHandleStateW));
     BOOL ok = U(GetNamedPipeHandleStateW)(INVALID_HANDLE_VALUE, NULL, NULL, NULL, NULL, NULL, 0);
     t_note("GetNamedPipeHandleStateW(INVALID, all NULL) = %d", ok);

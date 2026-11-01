@@ -565,7 +565,7 @@ TEST(gap5_cyc_fetch) {
     EXPECT_EQ(len, need);
     int nz = 0; for (DWORD i = 0; i < n; i++) if (b[i].CycleTime) nz++;
     CHECK(nz > 0);
-    /* bigger buffer than needed: the kernel's length rule for this class is not in the decompilation, so observe only */
+    /* bigger buffer than needed: the kernel's length rule for this class is not in the reference analysis, so observe only */
     len = need + 64; memset(b, 0, (n + 4) * sizeof *b);
     SET_ERR(0);
     BOOL r = GCYC(0, b, &len);

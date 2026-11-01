@@ -13,8 +13,8 @@ build/%.exe: $$(wildcard tests/$$*/*.c) common/t.c common/t.h
 	$(CC) $(CFLAGS) -Icommon -o $@ $(wildcard tests/$*/*.c) common/t.c -static -lkernel32 -ladvapi32 -lntdll -lshell32
 clean: ; rm -rf build
 # Sanity-run under wine (for harness/compile validation only; the authority is real Win10).
-WINE ?= /home/iceisfun/work/wine/proton-ge-custom/build/dist/files/bin/wine
-WINEPREFIX ?= /tmp/claude-1000/-home-iceisfun-test-user32/0dbca224-e0c6-4aac-8035-d3516ec0a47c/scratchpad/wpge
+WINE ?= wine
+WINEPREFIX ?= $(CURDIR)/build/wineprefix
 wine-run: all
 	@for e in $(EXES); do echo "== $$e"; WINEPREFIX=$(WINEPREFIX) WINEARCH=win64 WINEDEBUG=-all timeout 300 $(WINE) $$e 2>/dev/null | grep -E '^(FAIL|SKIP|SUMMARY)|^  (FAIL|NOTE)'; done
 .PHONY: all clean wine-run

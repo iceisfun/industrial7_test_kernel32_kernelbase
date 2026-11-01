@@ -139,7 +139,7 @@ TEST(fio_truncate_existing) {
 TEST(fio_truncate_existing_requires_generic_write) {
     REQUIRE(U(CreateFileA));
     TP(p, "te_noaccess.bin"); mkfile_pat(p, 50);
-    /* Kernel behaviour (not visible in the CreateFileInternal decompilation) is not verified: report only. */
+    /* Kernel behaviour (not visible in the CreateFileInternal reference analysis) is not verified: report only. */
     {
         HANDLE t0 = cfa(p, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, TRUNCATE_EXISTING, 0);
         t_note("TRUNCATE_EXISTING with GENERIC_READ: %s gle=%lu", t0 != INVALID_HANDLE_VALUE ? "ok" : "fail", GetLastError());

@@ -13,7 +13,7 @@ TEST(gap15_urlescape_args) {
 }
 TEST(gap15_urlescape_a_unsupported_flags) {
     REQUIRE(U(UrlEscapeA));
-    /* decomp: the ANSI entry rejects URL_ESCAPE_AS_UTF8 / URL_ESCAPE_ASCII_URI_COMPONENT */
+    /* reference analysis: the ANSI entry rejects URL_ESCAPE_AS_UTF8 / URL_ESCAPE_ASCII_URI_COMPONENT */
     char out[64]; DWORD n;
     static const DWORD fl[] = { 0x40000, 0x80000, 0xc0000 };
     for (size_t i = 0; i < 3; i++) {

@@ -286,7 +286,7 @@ TEST(eed_fm_alloc_buffer_pointer_zeroed_on_failure_or_null) {
     DWORD r = U(FormatMessageW)(FM_SYS | FM_IGN | FORMAT_MESSAGE_ALLOCATE_BUFFER, NULL, 0x7FFFFFFF, LANG_US, (LPWSTR)&p, 0, NULL);
     EXPECT_EQ(r, 0);
     EXPECT_ERR(ERROR_MR_MID_NOT_FOUND);
-    EXPECT_EQ(p, 0);   /* decomp: the pointer slot is cleared to NULL up front */
+    EXPECT_EQ(p, 0);   /* reference analysis: the pointer slot is cleared to NULL up front */
 }
 TEST(eed_fm_alloc_null_ptr_slot) {
     REQUIRE(U(FormatMessageW));
@@ -319,7 +319,7 @@ TEST(eed_fm_size_one_short_w) {
     WCHAR b[32]; for (int i = 0; i < 32; i++) b[i] = 0x7777;
     DWORD r = fw(FM_STR | FM_IGN, L"hello world", 0, 0, NULL, b, 11);
     EXPECT_EQ(r, 0); EXPECT_EQ(g_fmerr, ERROR_INSUFFICIENT_BUFFER);
-    EXPECT_EQ(b[10], 0);   /* decomp: buffer[nSize-1] = 0 on truncation */
+    EXPECT_EQ(b[10], 0);   /* reference analysis: buffer[nSize-1] = 0 on truncation */
     EXPECT_EQ(b[11], 0x7777);
 }
 TEST(eed_fm_size_one_short_a) {

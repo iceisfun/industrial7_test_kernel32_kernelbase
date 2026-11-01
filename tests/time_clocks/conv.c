@@ -291,7 +291,7 @@ TEST(timeconv_local_matches_localtime) {
 }
 TEST(timeconv_local_no_validation_negative) {
     REQUIRE(U(FileTimeToLocalFileTime)); REQUIRE(U(LocalFileTimeToFileTime));
-    /* the decomp does plain subtraction and always returns TRUE */
+    /* the reference analysis does plain subtraction and always returns TRUE */
     FILETIME ft = tc_ft(0x8000000000000000ULL), out = {0};
     SET_ERR(0);
     CHECK(U(FileTimeToLocalFileTime)(&ft, &out));

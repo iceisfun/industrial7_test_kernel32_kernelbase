@@ -111,7 +111,7 @@ TEST(gap10_replace_a_valid_flag_combinations) {
         cleanup("rp_a.txt", "rp_b.txt", NULL);
     }
 }
-/* decomp ReplaceFileExInternal: (flags & ~7) != 0 -> ERROR_INVALID_PARAMETER before any file access */
+/* reference analysis ReplaceFileExInternal: (flags & ~7) != 0 -> ERROR_INVALID_PARAMETER before any file access */
 TEST(gap10_replace_invalid_flags) {
     REQUIRE(U(ReplaceFileW)); REQUIRE(U(ReplaceFileA));
     static const DWORD bad[] = { 8, 0x10, 0x100, 0x80000000, 0xFFFFFFF8, 0xFFFFFFFF };
@@ -260,7 +260,7 @@ TEST(gap10_replace_backup_keeps_original_attributes) {
     CHECK(at != INVALID_FILE_ATTRIBUTES && (at & FILE_ATTRIBUTE_HIDDEN));
     cleanup("rp_a.txt", "rp_b.txt", "rp_k.txt");
 }
-/* decomp ReplaceFileExInternal: failed rename of replaced to backup -> 0x497 (ERROR_UNABLE_TO_REMOVE_REPLACED) */
+/* reference analysis ReplaceFileExInternal: failed rename of replaced to backup -> 0x497 (ERROR_UNABLE_TO_REMOVE_REPLACED) */
 TEST(gap10_replace_backup_in_missing_directory) {
     REQUIRE(U(ReplaceFileW));
     wfile("rp_a.txt", "orig", 4); wfile("rp_b.txt", "newer", 5);

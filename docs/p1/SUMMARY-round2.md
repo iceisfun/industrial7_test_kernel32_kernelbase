@@ -75,7 +75,7 @@ SUPERSEDED labels are heterogeneous in the TSVs (SUPERSEDED, SUPERSEDED(UNRESOLV
 - DELETE (5 rows): handles_objects 2, modules_loader 3 (round 1 and round 2); the round-2 addition is the ac_query_assembly_detailed_information ulFileCount check, replaced by a note because the observed value is 0 and the docs do not fix it.
 - Corrected evidence: path_names (check 20 not check 10; =Q: with a trailing backslash gets a doubled separator, now EXPECT-FIX), async_io_iocp (1784 from ntfs!NtfsGetCompression), console_apis (b[15] must stay 0x7777), gap_02 (exact error code from the image subsystem version).
 
-## UNRESOLVED (53 distinct tests; need the Win10 rerun or decomp work)
+## UNRESOLVED (53 distinct tests; need the Win10 rerun or reference analysis work)
 - appmodel_misc_kernelbase: pwr_duplicate_handle_shares_request (kbx_misc.c:149)
 - console_apis: con_vt_sgr_256_and_rgb (write.c:695,697)
 - console_apis: con_write_wrap_off (write.c:265)
@@ -138,7 +138,7 @@ The p1a rerun had no NOTRUN tests: the round-1 guards already released the tests
 - Guard-only changes keep tests in the run (no crash or hang expected): dir_find change-notify note, path_names drive-variable precondition (exit 77 if Q:\k32\dir is unreachable).
 
 ## Expected effect of a rerun (against the p1a baseline of 98 FAIL)
-- Of the 98 p1a failures: 48 are targeted by EXPECT-FIX, GUARD, TOLERANCE or DELETE rows and should turn OK (any that stay red mean the decomp reading was wrong and the row goes back to UNRESOLVED); 45 are UNRESOLVED and are expected to stay red, with extra diagnostics (t_note values, stage notes) giving the missing evidence; 5 are CLASS-G and are excluded from pass-rate comparison.
+- Of the 98 p1a failures: 48 are targeted by EXPECT-FIX, GUARD, TOLERANCE or DELETE rows and should turn OK (any that stay red mean the reference analysis reading was wrong and the row goes back to UNRESOLVED); 45 are UNRESOLVED and are expected to stay red, with extra diagnostics (t_note values, stage notes) giving the missing evidence; 5 are CLASS-G and are excluded from pass-rate comparison.
 - So the best case is roughly 48 fewer failures (about 50 FAIL left, of which 5 are CLASS-G). The 31 SKIPs are unchanged except where a precondition guard now skips (path_names, exit 77).
 - 8 UNRESOLVED rows are for tests that passed in p1a (gap_03 x4, gap_12 x2, locale_nls uipref_set_thread_invalid_child, modules_loader ld_ex_search_flags_dll_load_dir_with_altered_invalid); they are residual round-1 rows, expected to stay OK.
 - Tests that were OK in p1a must stay OK; any new FAIL there is a regression from round 2 (the changes touch 31 test source files).

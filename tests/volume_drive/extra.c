@@ -26,7 +26,7 @@ TEST(vd_extra_setmountpoint_a_existing_rejected) {
     if (t_is_wine()) { t_skip("SetVolumeMountPoint not safe under wine"); return; }
     char r[4]; vd_sysroot(r); char g[64];
     /* only call when the root is already a mount point: the call then fails with
-       ERROR_DIR_NOT_EMPTY before changing anything (decomp) */
+       ERROR_DIR_NOT_EMPTY before changing anything (reference analysis) */
     if (!U(GetVolumeNameForVolumeMountPointA)(r, g, 64)) { t_skip("precondition: %s is not a mount point", r); return; }
     SET_ERR(0);
     CHECK(!U(SetVolumeMountPointA)(r, g));

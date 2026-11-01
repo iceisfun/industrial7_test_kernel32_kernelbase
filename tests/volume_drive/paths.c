@@ -94,7 +94,7 @@ TEST(vd_volpath_guid_input) {
     char r[4]; vd_sysroot(r); char g[64], in[128], o[MAX_PATH];
     if (!vd_volname(r, g)) { t_skip("no volume name"); return; }
     sprintf(in, "%sWindows", g);
-    BOOL ok = vd_gvpn_a(in, o, sizeof o);   /* outcome not verifiable from decomp; note only */
+    BOOL ok = vd_gvpn_a(in, o, sizeof o);   /* outcome not verifiable from reference analysis; note only */
     t_note("GetVolumePathName(%s) ok=%d = %s", in, ok, ok ? o : "");
 }
 TEST(vd_volpath_ab_parity) {

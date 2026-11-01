@@ -539,7 +539,7 @@ TEST(gap19_depolicy_current_process) {
     t_note("ret %d flags 0x%lx permanent %d err %lu", ok, (unsigned long)fl, perm, (unsigned long)e);
     EXPECT_EQ(ok, TRUE);   /* ProcessExecuteFlags query works for the current process */
     if (ok) {
-        CHECK(fl == 0 || fl == 1 || fl == 3);   /* decomp: 0 disabled, 1 enabled, 3 enabled+ATL thunk off */
+        CHECK(fl == 0 || fl == 1 || fl == 3);   /* reference analysis: 0 disabled, 1 enabled, 3 enabled+ATL thunk off */
     } else {
         EXPECT_EQ(fl, 0xdeadbeef);    /* outputs written only on success */
         EXPECT_EQ(perm, 0x55);
@@ -666,7 +666,7 @@ TEST(gap19_pipeclientname_local_client) {
     BOOL ok = UN(GetNamedPipeClientComputerNameW)(s, b, 64);
     DWORD e = GetLastError();
     EXPECT_EQ(ok, FALSE);
-    EXPECT_EQ(e, ERROR_PIPE_LOCAL);       /* 229: client is on this machine (decomp maps NOT_FOUND to it) */
+    EXPECT_EQ(e, ERROR_PIPE_LOCAL);       /* 229: client is on this machine (reference analysis maps NOT_FOUND to it) */
     CloseHandle(c); CloseHandle(s);
 }
 TEST(gap19_pipeclientname_small_or_null_buffer_local) {
@@ -791,7 +791,7 @@ TEST(gap19_localshrink_moveable_handle) {
 }
 TEST(gap19_localshrink_invalid_handles_harmless) {
     REQUIRE(UN(LocalShrink));
-    /* decomp: the arguments are ignored (RtlCompactHeap(BaseHeap,0)) */
+    /* reference analysis: the arguments are ignored (RtlCompactHeap(BaseHeap,0)) */
     SIZE_T a = UN(LocalShrink)(NULL, 0);
     SIZE_T b = UN(LocalShrink)((HLOCAL)(ULONG_PTR)1, 0xffffffff);
     SIZE_T c = UN(LocalShrink)(INVALID_HANDLE_VALUE, 0x10000);

@@ -20,7 +20,7 @@ TEST(gap17_lstrlenA_null) {
     REQUIRE(U(lstrlenA));
     SET_ERR(0x1234);
     EXPECT_EQ(U(lstrlenA)(NULL), 0);
-    EXPECT_ERR(0x1234);   /* no last-error change (decomp: plain NULL check) */
+    EXPECT_ERR(0x1234);   /* no last-error change (reference analysis: plain NULL check) */
 }
 TEST(gap17_lstrlenW_basic) {
     REQUIRE(U(lstrlenW));
@@ -266,7 +266,7 @@ TEST(gap17_lstrcpynA_zero_max) {
     LPSTR r = U(lstrcpynA)(d, "abc", 0);
     EXPECT_EQ(r, d);
     for (int i = 0; i < 8; i++) CHECK(d[i] == SENT);
-    /* NULL dest with 0 length: nothing is written (decomp: guarded by iMaxLength != 0) */
+    /* NULL dest with 0 length: nothing is written (reference analysis: guarded by iMaxLength != 0) */
     r = U(lstrcpynA)(NULL, "abc", 0);
     EXPECT_EQ(r, NULL);
 }
@@ -479,7 +479,7 @@ TEST(gap17_uaw_wcslen_matches_lstrlenW) {
 TEST(gap17_uaw_lstrlenW_basic) {
     uaw_lstrlenW_pfn f = (uaw_lstrlenW_pfn)t_proc_k32("uaw_lstrlenW");
     REQUIRE(f);
-    EXPECT_EQ(f(NULL), 0);   /* NULL checked (decomp) */
+    EXPECT_EQ(f(NULL), 0);   /* NULL checked (reference analysis) */
     EXPECT_EQ(f(L""), 0);
     EXPECT_EQ(f(L"abcdef"), 6);
     BYTE buf[32] = {0};

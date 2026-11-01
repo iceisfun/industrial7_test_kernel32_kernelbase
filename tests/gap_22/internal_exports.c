@@ -1,6 +1,6 @@
 /* gap_22: non-public / internal exports (calendar week, package context/property,
  * package status, LZ expanded name, NLS helpers). Only argument-validation paths and
- * side-effect-free calls verified from decompilation are exercised. */
+ * side-effect-free calls verified from reference analysis are exercised. */
 #include "t.h"
 
 static const struct { const char *n; int k32, kb; } ex[] = {
@@ -185,7 +185,7 @@ TEST(gap22_curpkg_info3_validation) {
     EXPECT_EQ(len, 16);
     len = 0;
     LONG r = f(1, 1, &len, NULL, &cnt);
-    t_note("GetCurrentPackageInfo3 unpackaged -> 0x%lx (decomp: 0x80073d54)", (unsigned long)r);
+    t_note("GetCurrentPackageInfo3 unpackaged -> 0x%lx (reference analysis: 0x80073d54)", (unsigned long)r);
     CHECK(r != 0);
 }
 
@@ -461,7 +461,7 @@ TEST(gap22_expandedname_nonexistent) {
     lstrcpyA(missing, "C:\\k32t_gap22_no_such_dir\\none.dat");
     EXPECT_EQ(fa(missing, out), -7);
     WCHAR wmiss[] = L"C:\\k32t_gap22_no_such_dir\\none.dat";
-    /* decomp: W only returns early on -1; A's -7 falls through to the copy path, so result depends on buffer contents */
+    /* reference analysis: W only returns early on -1; A's -7 falls through to the copy path, so result depends on buffer contents */
     memset(outw, 0, sizeof outw);
     t_note("GetExpandedNameW(nonexistent) -> %d", (int)fw(wmiss, outw));
 }
@@ -475,7 +475,7 @@ TEST(gap22_expandedname_w_plain_file) {
     lstrcatW(src, L"\\kernel32.dll");
     memset(out, 0, sizeof out);
     INT r = fw(src, out);
-    t_note("GetExpandedNameW(plain) -> %d (decomp returns the copy status, 0)", r);
+    t_note("GetExpandedNameW(plain) -> %d (reference analysis returns the copy status, 0)", r);
     CHECK(r != -1 && r != -7);
     EXPECT_WSTR(out, src);
 }

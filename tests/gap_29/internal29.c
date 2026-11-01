@@ -1,6 +1,6 @@
 #include "t.h"
 /* Non-public / CRT-ish exports of kernel32 and kernelbase.
- * Behaviour below was taken from the Win10 kernelbase/kernel32 decompilation:
+ * Behaviour below was taken from the Win10 kernelbase/kernel32 reference analysis:
  *  - time/_time64: GetSystemTimeAsFileTime -> seconds since 1970, clamped to -1 past year 3000
  *  - atexit -> _onexit (returns func or NULL); atexit returns 0 / -1
  *  - exit -> doexit -> RtlExitUserProcess(code)
@@ -129,7 +129,7 @@ TEST(gap29_uaw_lstrcmp_alias_identity) {
   FARPROC c = t_proc_k32("uaw_lstrcmpiW"), d = t_proc_k32("lstrcmpiW");
   REQUIRE(a); REQUIRE(b); REQUIRE(c); REQUIRE(d);
   if (t_is_wine()) { t_note("alias identity not enforced on wine"); return; }
-  CHECK(a == b);   /* same RVA in the Win10 image (kernel32 decomp: uaw_lstrcmpW/lstrcmpW share 0x1bf00, uaw_lstrcmpiW/lstrcmpiW share 0x18330) */
+  CHECK(a == b);   /* same RVA in the Win10 image (kernel32 reference analysis: uaw_lstrcmpW/lstrcmpW share 0x1bf00, uaw_lstrcmpiW/lstrcmpiW share 0x18330) */
   CHECK(c == d);
   CHECK(a != c);
 }

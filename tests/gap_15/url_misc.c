@@ -379,7 +379,7 @@ TEST(gap15_urlgetlocation) {
 /* ---------------------------------------------------------------------- UrlHash */
 TEST(gap15_urlhash_args) {
     REQUIRE(U(UrlHashA)); REQUIRE(U(UrlHashW));
-    /* decomp: NULL url/out/pcch -> E_INVALIDARG before any dereference */
+    /* reference analysis: NULL url/out/pcch -> E_INVALIDARG before any dereference */
     BYTE h[16];
     CHECK(U(UrlHashA)(NULL, h, 16) == G_E_INVALIDARG);
     CHECK(U(UrlHashA)("http://a/", NULL, 16) == G_E_INVALIDARG);
@@ -501,7 +501,7 @@ TEST(gap15_urlcompare_ignoreslash_values) {
 /* ------------------------------------------------------------- UrlCreateFromPath */
 TEST(gap15_urlfrompath_args) {
     REQUIRE(U(UrlCreateFromPathA)); REQUIRE(U(UrlCreateFromPathW));
-    /* decomp: NULL url/out/pcch -> E_INVALIDARG before any dereference */
+    /* reference analysis: NULL url/out/pcch -> E_INVALIDARG before any dereference */
     g_args4("UrlCreateFromPath", (g_fnA4)U(UrlCreateFromPathA), (g_fnW4)U(UrlCreateFromPathW), "c:\\dir", 0);
 }
 TEST(gap15_urlfrompath_basic) {

@@ -102,7 +102,7 @@ TEST(ld3_extension_variants) {
     m = U(LoadLibraryA)(dotted);
     CHECKF(m != NULL, "trailing dot: err %lu", GetLastError());
     if (m) {
-        /* whether a trailing-dot name matches the loaded module's base name is not shown by the decompilation */
+        /* whether a trailing-dot name matches the loaded module's base name is not shown by the reference analysis */
         t_note("GetModuleHandle(\"k32m_noext.\") %s", GetModuleHandleA("k32m_noext.") == m ? "matches" : "does not match");
         char out[MAX_PATH]; GetModuleFileNameA(m, out, MAX_PATH);
         CHECK(!_stricmp(out, p));

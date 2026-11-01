@@ -279,7 +279,7 @@ TEST(waitmulti_wait_all_duplicate_handle_values) {
     NEED_W();
     HANDLE a = CreateEventA(NULL, TRUE, TRUE, NULL);
     HANDLE arr[2] = { a, a };
-    /* docs: the array may not contain multiple copies of the same handle; kernel behaviour not verified from decomp -> accept both */
+    /* docs: the array may not contain multiple copies of the same handle; kernel behaviour not verified from reference analysis -> accept both */
     SET_ERR(0); DWORD r2 = WM(2, arr, TRUE, 0);
     t_note("wait-all dup handle value -> 0x%lx err %lu", r2, r2 == WAIT_FAILED ? GetLastError() : 0);
     CHECK(r2 == WAIT_FAILED || r2 == WAIT_OBJECT_0);

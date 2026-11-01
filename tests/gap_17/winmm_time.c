@@ -222,7 +222,7 @@ TEST(gap17_timeBeginPeriod_above_max_noop) {
     tbp_pfn b = BP(); tbp_pfn e = EP(); tgdc_pfn dc = DC();
     REQUIRE(b); REQUIRE(e); REQUIRE(dc);
     G17_TIMECAPS c; dc(&c, 8);
-    /* decomp: periods at/above an internal maximum succeed without tracking; the
+    /* reference analysis: periods at/above an internal maximum succeed without tracking; the
      * exact threshold is internal, so only observe. */
     t_note("begin(max)=%u begin(max+1)=%u begin(~0)=%u", b(c.wPeriodMax), b(c.wPeriodMax + 1), b(0xffffffff));
     t_note("end(max)=%u end(~0)=%u", e(c.wPeriodMax), e(0xffffffff));

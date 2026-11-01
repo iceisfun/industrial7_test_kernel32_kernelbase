@@ -300,7 +300,7 @@ TEST(envvar_delete_existing) {
 TEST(envvar_delete_missing_w) {
     REQUIRE(U(SetEnvironmentVariableW));
     SET_ERR(SENTINEL_ERR);
-    /* RtlSetEnvironmentVar decomp shows no not-found status path; result not asserted */
+    /* RtlSetEnvironmentVar reference analysis shows no not-found status path; result not asserted */
     BOOL r = U(SetEnvironmentVariableW)(L"K32T_EV_NEVER_SET", NULL);
     t_note("delete missing W: ret=%d err=%lu", (int)r, GetLastError());
 }

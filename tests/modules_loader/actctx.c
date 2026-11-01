@@ -803,7 +803,7 @@ TEST(ac_settings_missing_and_wrong_namespace) {
     EXPECT_ERR(ERROR_SXS_KEY_NOT_FOUND);
     SET_ERR(0);
     /* QueryActCtxSettingsWWorker only forwards the eight known WindowsSettings namespaces; anything else fails
-     * before the activation-context query (status not shown by the decompilation) */
+     * before the activation-context query (status not shown by the reference analysis) */
     CHECK(!U(QueryActCtxSettingsW)(0, ctx, L"urn:k32t:wrong-namespace", L"dpiAware", buf, 64, &need));
     t_note("QueryActCtxSettings(unknown namespace) error %lu", GetLastError());
     CHECK(GetLastError() != 0);

@@ -106,7 +106,7 @@ TEST(gap23_internal_lcid_to_name) {
     if (n) { CHECK(!lstrcmpiW(n, L"en-US")); }
     /* repeated call yields identical record */
     CHECK(f(0x0409) == n);
-    /* invalid locale id: decomp returns NULL when NlsValidateLocale fails; exact validation of 0xFFFFFFFF unverified */
+    /* invalid locale id: reference analysis returns NULL when NlsValidateLocale fails; exact validation of 0xFFFFFFFF unverified */
     t_note("InternalLcidToName(0xFFFFFFFF) = %p", (const void *)f(0xFFFFFFFF));
 }
 TEST(gap23_unicode_to_eightbit_routines) {

@@ -708,7 +708,7 @@ TEST(jobset_ui_invalid_bits) {
     for (unsigned i = 0; i < sizeof bad / sizeof *bad; i++) {
         JOBOBJECT_BASIC_UI_RESTRICTIONS u = { bad[i] };
         SetLastError(0); BOOL r = S(j, JobObjectBasicUIRestrictions, &u, sizeof u); DWORD e = GetLastError();
-        t_note("UI restrictions bits 0x%lx: ret %d err %lu", bad[i], r, e);   /* valid-mask not verifiable from user-mode decomp */
+        t_note("UI restrictions bits 0x%lx: ret %d err %lu", bad[i], r, e);   /* valid-mask not verifiable from user-mode reference analysis */
         if (r) { JOBOBJECT_BASIC_UI_RESTRICTIONS z = { 0 }; S(j, JobObjectBasicUIRestrictions, &z, sizeof z); }
     }
     CloseHandle(j);

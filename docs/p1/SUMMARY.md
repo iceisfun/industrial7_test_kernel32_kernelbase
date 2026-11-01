@@ -64,7 +64,7 @@ EXPECT-FIX 391, UNRESOLVED 66, GUARD 61, TOLERANCE 28, DELETE 4, CLASS-G 3, INFO
 | toolhelp_psapi | 11 | 0 | 2 | 2 | 0 | 0 | 0 |
 | volume_drive | 2 | 0 | 1 | 2 | 0 | 0 | 0 |
 
-## UNRESOLVED (66 rows; need the Win10 rerun or decomp work)
+## UNRESOLVED (66 rows; need the Win10 rerun or reference analysis work)
 Test / site, by area:
 
 - appmodel_misc_kernelbase: pwr_duplicate_handle_shares_request (kbx_misc.c:148)
@@ -144,7 +144,7 @@ Test / site, by area:
 
 ## Expected effect of a rerun
 - The five areas above should now complete rather than abort or time out, so the roughly 115 + 290 + 13 + 46+ previously NOTRUN tests will report results for the first time; some of those may expose new, independent failures.
-- Rows marked EXPECT-FIX should flip from FAIL to OK (391 rows; any that stay red mean the decomp reading was wrong, and the row is then UNRESOLVED).
+- Rows marked EXPECT-FIX should flip from FAIL to OK (391 rows; any that stay red mean the reference analysis reading was wrong, and the row is then UNRESOLVED).
 - GUARD rows: crashes become contained or cleanly reported; no area abort expected.
 - TOLERANCE rows: pass on the accepted alternatives.
 - UNRESOLVED rows: expected to remain failing; the rerun supplies the missing evidence. These are not counted as fixed.
@@ -152,4 +152,4 @@ Test / site, by area:
 - Pre-existing OK tests should stay OK (audit restored two baseline-passing expectations: gap1_cfm2_desired_access_read_only_handle and the unrelated test changed by mistake).
 
 ## Audit
-All 52 area branches were audited by independent reviewers (about a third to all cited decompilations re-read). Defects were fixed in follow-up commits already included in the tips: async_io_iocp 6570aec, dir_find e9ab13a, gap_10 aed68f6, locale_nls f83d419 and 239261f, console_apis 89a612b, process_create 519583c, modules_loader c20a75b, gap_16 df8f1d9, registry_kernelbase 70dbec7, strings_codepages 4da059e, file_io 2d1d618, gap_06 751a28c, gap_04 38fbfa9, file_attrs_ops 3dadb26, sync_objects 87a315a, handles_objects 50493ad, appmodel_misc_kernelbase 46108d5, threads_tls_fibers 67990ac, gap_01 0f2f7a1, rtl_misc_kernel32 8cf9d61, gap_19 441823f, gap_22 00acfb8, path_names a7912d3 and ea319c4, gap_28 aaa0a77, gap_18 edd1eef, gap_24 ef61b80, gap_26 47b02f5, gap_13 03994c4. atoms_profile_ini and threadpool_timers passed unchanged.
+All 52 area branches were audited by independent reviewers (about a third to all cited reference analyses re-read). Defects were fixed in follow-up commits already included in the tips: async_io_iocp 6570aec, dir_find e9ab13a, gap_10 aed68f6, locale_nls f83d419 and 239261f, console_apis 89a612b, process_create 519583c, modules_loader c20a75b, gap_16 df8f1d9, registry_kernelbase 70dbec7, strings_codepages 4da059e, file_io 2d1d618, gap_06 751a28c, gap_04 38fbfa9, file_attrs_ops 3dadb26, sync_objects 87a315a, handles_objects 50493ad, appmodel_misc_kernelbase 46108d5, threads_tls_fibers 67990ac, gap_01 0f2f7a1, rtl_misc_kernel32 8cf9d61, gap_19 441823f, gap_22 00acfb8, path_names a7912d3 and ea319c4, gap_28 aaa0a77, gap_18 edd1eef, gap_24 ef61b80, gap_26 47b02f5, gap_13 03994c4. atoms_profile_ini and threadpool_timers passed unchanged.

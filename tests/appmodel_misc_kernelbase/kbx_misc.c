@@ -104,7 +104,7 @@ TEST(pwr_invalid_request_types) {
         t_note("PowerSetRequest(type %d) err %lu", bad[i], GetLastError());
         r = U(PowerClearRequest)(h, (POWER_REQUEST_TYPE)bad[i]);
         CHECKF(!r, "clear type %d", bad[i]);
-        /* the failing path calls BaseSetLastNTError with a status the decompilation does not pin down: no last-error check */
+        /* the failing path calls BaseSetLastNTError with a status the reference analysis does not pin down: no last-error check */
     }
     CloseHandle(h);
 }

@@ -327,7 +327,7 @@ TEST(path_names_ns_toolong_path_without_prefix_fails_206) {
     SET_ERR(0);
     HANDLE h = cf_w(p, GENERIC_WRITE, 0, CREATE_ALWAYS, 0);
     CHECK(h == INVALID_HANDLE_VALUE);
-    /* exact status mapping not recoverable from the decompilation: 206 or 3 */
+    /* exact status mapping not recoverable from the reference analysis: 206 or 3 */
     { DWORD e = GetLastError(); CHECKF(e == ERROR_FILENAME_EXCED_RANGE || e == ERROR_PATH_NOT_FOUND, "err %lu", e); }
     if (h != INVALID_HANDLE_VALUE) CloseHandle(h);
     wcscat(p, L"x");

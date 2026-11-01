@@ -1,4 +1,4 @@
-/* gap20: side-effect-free internal helpers (verified against decompilation). */
+/* gap20: side-effect-free internal helpers (verified against reference analysis). */
 #include "t.h"
 
 typedef BOOL (WINAPI *ChrCmp_pfn)(WORD, WORD);

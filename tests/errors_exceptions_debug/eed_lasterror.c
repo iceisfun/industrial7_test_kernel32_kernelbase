@@ -385,7 +385,7 @@ MAPTEST(eed_ntmap_loader_security,
 
 TEST(eed_ntmap_win32_facility_passthrough) {
     REQUIRE(UNT(RtlNtStatusToDosError));
-    /* 0x8007xxxx / 0xC007xxxx are HRESULT-style Win32 codes: low word returned (decomp: mask 0xFFFF). */
+    /* 0x8007xxxx / 0xC007xxxx are HRESULT-style Win32 codes: low word returned (reference analysis: mask 0xFFFF). */
     EXPECT_EQ(UNT(RtlNtStatusToDosError)(0x80070005), 5);
     EXPECT_EQ(UNT(RtlNtStatusToDosError)(0x80070057), 87);
     EXPECT_EQ(UNT(RtlNtStatusToDosError)(0x8007007B), 0x7B);

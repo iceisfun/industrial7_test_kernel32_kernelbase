@@ -102,7 +102,7 @@ TEST(gap14_strtoint64ex_unknown_flags) {
 
 TEST(gap14_strtoint64ex_hex_sign_ignored) {
     REQUIRE(U(StrToInt64ExW));
-    /* decomp: hex branch clears the negative flag */
+    /* reference analysis: hex branch clears the negative flag */
     LONGLONG v = SENT;
     CHECK(U(StrToInt64ExW)(L"-0x10", 1, &v)); CHECK(v == 16);
     v = SENT;

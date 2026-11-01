@@ -1,6 +1,6 @@
 #include "t.h"
 /* Non-public exports: presence, module ownership, alias identity, and the
- * side-effect-free PathIsValidChar{A,W} predicate (verified from kernelbase decomp). */
+ * side-effect-free PathIsValidChar{A,W} predicate (verified from kernelbase reference analysis). */
 static const struct { const char *n; int k32; } ex[] = {
   {"OpenStateExplicit",1},{"OpenStateExplicitForUserSid",0},{"OpenStateExplicitForUserSidString",0},
   {"PackageFamilyNameFromIdA",0},{"PackageFamilyNameFromProductId",0},{"PackageFullNameFromIdA",0},

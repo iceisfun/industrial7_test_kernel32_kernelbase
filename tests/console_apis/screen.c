@@ -460,7 +460,7 @@ CT(con_sbs_cursor_stays_in_bounds_when_grown) {
     CC(SetConsoleCursorPosition(b, co(79, 24)));
     CC(SetConsoleScreenBufferSize(b, co(90, 30)));
     { COORD c_ = curpos(b); cnote("cursor after growing 80x25 -> 90x30: %d,%d", c_.X, c_.Y); }
-    CC(coeq(curpos(b), 79, 24));   /* P1b UNRESOLVED: baseline cursor is (78,24) after growing, i.e. moved left by one; no decompilation read explains it */
+    CC(coeq(curpos(b), 79, 24));   /* P1b UNRESOLVED: baseline cursor is (78,24) after growing, i.e. moved left by one; no reference analysis read explains it */
     CloseHandle(b);
 }
 
