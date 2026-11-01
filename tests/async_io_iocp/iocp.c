@@ -288,12 +288,20 @@ TEST(aio_iocp_packets_survive_handle_close) {
     char p[MAX_PATH]; mkpath(p, "surv"); make_file(p, 4096);
     HANDLE f = open_ov(p, GENERIC_READ, 0); HANDLE port = new_port(0);
     U(CreateIoCompletionPort)(f, port, 9, 0);
-    OVERLAPPED ov; ovinit(&ov, 0, NULL); BYTE b[100];
+    /* GUARD: with hEvent NULL, GetOverlappedResult(TRUE) waits INFINITE on the file handle. For a
+       port-associated handle Win10 defers IopCompleteRequest (IOSB write + event signalling) until the
+       packet is dequeued (ntoskrnl IoRemoveIoCompletion calls IopCompleteRequest), so neither the file
+       object nor a user event is signalled before GetQueuedCompletionStatus. Wait bounded and only note
+       the result before the close; after the dequeue the event must be signalled. */
+    HANDLE ev = mkevent();
+    OVERLAPPED ov; ovinit(&ov, 0, ev); BYTE b[100];
     BOOL r = U(ReadFile)(f, b, 100, NULL, &ov); CHECK(r || GetLastError() == ERROR_IO_PENDING);
-    DWORD n; GetOverlappedResult(f, &ov, &n, TRUE);
+    DWORD w0 = WaitForSingleObject(ev, 2000);
+    t_note("event before dequeue: wait=%lu Internal=0x%llx", w0, (unsigned long long)ov.Internal);
     CloseHandle(f);
     gq g = getq(port, 2000); CHECK(g.r); CHECK(g.ov == &ov); EXPECT_EQ(g.n, 100); EXPECT_EQ(g.key, 9);
-    CloseHandle(port);
+    CHECK(WaitForSingleObject(ev, 0) == WAIT_OBJECT_0); EXPECT_EQ(ov.Internal, 0); EXPECT_EQ(ov.InternalHigh, 100);
+    CloseHandle(ev); CloseHandle(port);
 }
 
 TEST(aio_iocp_two_handles_distinct_keys) {

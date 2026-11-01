@@ -194,9 +194,13 @@ TEST(gap15_verfind_cur_buffer_small) {
     cl = 1; dl = MAX_PATH;
     r = U(VerFindFileA)(0, bare, win, app, cur, &cl, dst, &dl);
     CHECKF(!(r & VFF_BUFFTOOSMALL), "empty cur dir with len 1: r=0x%lx", (unsigned long)r);
-    CHECK(cl == 1);
+    /* Win10: VerFindFileW returns cur len 1 (the NUL) for the empty dir; on success VerFindFileA converts that 1-WCHAR
+       string with RtlUnicodeStringToAnsiString into a buffer of MaximumLength = caller cl and stores the result Length.
+       With MaximumLength 1 the 1-byte result does not fit, so Length is truncated to MaximumLength-1 = 0. */
+    CHECKF(cl == 0, "empty cur dir with len 1: returned cl=%u", cl);
     cl = 0; dl = MAX_PATH;
     r = U(VerFindFileA)(0, bare, win, app, cur, &cl, dst, &dl);
+    /* MaximumLength 0: RtlUnicodeStringToAnsiString returns BUFFER_OVERFLOW with Length still 1, so cl=1 (note only) */
     t_note("A cur len 0: r=0x%lx cl=%u", (unsigned long)r, cl);
 }
 TEST(gap15_verfind_dest_buffer_small) {
@@ -222,12 +226,17 @@ TEST(gap15_verfind_dest_buffer_small) {
     CHECKF(dl == applen + 1, "W required dest len %u", dl);
 }
 TEST(gap15_verfind_null_dest) {
-    REQUIRE(U(VerFindFileA));
-    char app[MAX_PATH], win[MAX_PATH], file[] = "gap15_nofile.dll", cur[MAX_PATH];
+    /* VerFindFileA converts the destination buffer unconditionally (RtlUnicodeStringToAnsiString into
+     * szDestDir), so a NULL dest is only valid for VerFindFileW, which skips the dest block. */
+    REQUIRE(U(VerFindFileW));
+    char app[MAX_PATH], win[MAX_PATH], cur[MAX_PATH];
     strcpy(app, t_tmpdir()); GetWindowsDirectoryA(win, MAX_PATH);
+    WCHAR wapp[MAX_PATH], wwin[MAX_PATH], wfile[] = L"gap15_nofile.dll", wcur[MAX_PATH];
+    g_widen(app, wapp, MAX_PATH); g_widen(win, wwin, MAX_PATH);
+    (void)cur;
     UINT cl = MAX_PATH, dl = MAX_PATH;
-    DWORD r = U(VerFindFileA)(0, file, win, app, cur, &cl, NULL, &dl);
-    t_note("VerFindFileA NULL dest: r=0x%lx cl=%u dl=%u", (unsigned long)r, cl, dl);
+    DWORD r = U(VerFindFileW)(0, wfile, wwin, wapp, wcur, &cl, NULL, &dl);
+    t_note("VerFindFileW NULL dest: r=0x%lx cl=%u dl=%u", (unsigned long)r, cl, dl);
     CHECK(!(r & VFF_BUFFTOOSMALL));
 }
 TEST(gap15_verfind_shared) {
@@ -677,14 +686,15 @@ TEST(gap15_badmem_unregister_null_child) {
 /* ------------------------------------------------------------ UnregisterTraceGuids */
 TEST(gap15_unregtraceguids_stub) {
     REQUIRE(U(UnregisterTraceGuids));
-    /* decomp: UnregisterTraceGuids body is RtlSetLastWin32Error(0x7f); return 0x7f */
-    /* kernelbase exports this as a stub that fails with ERROR_PROC_NOT_FOUND (127) */
+    /* kernelbase!UnregisterTraceGuids forwards to ntdll!EtwUnregisterTraceGuids, which calls
+     * EtwNotificationUnregister and restores its error code; an unregistered handle gives
+     * ERROR_INVALID_HANDLE (6). (The 0x7f stub body belongs to CloseTrace, not this export.) */
     static const ULONG64 handles[] = { 0, 1, 0xdeadbeef, (ULONG64)-1 };
     for (size_t i = 0; i < 4; i++) {
         SetLastError(0xdeadbeef);
         ULONG r = U(UnregisterTraceGuids)(handles[i]);
         DWORD e = GetLastError();
-        CHECKF(r == 127, "handle %llx returned %lu", (unsigned long long)handles[i], (unsigned long)r);
-        CHECKF(e == 127, "handle %llx lasterror %lu", (unsigned long long)handles[i], e);
+        CHECKF(r == ERROR_INVALID_HANDLE, "handle %llx returned %lu", (unsigned long long)handles[i], (unsigned long)r);
+        CHECKF(e == ERROR_INVALID_HANDLE, "handle %llx lasterror %lu", (unsigned long long)handles[i], e);
     }
 }

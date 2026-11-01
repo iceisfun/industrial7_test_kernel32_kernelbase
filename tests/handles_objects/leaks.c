@@ -139,7 +139,8 @@ TEST(ho_err_thread_isolation) {
     SetEvent(go);
     WaitForSingleObject(a, 5000);
     EXPECT_EQ(g_r1, 1111);
-    EXPECT_EQ(g_r2, 0);
+    if (g_r2 != 0) t_note("P1b diag: new thread initial last-error = %lu (creator had 3333, thread A 1111)", (unsigned long)g_r2);
+    EXPECT_EQ(g_r2, 0);   /* P1 UNRESOLVED: Win10 baseline 0x57, writer not identified (see docs/p1) */
     EXPECT_EQ(g_r3, ERROR_INVALID_HANDLE);
     EXPECT_EQ(U(GetLastError)(), 3333);
     CloseHandle(a); CloseHandle(b); CloseHandle(go);

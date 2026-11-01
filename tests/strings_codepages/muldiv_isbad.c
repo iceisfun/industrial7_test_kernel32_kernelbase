@@ -118,20 +118,27 @@ TEST(muldiv_no_lasterror_change_on_success) {
 #define KC(c) do { if (!(c)) { printf("  CHILD FAIL line %d: %s\n", __LINE__, #c); return __LINE__; } } while (0)
 #define KEQ(a, b) do { ULONG_PTR a_ = (ULONG_PTR)(a), b_ = (ULONG_PTR)(b); if (a_ != b_) { printf("  CHILD FAIL line %d: %s == %s (got 0x%llx want 0x%llx)\n", __LINE__, #a, #b, (unsigned long long)a_, (unsigned long long)b_); return __LINE__; } } while (0)
 
+CHILD(isbad_readptr_null_and_zero) {
+    if (!U(IsBadReadPtr)) return 0;
+    char c = 1;
+    KEQ(U(IsBadReadPtr)(NULL, 0), 0);
+    KEQ(U(IsBadReadPtr)(NULL, 1), 1);
+    KEQ(U(IsBadReadPtr)(NULL, 100), 1);
+    KEQ(U(IsBadReadPtr)(&c, 0), 0);
+    KEQ(U(IsBadReadPtr)(&c, 1), 0);
+    KEQ(U(IsBadReadPtr)((void *)(ULONG_PTR)0xdeadbeef, 0), 0);
+    KEQ(U(IsBadReadPtr)((void *)(ULONG_PTR)0x10, 1), 1);
+    KEQ(U(IsBadReadPtr)((void *)~(ULONG_PTR)0, 1), 1);
+    KEQ(U(IsBadReadPtr)((void *)~(ULONG_PTR)0, 2), 1);       /* wraps */
+    KEQ(U(IsBadReadPtr)(&c, ~(UINT_PTR)0), 1);               /* wraps */
+    return 0;
+}
 TEST(isbad_readptr_null_and_zero) {
     REQUIRE(U(IsBadReadPtr));
     if (t_is_wine()) { t_skip("emulator probes NULL and faults visibly"); return; }
-    char c = 1;
-    EXPECT_EQ(U(IsBadReadPtr)(NULL, 0), 0);
-    EXPECT_EQ(U(IsBadReadPtr)(NULL, 1), 1);
-    EXPECT_EQ(U(IsBadReadPtr)(NULL, 100), 1);
-    EXPECT_EQ(U(IsBadReadPtr)(&c, 0), 0);
-    EXPECT_EQ(U(IsBadReadPtr)(&c, 1), 0);
-    EXPECT_EQ(U(IsBadReadPtr)((void *)(ULONG_PTR)0xdeadbeef, 0), 0);
-    EXPECT_EQ(U(IsBadReadPtr)((void *)(ULONG_PTR)0x10, 1), 1);
-    EXPECT_EQ(U(IsBadReadPtr)((void *)~(ULONG_PTR)0, 1), 1);
-    EXPECT_EQ(U(IsBadReadPtr)((void *)~(ULONG_PTR)0, 2), 1);       /* wraps */
-    EXPECT_EQ(U(IsBadReadPtr)(&c, ~(UINT_PTR)0), 1);               /* wraps */
+    /* the 0x10 and ~0 probes really fault (and are caught inside IsBadReadPtr): run in a child so the harness exception hook does not see them */
+    DWORD rc = t_run_child("isbad_readptr_null_and_zero", "", 20000);
+    CHECKF(rc == 0, "child rc %lu (0=ok, else failing line)", rc);
 }
 TEST(isbad_writeptr_null_and_zero) {
     REQUIRE(U(IsBadWritePtr));

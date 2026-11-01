@@ -68,7 +68,8 @@ CT(gap4_title_a_roundtrip_and_sizes) {
     memset(b, 0x55, sizeof b);
     DWORD r = GetConsoleTitleA(b, 5);
     cnote("GetConsoleTitleA(size 5) -> %lu \"%s\"", r, b);
-    CCF(memcmp(b, "hell", 4) == 0 || memcmp(b, "hello", 5) == 0, "content \"%.8s\"", b);
+    /* documented: a buffer too small for the title yields 0 (content unspecified) */
+    CEQ(r, 0);
     memset(b, 0x55, sizeof b);
     CEQ(GetConsoleTitleA(b, 0), 0);
     CEQ((unsigned char)b[0], 0x55);

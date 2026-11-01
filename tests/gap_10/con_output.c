@@ -69,7 +69,7 @@ GC(rocw_truncates_at_buffer_end) {
     for (int i = 0; i < 32; i++) b[i] = 0x7777;
     GCHK(U(ReadConsoleOutputCharacterW)(h, b, 10, gco(W_ - 3, H_ - 1), &n));
     GEQ(n, 3);
-    GEQ(b[2], L' '); GEQ(b[3], 0x7777);
+    GEQ(b[2], L' '); GCHK(b[3] == 0x7777 || b[3] == 0);   /* element past the returned count is unspecified (Win10 zero-fills the requested length) */
     n = 0xAA;
     GCHK(U(ReadConsoleOutputCharacterW)(h, b, 5, gco(W_ - 1, H_ - 1), &n));
     GEQ(n, 1);
@@ -173,7 +173,7 @@ GC(roca_truncates_at_buffer_end) {
     GREQ(U(ReadConsoleOutputCharacterA)); SETUP();
     char b[32]; DWORD n = 0xAA; memset(b, 0x77, sizeof b);
     GCHK(U(ReadConsoleOutputCharacterA)(h, b, 10, gco(W_ - 4, H_ - 1), &n));
-    GEQ(n, 4); GEQ(b[4], 0x77);
+    GEQ(n, 4); GCHK(b[4] == 0x77 || b[4] == 0);   /* byte past the returned count is unspecified (Win10 zero-fills the requested length) */
 }
 GC(roca_cp1252_high_char) {
     GREQ(U(ReadConsoleOutputCharacterA)); SETUP();
@@ -255,7 +255,7 @@ GC(roa_truncates_at_buffer_end) {
     GREQ(U(ReadConsoleOutputAttribute)); SETUP();
     WORD a[16]; DWORD n = 0xAA; for (int i = 0; i < 16; i++) a[i] = 0x7777;
     GCHK(U(ReadConsoleOutputAttribute)(h, a, 10, gco(W_ - 2, H_ - 1), &n));
-    GEQ(n, 2); GEQ(a[2], 0x7777);
+    GEQ(n, 2); GCHK(a[2] == 0x7777 || a[2] == 0);   /* element past the returned count is unspecified (Win10 zero-fills the requested length) */
 }
 GC(roa_does_not_write_past_length) {
     GREQ(U(ReadConsoleOutputAttribute)); SETUP();

@@ -615,8 +615,11 @@ TEST_(TN(_realloc_fixed_shrink_same_pointer)) {
     unsigned char *p = AL(0, 4000);
     hlg_fill(p, 4000, 0x12);
     unsigned char *q = RE(p, 1000, 0);
-    CHECK(q == p);
-    if (q) { CHECK(hlg_verify(q, 1000, 0x12)); EXPECT_EQ(SZ(q), 1000); FR(q); } else FR(p);
+    /* P1: without MOVEABLE the call is in-place-only (HEAP_REALLOC_IN_PLACE_ONLY). An NT-heap block
+       that lives in the low-fragmentation heap cannot be resized in place and the call returns NULL
+       with the original block intact (ntdll RtlpReAllocateHeap). A non-NULL result must be p. */
+    if (q) { CHECK(q == p); CHECK(hlg_verify(q, 1000, 0x12)); EXPECT_EQ(SZ(q), 1000); FR(q); }
+    else { CHECK(hlg_verify(p, 4000, 0x12)); EXPECT_EQ(SZ(p), 4000); FR(p); }
 }
 TEST_(TN(_realloc_fixed_grow_moveable_flag)) {
     NEED();
@@ -642,8 +645,9 @@ TEST_(TN(_realloc_fixed_zeroinit_tail_inplace_only)) {
     unsigned char *p = AL(0, 4000);
     memset(p, 0xBB, 4000);
     unsigned char *q = RE(p, 2000, ZINIT);        /* shrink in place */
-    CHECK(q == p);
-    if (q) CHECK(hlg_all(q, 2000, 0xBB));
+    /* P1: in-place-only; an LFH-backed block yields NULL with the original intact (see shrink_same_pointer). */
+    if (q) { CHECK(q == p); CHECK(hlg_all(q, 2000, 0xBB)); }
+    else CHECK(hlg_all(p, 4000, 0xBB));
     FR(q ? q : p);
 }
 TEST_(TN(_realloc_invalid_flags)) {

@@ -91,7 +91,8 @@ TEST(jobnotify_multiple_children_counts) {
     for (int i = 0; i < N; i++) if (pi[i].hProcess) jc_wait_exit(pi[i].hProcess, 8000);
     JMSG m[32]; int n = collect(port, m, 32, 8000, 1500);
     EXPECT_EQ(count_msg(m, n, JOB_OBJECT_MSG_NEW_PROCESS, 0), N);
-    EXPECT_EQ(count_msg(m, n, JOB_OBJECT_MSG_EXIT_PROCESS, 0) + count_msg(m, n, JOB_OBJECT_MSG_ABNORMAL_EXIT_PROCESS, 0), N);
+    /* processes removed by TerminateJobObject post no per-process exit message (Win10: the terminate path removes members without a notification); ACTIVE_PROCESS_ZERO is still posted */
+    EXPECT_EQ(count_msg(m, n, JOB_OBJECT_MSG_EXIT_PROCESS, 0) + count_msg(m, n, JOB_OBJECT_MSG_ABNORMAL_EXIT_PROCESS, 0), 0);
     EXPECT_EQ(count_msg(m, n, JOB_OBJECT_MSG_ACTIVE_PROCESS_ZERO, 0), 1);
     for (int i = 0; i < N; i++) if (pi[i].hProcess) { CHECK(count_msg(m, n, JOB_OBJECT_MSG_NEW_PROCESS, pi[i].dwProcessId) == 1); jc_kill(&pi[i]); }
     CloseHandle(port); CloseHandle(j);
@@ -140,7 +141,8 @@ TEST(jobnotify_associate_after_assign) {
     U(TerminateJobObject)(j, 2);
     jc_wait_exit(pi.hProcess, 8000);
     int n = collect(port, m, 8, 5000, 1200);
-    CHECK(count_msg(m, n, JOB_OBJECT_MSG_EXIT_PROCESS, pi.dwProcessId) + count_msg(m, n, JOB_OBJECT_MSG_ABNORMAL_EXIT_PROCESS, pi.dwProcessId) >= 1);
+    /* member killed by TerminateJobObject: no per-process exit message on Win10 (see jobnotify_multiple_children_counts) */
+    CHECK(count_msg(m, n, JOB_OBJECT_MSG_EXIT_PROCESS, pi.dwProcessId) + count_msg(m, n, JOB_OBJECT_MSG_ABNORMAL_EXIT_PROCESS, pi.dwProcessId) == 0);
     t_note("ACTIVE_PROCESS_ZERO after late association: %d", count_msg(m, n, JOB_OBJECT_MSG_ACTIVE_PROCESS_ZERO, 0));
     jc_kill(&pi); CloseHandle(port); CloseHandle(j);
 }

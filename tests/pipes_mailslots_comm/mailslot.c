@@ -333,7 +333,9 @@ TEST(pmc_ms_client_requires_share_read) {
     HANDLE h = U(CreateMailslotA)(nm, 0, 0, NULL);
     SET_ERR(0);
     HANDLE c = CreateFileA(nm, GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
-    CHECK(c == INVALID_HANDLE_VALUE); EXPECT_ERR(ERROR_SHARING_VIOLATION);
+    /* p1: msfs MsCommonCreate/MsCreateClientEnd perform only an access check; no share-mode failure path */
+    CHECK(c != INVALID_HANDLE_VALUE);
+    if (c != INVALID_HANDLE_VALUE) CloseHandle(c);
     c = CreateFileA(nm, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
     CHECK(c != INVALID_HANDLE_VALUE);
     if (c != INVALID_HANDLE_VALUE) CloseHandle(c);

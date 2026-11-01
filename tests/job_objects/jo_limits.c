@@ -234,7 +234,7 @@ TEST(joblimit_job_memory_blocks_second_process) {
 TEST(joblimit_job_memory_peak_tracking) {
     REQUIRE(U(SetInformationJobObject));
     HANDLE j = jc_job(); PROCESS_INFORMATION pi; CHECK(j); if (!j) return;
-    SIZE_T lim = 512 * MB; CHECK(ext_set(j, JOB_OBJECT_LIMIT_JOB_MEMORY | JOB_OBJECT_LIMIT_PROCESS_MEMORY, fill_jobmem, &lim));
+    SIZE_T lim = 512 * MB;
     JOBOBJECT_EXTENDED_LIMIT_INFORMATION e; memset(&e, 0, sizeof e);
     e.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_JOB_MEMORY | JOB_OBJECT_LIMIT_PROCESS_MEMORY; e.JobMemoryLimit = lim; e.ProcessMemoryLimit = lim;
     CHECK(jc_set_ext(j, &e));
@@ -395,7 +395,6 @@ TEST(joblimit_time_limits_do_not_hit_sleepers) {
     REQUIRE(U(SetInformationJobObject));
     HANDLE j = jc_job(); PROCESS_INFORMATION pi; CHECK(j); if (!j) return;
     LONGLONG lim = 3000000;
-    CHECK(ext_set(j, JOB_OBJECT_LIMIT_PROCESS_TIME | JOB_OBJECT_LIMIT_JOB_TIME, fill_jtime, &lim));
     JOBOBJECT_EXTENDED_LIMIT_INFORMATION e; memset(&e, 0, sizeof e);
     e.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_PROCESS_TIME | JOB_OBJECT_LIMIT_JOB_TIME;
     e.BasicLimitInformation.PerProcessUserTimeLimit.QuadPart = lim; e.BasicLimitInformation.PerJobUserTimeLimit.QuadPart = lim;

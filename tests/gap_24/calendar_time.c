@@ -182,8 +182,11 @@ TEST(gap24_localsystemtime_leap_second_clamped) {
     FILETIME a, b;
     CHECK(f(&tz, &s59, &a));
     BOOL r = f(&tz, &s60, &b);
-    CHECKF(r, "second=60 accepted, err %lu", GetLastError());
-    CHECK(a.dwLowDateTime == b.dwLowDateTime && a.dwHighDateTime == b.dwHighDateTime);
+    /* Win10 kernelbase clamps 60->59 only in a private copy used to probe the
+       bias; the final conversion uses the caller's original SYSTEMTIME, so
+       second=60 fails with ERROR_INVALID_PARAMETER (87). */
+    CHECKF(!r, "second=60 must fail like other invalid fields");
+    CHECK(GetLastError() == ERROR_INVALID_PARAMETER);
 }
 TEST(gap24_localsystemtime_invalid_fields_fail) {
     LST2LFT_t f = (LST2LFT_t)t_proc("LocalSystemTimeToLocalFileTime"); REQUIRE(f);

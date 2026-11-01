@@ -279,8 +279,10 @@ TEST(ld_ex_search_flags_dll_load_dir_with_altered_invalid) {
     CHECK(ml_put(ML_A, d, "k32m_sdl.dll", p));
     SET_ERR(0);
     HMODULE h = U(LoadLibraryExW)(ml_w(p), NULL, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_WITH_ALTERED_SEARCH_PATH);
-    CHECK(h == NULL);
-    if (h) ml_unload(h); else EXPECT_ERR(ERROR_INVALID_PARAMETER);
+    /* The documentation says the combination "cannot be combined" but names no error, and neither LoadLibraryExW nor
+     * LdrLoadDll on Windows 10 rejects it: the outcome is not specified, so only record it. */
+    t_note("DLL_LOAD_DIR|ALTERED_SEARCH_PATH with an absolute path: %s err %lu", h ? "loaded" : "failed", h ? 0 : GetLastError());
+    if (h) ml_unload(h);
 }
 TEST(ld_ex_search_dll_load_dir_needs_absolute) {
     REQUIRE(U(LoadLibraryExW));
@@ -586,9 +588,10 @@ TEST(ld_datafile_nonexistent) {
 }
 TEST(ld_datafile_bare_system_name) {
     REQUIRE(U(LoadLibraryExW));
+    HMODULE loaded = GetModuleHandleW(L"user32.dll");   /* an already loaded module is returned as the image handle, untagged */
     HMODULE h = U(LoadLibraryExW)(L"user32.dll", NULL, LOAD_LIBRARY_AS_DATAFILE);
     CHECKF(h != NULL, "err %lu", GetLastError());
-    if (h) { CHECK((ULONG_PTR)h & 1); FreeLibrary(h); }
+    if (h) { if (loaded) CHECK(h == loaded); else CHECK((ULONG_PTR)h & 1); FreeLibrary(h); }
     h = U(LoadLibraryExW)(L"user32", NULL, LOAD_LIBRARY_AS_DATAFILE);
     t_note("datafile load without extension: %s", h ? "ok" : "failed");
     if (h) FreeLibrary(h);
@@ -704,10 +707,9 @@ TEST(ld_packaged_no_package) {
 }
 TEST(ld_packaged_null_name) {
     REQUIRE(U(LoadPackagedLibrary));
-    SET_ERR(0);
-    CHECK(U(LoadPackagedLibrary)(NULL, 0) == NULL);
-    DWORD e = GetLastError();
-    CHECKF(e == ERROR_INVALID_PARAMETER || e == 15700, "e=%lu", e);
+    /* LoadPackagedLibrary(NULL, 0) passes the pointer to RtlDetermineDosPathNameType_U, which faults on Windows 10;
+     * the documentation does not define a NULL name, so there is nothing to verify. */
+    t_skip("LoadPackagedLibrary(NULL) is undefined (access violation on Windows 10)");
 }
 TEST(ld_packaged_reserved_nonzero) {
     REQUIRE(U(LoadPackagedLibrary));

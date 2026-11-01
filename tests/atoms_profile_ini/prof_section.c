@@ -27,7 +27,7 @@ TEST(profile_section_empty_and_value_only) {
     SET_ERR(0xdeadbeef);
     EXPECT_EQ(gsec("section2", b, sizeof b, path), 0);
     EXPECT_ERR(0);
-    CHECK(b[0] == 0 && b[1] == 0);
+    CHECK(b[0] == 0);   /* a lone NUL: Win10 does not write the second NUL when 0 is returned */
     memset(b, 'z', sizeof b);
     DWORD r = gsec("section3", b, sizeof b, path);
     EXPECT_EQ(r, 6);
@@ -44,7 +44,7 @@ TEST(profile_section_missing_section_and_file) {
     SET_ERR(0xdeadbeef);
     EXPECT_EQ(gsec("nosuch", b, sizeof b, path), 0);
     t_note("missing section: err=%lu b0=%d b1=%d", GetLastError(), b[0], b[1]);
-    CHECK(b[0] == 0 && b[1] == 0);
+    CHECK(b[0] == 0);   /* a lone NUL, see above */
     char gone[MAX_PATH]; t_tmpfile(gone, sizeof gone, "sec_gone.ini"); ap_rm(gone);
     memset(b, 'z', sizeof b);
     SET_ERR(0xdeadbeef);

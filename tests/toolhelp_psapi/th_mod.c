@@ -154,14 +154,23 @@ TEST(th_mod_a_bad_dwsize) {
     HANDLE s = U(CreateToolhelp32Snapshot)(TH32CS_SNAPMODULE, 0);
     if (s == INVALID_HANDLE_VALUE) { CHECK(0); return; }
     MODULEENTRY32 a;
-    DWORD bad[] = { 0, sizeof a - 1, sizeof a + 1, PSZ_MOD_W };
-    for (int i = 0; i < 4; i++) {
+    /* Win10 kernel32!Module32First only rejects dwSize < 0x238 (it fills a private 0x438 W entry and converts),
+     * so sizeof a + 1 and PSZ_MOD_W are accepted; only values below the A-entry size must fail. */
+    DWORD bad[] = { 0, sizeof a - 1 };
+    DWORD big[] = { sizeof a + 1, PSZ_MOD_W };
+    for (int i = 0; i < 2; i++) {
         a.dwSize = bad[i]; SET_ERR(0);
         CHECKF(!UN(Module32First)(s, &a), "dwSize 0x%lx", bad[i]);
         t_note("bad dwSize err=%lu", GetLastError());
         a.dwSize = bad[i]; SET_ERR(0);
         CHECKF(!UN(Module32Next)(s, &a), "next dwSize 0x%lx", bad[i]);
         t_note("bad dwSize err=%lu", GetLastError());
+    }
+    for (int i = 0; i < 2; i++) {
+        a.dwSize = big[i];
+        CHECKF(UN(Module32First)(s, &a), "oversized dwSize 0x%lx", big[i]);
+        a.dwSize = big[i];
+        CHECKF(UN(Module32Next)(s, &a), "oversized next dwSize 0x%lx", big[i]);
     }
     CloseHandle(s);
 }
@@ -412,20 +421,28 @@ static const char g_marker[64] = "k32t-toolhelp-readprocessmemory-marker-0123456
 
 TEST(th_rpm_self_pid_and_zero) {
     REQUIRE(U(Toolhelp32ReadProcessMemory));
-    for (int k = 0; k < 2; k++) {
+    {
         char buf[64]; SIZE_T got = 77; memset(buf, 0, sizeof buf);
         SET_ERR(0);
-        BOOL r = U(Toolhelp32ReadProcessMemory)(k ? GetCurrentProcessId() : 0, g_marker, buf, sizeof buf, &got);
-        CHECKF(r, "k=%d err=%lu", k, GetLastError());
+        BOOL r = U(Toolhelp32ReadProcessMemory)(GetCurrentProcessId(), g_marker, buf, sizeof buf, &got);
+        CHECKF(r, "err=%lu", GetLastError());
         EXPECT_EQ(got, sizeof buf);
         CHECK(!memcmp(buf, g_marker, sizeof buf));
+    }
+    /* Win10 kernel32!Toolhelp32ReadProcessMemory is OpenProcess(PROCESS_VM_READ, FALSE, pid) + ReadProcessMemory,
+     * with no special case for pid 0 (the documentation says 0 means the current process), so pid 0 fails. */
+    {
+        char buf[64]; SIZE_T got = 77;
+        SET_ERR(0);
+        CHECK(!U(Toolhelp32ReadProcessMemory)(0, g_marker, buf, sizeof buf, &got));
+        EXPECT_ERR(ERROR_INVALID_PARAMETER);
     }
 }
 
 TEST(th_rpm_null_count_pointer) {
     REQUIRE(U(Toolhelp32ReadProcessMemory));
     char buf[16];
-    CHECK(U(Toolhelp32ReadProcessMemory)(0, g_marker, buf, sizeof buf, NULL));
+    CHECK(U(Toolhelp32ReadProcessMemory)(GetCurrentProcessId(), g_marker, buf, sizeof buf, NULL));
     CHECK(!memcmp(buf, g_marker, 16));
 }
 
@@ -440,7 +457,7 @@ TEST(th_rpm_zero_size) {
 TEST(th_rpm_unmapped_address) {
     REQUIRE(U(Toolhelp32ReadProcessMemory));
     char buf[16]; SIZE_T got = 99; SET_ERR(0);
-    BOOL r = U(Toolhelp32ReadProcessMemory)(0, (LPCVOID)0x10, buf, sizeof buf, &got);
+    BOOL r = U(Toolhelp32ReadProcessMemory)(GetCurrentProcessId(), (LPCVOID)0x10, buf, sizeof buf, &got);
     CHECK(!r);
     DWORD e = GetLastError();
     t_note("read of 0x10: err=%lu got=%llu", e, (unsigned long long)got);

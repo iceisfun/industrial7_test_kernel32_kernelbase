@@ -1,0 +1,5 @@
+console_apis.con_write_cjk_two_cells  # wide-character cell flags and read-back depend on console font and code page (baseline: cells read back as spaces, no LVB lead/trail flags)
+console_apis.con_write_cjk_sequence  # same: DBCS lead/trail attribute reporting is font/code-page dependent
+gap_10.gap10_qwsex_access_denied_limited  # kernel NtQueryVirtualMemory(MemoryWorkingSetEx) needs only PROCESS_QUERY_LIMITED_INFORMATION when the caller token is admin or holds SeProfileSingleProcessPrivilege (MiIsUserQueryVmCallerTrusted), otherwise PROCESS_QUERY_INFORMATION; outcome depends on the run token (baseline: succeeded with a limited handle)
+gap_10.gap10_qws_access_rights  # same token-dependent access check for QueryWorkingSet (baseline: limited and query-only handles reach the buffer-size check and return ERROR_BAD_LENGTH(24) instead of ERROR_ACCESS_DENIED)
+toolhelp_psapi.ps_wswatch_self_in_child  # number of working-set watch records for 256 touched pages varies between runs (31 then 46 on same host; fault clustering/memory state), policy not traced

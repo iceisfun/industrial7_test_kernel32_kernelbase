@@ -4,11 +4,11 @@
 #define USK_HKCU        0x1   /* SHREGSET_HKCU */
 #define USK_FORCE_HKCU  0x2   /* SHREGSET_FORCE_HKCU */
 #define E_HKCU 1              /* SHREGENUM_HKCU */
-#define E_HKLM 2              /* SHREGENUM_HKLM */
-#define E_BOTH 3
+#define E_HKLM 0x10           /* SHREGENUM_HKLM */
+#define E_BOTH 0x11           /* SHREGENUM_BOTH */
 #define D_HKCU 1              /* SHREGDEL_HKCU */
-#define D_HKLM 2
-#define D_BOTH 3
+#define D_HKLM 0x10           /* SHREGDEL_HKLM */
+#define D_BOTH 0x11           /* SHREGDEL_BOTH */
 
 static char g_root[160];      /* Software\k32t_<pid>_g10 */
 static WCHAR g_rootw[160];
@@ -322,7 +322,7 @@ TEST(gap10_usk_enumkey_invalid_args) {
     cch = 16; EQ1(U(SHRegEnumUSKeyW)(h, 0, w, &cch, (SHREGENUM_FLAGS)E_BOTH), ERROR_CALL_NOT_IMPLEMENTED);
     cch = 16; EQ1(U(SHRegEnumUSKeyA)(NULL, 0, a, &cch, (SHREGENUM_FLAGS)E_BOTH), ERROR_CALL_NOT_IMPLEMENTED);
     cch = 16; EQ1(U(SHRegEnumUSKeyW)(NULL, 0, w, &cch, (SHREGENUM_FLAGS)E_BOTH), ERROR_CALL_NOT_IMPLEMENTED);
-    static const DWORD bad[] = { 4, 8, 0x10, 0x100, 0x80000000 };
+    static const DWORD bad[] = { 4, 8, 0x20, 0x100, 0x80000000 };
     for (size_t i = 0; i < sizeof bad / sizeof bad[0]; i++) {
         cch = 16; EQ1(U(SHRegEnumUSKeyA)(h, 0, a, &cch, (SHREGENUM_FLAGS)bad[i]), ERROR_INVALID_PARAMETER);
         cch = 16; EQ1(U(SHRegEnumUSKeyW)(h, 0, w, &cch, (SHREGENUM_FLAGS)bad[i]), ERROR_INVALID_PARAMETER);
@@ -367,7 +367,7 @@ TEST(gap10_usk_enumvalue_w_all) {
         WCHAR n[64] = {0}; DWORD cn = 64, ty = 0xAA, cb = 64; BYTE d[64] = {0};
         EQ1(U(SHRegEnumUSValueW)(h, i, n, &cn, &ty, d, &cb, (SHREGENUM_FLAGS)E_HKCU), 0);
         if (!lstrcmpW(n, L"v_dword")) { seen |= 1; EQ1(ty, REG_DWORD); EQ1(*(DWORD *)d, 0x1234); EQ1(cn, 7); }
-        else if (!lstrcmpW(n, L"v_sz")) { seen |= 2; EQ1(ty, REG_SZ); EQ1(cb, 6); EXPECT_STR((char *)d, "hello"); }
+        else if (!lstrcmpW(n, L"v_sz")) { seen |= 2; EQ1(ty, REG_SZ); EQ1(cb, 12); EXPECT_WSTR((WCHAR *)d, L"hello"); }
         else if (!lstrcmpW(n, L"v_bin")) { seen |= 4; EQ1(ty, REG_BINARY); EQ1(cb, 3); }
         else CHECK(0);
     }
@@ -425,7 +425,7 @@ TEST(gap10_usk_enumvalue_invalid_args) {
     cn = 16; EQ1(U(SHRegEnumUSValueA)(h, 0, a, &cn, NULL, NULL, NULL, (SHREGENUM_FLAGS)E_BOTH), ERROR_CALL_NOT_IMPLEMENTED);
     cn = 16; EQ1(U(SHRegEnumUSValueW)(h, 0, w, &cn, NULL, NULL, NULL, (SHREGENUM_FLAGS)E_BOTH), ERROR_CALL_NOT_IMPLEMENTED);
     cn = 16; EQ1(U(SHRegEnumUSValueA)(NULL, 0, a, &cn, NULL, NULL, NULL, (SHREGENUM_FLAGS)E_BOTH), ERROR_CALL_NOT_IMPLEMENTED);
-    static const DWORD bad[] = { 4, 8, 0x10, 0x80000000 };
+    static const DWORD bad[] = { 4, 8, 0x20, 0x80000000 };
     for (size_t i = 0; i < sizeof bad / sizeof bad[0]; i++) {
         cn = 16; EQ1(U(SHRegEnumUSValueA)(h, 0, a, &cn, NULL, NULL, NULL, (SHREGENUM_FLAGS)bad[i]), ERROR_INVALID_PARAMETER);
         cn = 16; EQ1(U(SHRegEnumUSValueW)(h, 0, w, &cn, NULL, NULL, NULL, (SHREGENUM_FLAGS)bad[i]), ERROR_INVALID_PARAMETER);
@@ -504,7 +504,7 @@ TEST(gap10_usk_delvalue_invalid_args) {
     NEED(SHRegDeleteUSValueW); NEED(SHRegDeleteUSValueA); NEED(SHRegCloseUSKey); ROOT();
     setsz("dvi", "val", "x");
     HUSKEY h = mkus("dvi"); if (!h) { t_skip("no key"); return; }
-    static const DWORD bad[] = { 4, 8, 0x10, 0x80000000 };
+    static const DWORD bad[] = { 4, 8, 0x20, 0x80000000 };
     for (size_t i = 0; i < sizeof bad / sizeof bad[0]; i++) {
         EQ1(U(SHRegDeleteUSValueW)(h, L"val", (SHREGDEL_FLAGS)bad[i]), ERROR_INVALID_PARAMETER);
         EQ1(U(SHRegDeleteUSValueA)(h, "val", (SHREGDEL_FLAGS)bad[i]), ERROR_INVALID_PARAMETER);
@@ -593,7 +593,7 @@ TEST(gap10_usk_delkey_invalid_args) {
     NEED(SHRegDeleteEmptyUSKeyW); NEED(SHRegDeleteEmptyUSKeyA); NEED(SHRegCloseUSKey); ROOT();
     mksub("dki\\victim");
     HUSKEY h = mkus("dki"); if (!h) { t_skip("no key"); return; }
-    static const DWORD bad[] = { 4, 8, 0x10, 0x80000000 };
+    static const DWORD bad[] = { 4, 8, 0x20, 0x80000000 };
     for (size_t i = 0; i < sizeof bad / sizeof bad[0]; i++) {
         EQ1(U(SHRegDeleteEmptyUSKeyW)(h, L"victim", (SHREGDEL_FLAGS)bad[i]), ERROR_INVALID_PARAMETER);
         EQ1(U(SHRegDeleteEmptyUSKeyA)(h, "victim", (SHREGDEL_FLAGS)bad[i]), ERROR_INVALID_PARAMETER);
@@ -674,7 +674,7 @@ TEST(gap10_shlis_reserved_pointer_zeroed) {
     NEED(SHLoadIndirectString);
     WCHAR b[16]; void *rsv = (void *)(ULONG_PTR)0x1234;
     EQ1(U(SHLoadIndirectString)(L"abc", b, 16, &rsv), S_OK);
-    EQ1(rsv, 0);
+    EQ1(rsv, 0x1234);   /* Win10: the reserved argument is ignored (SHLoadIndirectString passes NULL on), left untouched */
 }
 TEST(gap10_shlis_indirect_bad_dll) {
     NEED(SHLoadIndirectString);
@@ -733,6 +733,17 @@ typedef void (WINAPI *CoUninit_t)(void);
 static ULONG rel(void *p) { return ((IUnknown *)p)->lpVtbl->Release((IUnknown *)p); }
 
 static HRESULT g_hr[8]; static void *g_pp[8]; static int g_init;
+static volatile int g_fault[8]; static volatile DWORD g_guard_tid;
+/* GUARD: SHCoCreateInstance with invalid/NULL ids may fault inside shell32 on Windows; the faulting
+ * call runs in its own thread and the handler ends only that thread. */
+static LONG CALLBACK shco_veh(PEXCEPTION_POINTERS ep) {
+    if (g_guard_tid && g_guard_tid == GetCurrentThreadId() &&
+        ep->ExceptionRecord->ExceptionCode == EXCEPTION_ACCESS_VIOLATION) {
+        g_guard_tid = 0;
+        ExitThread(0xDEAD0000);
+    }
+    return EXCEPTION_CONTINUE_SEARCH;
+}
 static DWORD WINAPI shco_thread(LPVOID arg) {
     HMODULE ole = LoadLibraryA("ole32.dll");
     CoInit_t ci = ole ? (CoInit_t)GetProcAddress(ole, "CoInitializeEx") : NULL;
@@ -745,9 +756,14 @@ static DWORD WINAPI shco_thread(LPVOID arg) {
         g_hr[0] = UN(SHCoCreateInstance)(NULL, &CLSID_ShellLink_, NULL, &IID_IUnknown_, &p); g_pp[0] = p; p = NULL;
         g_hr[1] = UN(SHCoCreateInstance)(L"{00021401-0000-0000-C000-000000000046}", NULL, NULL, &IID_IShellLinkW_, &p); g_pp[1] = p; p = NULL;
         g_hr[2] = UN(SHCoCreateInstance)(NULL, &CLSID_Bogus_, NULL, &IID_IUnknown_, &p); g_pp[2] = p; p = (void *)(ULONG_PTR)0;
-        g_hr[3] = UN(SHCoCreateInstance)(L"not a guid", NULL, NULL, &IID_IUnknown_, &p); g_pp[3] = p; p = NULL;
-        g_hr[4] = UN(SHCoCreateInstance)(NULL, NULL, NULL, &IID_IUnknown_, &p); g_pp[4] = p; p = NULL;
-        g_hr[5] = UN(SHCoCreateInstance)(L"{00021401-0000-0000-C000-000000000046}", &CLSID_Bogus_, NULL, &IID_IUnknown_, &p); g_pp[5] = p;
+    } else if (mode >= 13 && mode <= 15) {
+        int i = mode - 10;
+        g_hr[i] = E_FAIL; g_fault[i] = 1; /* stays 1 if the guard kills this thread */
+        g_guard_tid = GetCurrentThreadId();
+        if (i == 3) g_hr[i] = UN(SHCoCreateInstance)(L"not a guid", NULL, NULL, &IID_IUnknown_, &p);
+        else if (i == 4) g_hr[i] = UN(SHCoCreateInstance)(NULL, NULL, NULL, &IID_IUnknown_, &p);
+        else g_hr[i] = UN(SHCoCreateInstance)(L"{00021401-0000-0000-C000-000000000046}", &CLSID_Bogus_, NULL, &IID_IUnknown_, &p);
+        g_guard_tid = 0; g_fault[i] = 0; g_pp[i] = p;   /* clear the guard: a later thread may reuse this id */
     } else if (mode == 2) {
         g_hr[0] = UN(SHCoCreateInstance)(NULL, &CLSID_ShellLink_, NULL, &IID_IUnknown_, &p); g_pp[0] = p;
     }
@@ -755,6 +771,8 @@ static DWORD WINAPI shco_thread(LPVOID arg) {
     return 0;
 }
 static void run_shco(int mode) {
+    static PVOID veh;
+    if (!veh) veh = AddVectoredExceptionHandler(1, shco_veh);
     HANDLE t = CreateThread(NULL, 0, shco_thread, (LPVOID)(ULONG_PTR)mode, 0, NULL);
     WaitForSingleObject(t, 20000); CloseHandle(t);
 }
@@ -789,13 +807,20 @@ TEST(gap10_shco_unregistered_class) {
 TEST(gap10_shco_bad_string_and_null_ids) {
     REQUIRE(UN(SHCoCreateInstance));
     if (t_is_wine()) { t_skip("shell COM activation not exercised under emulator"); return; }
-    run_shco(0);
-    if (!g_init) { t_skip("COM init failed"); return; }
+    run_shco(13); if (!g_init) { t_skip("COM init failed"); return; }
+    run_shco(14); run_shco(15);
+    t_note("faulted: bad string=%d both NULL=%d both given=%d", g_fault[3], g_fault[4], g_fault[5]);
     t_note("bad string hr=0x%08lx; both NULL hr=0x%08lx; both given hr=0x%08lx", (unsigned long)g_hr[3], (unsigned long)g_hr[4], (unsigned long)g_hr[5]);
-    CHECK(FAILED(g_hr[3])); CHECK(FAILED(g_hr[4]));
-    if (g_pp[3]) rel(g_pp[3]);
-    if (g_pp[4]) rel(g_pp[4]);
-    if (g_hr[5] == S_OK && g_pp[5]) rel(g_pp[5]);
+    /* P1 audit: windows.storage!SHCoCreateInstanceWorker uses pclsid when pszCLSID is NULL and
+     * _SHCoCreateInstance first calls shlwapi!SHStringFromGUIDW(pclsid, ...), which reads the GUID bytes
+     * without a NULL check: NULL/NULL faults (access violation) on Win10. A bad string is rejected by
+     * SHCLSIDFromString before that point and must not fault; neither may the both-given call. */
+    CHECK(!g_fault[3]); CHECK(FAILED(g_hr[3]));
+    CHECK(g_fault[4]);
+    CHECK(!g_fault[5]);
+    if (!g_fault[3] && g_pp[3]) rel(g_pp[3]);
+    if (!g_fault[4] && g_pp[4]) rel(g_pp[4]);
+    if (!g_fault[5] && g_hr[5] == S_OK && g_pp[5]) rel(g_pp[5]);
 }
 TEST(gap10_shco_without_com_init) {
     REQUIRE(UN(SHCoCreateInstance));

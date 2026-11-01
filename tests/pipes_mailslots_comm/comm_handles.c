@@ -130,11 +130,12 @@ TEST(pmc_comm_break_noncomm) {
 TEST(pmc_comm_escape_noncomm) {
     REQUIRE(U(EscapeCommFunction));
     hset s; hs_open(&s);
+    /* p1: codes 1-9 are all accepted by kernelbase EscapeCommFunction; a plain file handle gets ERROR_INVALID_PARAMETER from the file system's IOCTL path */
     DWORD f[] = { SETXOFF, SETXON, SETRTS, CLRRTS, SETDTR, CLRDTR, SETBREAK, CLRBREAK };
     EACH(k) for (int i = 0; i < 8; i++) {
         SET_ERR(0);
         CHECKF(!U(EscapeCommFunction)(s.h[k], f[i]), "%s func %lu succeeded", hname[k], f[i]);
-        CHECKF(GetLastError() != ERROR_INVALID_PARAMETER || k == H_NULL, "%s func %lu: valid function rejected as invalid parameter", hname[k], f[i]);
+        CHECKF(GetLastError() != ERROR_INVALID_PARAMETER || k == H_NULL || k == H_FILE, "%s func %lu: valid function rejected as invalid parameter", hname[k], f[i]);
     }
     hs_close(&s);
 }

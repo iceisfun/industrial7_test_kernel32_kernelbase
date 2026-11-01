@@ -257,5 +257,17 @@ TEST(gap16_wer_all_exports_present) {
 TEST(gap16_wer_k32_forwards_to_kernelbase) {
     static const char *n[] = { "WerRegisterFile", "WerRegisterMemoryBlock", "WerRegisterCustomMetadata", "WerRegisterAppLocalDump", "WerUnregisterFile" };
     if (t_is_wine()) { t_skip("forwarders are stubs"); return; }
-    for (int i = 0; i < 5; i++) { FARPROC a = t_proc_k32(n[i]), b = t_proc_kb(n[i]); if (a && b) CHECKF(a == b, "%s kernel32 %p kernelbase %p", n[i], a, b); }
+    for (int i = 0; i < 5; i++) {
+        FARPROC a = t_proc_k32(n[i]), b = t_proc_kb(n[i]);
+        if (!a || !b || a == b) continue;   /* a forwarder resolves to the kernelbase address itself */
+        /* Win10: kernel32 exports a local thunk `jmp qword ptr [rip+disp32]` (48 FF 25 / FF 25) whose IAT slot holds
+         * the kernelbase export, so the addresses differ; require exactly that thunk and that target. */
+        HMODULE hm = NULL; BOOL inK32 = GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCSTR)a, &hm) && hm == t_kernel32();
+        const unsigned char *c = (const unsigned char *)a; FARPROC tgt = NULL;
+        if (inK32) {
+            if (c[0] == 0x48) c++;
+            if (c[0] == 0xFF && c[1] == 0x25) { LONG d; memcpy(&d, c + 2, 4); tgt = *(FARPROC *)(c + 6 + d); }
+        }
+        CHECKF(inK32 && tgt == b, "%s kernel32 %p (thunk target %p) kernelbase %p", n[i], a, tgt, b);
+    }
 }

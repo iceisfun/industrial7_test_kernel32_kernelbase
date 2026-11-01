@@ -117,7 +117,13 @@ TEST(gap26_shexpand_a_truncation_returns_zero) {
   UDECL(DWORD, SHExpandEnvironmentStringsA, (LPCSTR, LPSTR, DWORD));
   SHExpandEnvironmentStringsA_pfn f = UN(SHExpandEnvironmentStringsA); REQUIRE(f);
   char out[16];
-  EXPECT_EQ(f("abcdef", out, 7), 7); EXPECT_STR(out, "abcdef");
+  /* ExpandEnvironmentStringsA reserves nSize-1 chars for the unicode expansion, so an
+     exact fit (nSize == len+1) takes the too-small retry path and returns len+2 > nSize:
+     SHExpand truncates and returns 0. nSize == len+2 succeeds. (UNVERIFIED-until-rerun) */
+  EXPECT_EQ(f("abcdef", out, 8), 7); EXPECT_STR(out, "abcdef");
+  memset(out, 'Z', sizeof out);
+  EXPECT_EQ(f("abcdef", out, 7), 0);
+  EXPECT_STR(out, "");  /* ExpandEnvironmentStringsA zeroes out[0] first; SHTruncateString(out,7) then writes out[6] */
   memset(out, 'Z', sizeof out);
   EXPECT_EQ(f("abcdef", out, 6), 0);
   CHECK(strlen(out) <= 5);

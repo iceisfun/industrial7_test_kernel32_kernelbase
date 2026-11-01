@@ -476,9 +476,12 @@ TEST(clocks_system_time_adjustment_precise) {
     t_note("precise adj %llu inc %llu disabled %d", adj, inc, dis);
     if (U(GetSystemTimeAdjustment)) {
         DWORD a2, i2; BOOL d2; U(GetSystemTimeAdjustment)(&a2, &i2, &d2);
-        /* precise values carry 2^-16 extra bits */
-        CHECK(d2 == dis || 1);
-        CHECK((adj >> 16) <= 2 * (unsigned long long)a2 + 1000 && (adj >> 16) + 1000 >= a2 / 2);
+        /* Win10 22H2 baseline: both calls forward NtQuerySystemInformation(0x1c) unscaled; precise values were
+           adj=inc=10000000 where plain were 156250 (ratio 64); the scaling is not documented, so only the
+           adj==inc invariant of a disabled adjustment is checked. */
+        CHECK(d2 == dis);
+        if (dis) EXPECT_EQ(adj, inc);
+        t_note("precise/plain increment ratio %llu", i2 ? (unsigned long long)(inc / i2) : 0ULL);
     }
 }
 TEST(clocks_set_system_time_adjustment_never) {

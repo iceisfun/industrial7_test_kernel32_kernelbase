@@ -164,8 +164,12 @@ TEST(gap1_cfm2_extparam_zero_count_ignores_array) {
     REQUIRE(CFM2);
     MEM_EXTENDED_PARAMETER p; memset(&p, 0, sizeof p);
     p.Type = 0xFF;
+    SET_ERR(0);
     HANDLE h = CFM2(INVALID_HANDLE_VALUE, NULL, FILE_MAP_ALL_ACCESS, PAGE_READWRITE, 0, 4096, NULL, &p, 0);
-    CHECKF(h != NULL, "err %lu", GetLastError());
+    /* P1: kernelbase skips its own check for count 0, but the kernel (MiCaptureSectionCreateExtendedParameters)
+     * rejects a non-NULL array with count 0 as STATUS_INVALID_PARAMETER. UNVERIFIED-until-rerun. */
+    CHECK(h == NULL);
+    EXPECT_ERR(ERROR_INVALID_PARAMETER);
     if (h) CloseHandle(h);
 }
 TEST(gap1_cfm2_extparam_null_array_zero_count) {
@@ -311,7 +315,9 @@ TEST(gap1_cfm2_prot_readonly_blocks_write_view) {
     SET_ERR(0);
     void *w = MapViewOfFile(h, FILE_MAP_WRITE, 0, 0, 0);
     CHECK(w == NULL);
-    EXPECT_ERR(ERROR_ACCESS_DENIED);
+    /* P1: Win10 maps this to STATUS_SECTION_PROTECTION (MiMapViewOfSection) -> ERROR_INVALID_PARAMETER.
+     * UNVERIFIED-until-rerun. */
+    EXPECT_ERR(ERROR_INVALID_PARAMETER);
     if (w) UnmapViewOfFile(w);
     void *r = MapViewOfFile(h, FILE_MAP_READ, 0, 0, 0);
     CHECK(r != NULL);
@@ -686,8 +692,11 @@ TEST(gap1_cfm2_name_case_insensitive) {
     HANDLE h1 = CFM2(INVALID_HANDLE_VALUE, NULL, FILE_MAP_ALL_ACCESS, PAGE_READWRITE, 0, 4096, a, NULL, 0);
     SET_ERR(0);
     HANDLE h2 = CFM2(INVALID_HANDLE_VALUE, NULL, FILE_MAP_ALL_ACCESS, PAGE_READWRITE, 0, 4096, b, NULL, 0);
+    /* P1: kernel object names are case-sensitive (BaseFormatObjectAttributes sets OBJ_OPENIF only, no
+     * OBJ_CASE_INSENSITIVE): differing case yields two distinct sections, no ERROR_ALREADY_EXISTS. UNVERIFIED-until-rerun. */
     CHECK(h1 && h2);
-    EXPECT_ERR(ERROR_ALREADY_EXISTS);
+    EXPECT_ERR(0);
+    CHECK(h1 != h2);
     if (h1) CloseHandle(h1);
     if (h2) CloseHandle(h2);
 }

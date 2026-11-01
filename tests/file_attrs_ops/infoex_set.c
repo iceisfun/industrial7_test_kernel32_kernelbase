@@ -205,7 +205,9 @@ TEST(fsinfo_set_basic_negative_time_invalid) {
     HANDLE h = mk("si_bneg.txt", GENERIC_READ | GENERIC_WRITE);
     FILE_BASIC_INFO bi; memset(&bi, 0, sizeof bi);
     bi.CreationTime.QuadPart = -2;
-    SetLastError(0); EXPECT_EQ(si(h, C_BASIC, &bi, sizeof bi), FALSE); EXPECT_ERR(ERROR_INVALID_PARAMETER);
+    /* P1: -2 is a documented special value on NTFS/ReFS (FILE_BASIC_INFORMATION remarks: "-2 restores time stamp
+       updates on the handle"), so it is accepted (test already requires real NTFS); only the minimum is rejected */
+    SetLastError(0); EXPECT_EQ(si(h, C_BASIC, &bi, sizeof bi), TRUE);
     bi.CreationTime.QuadPart = (LONGLONG)0x8000000000000000ULL;
     SetLastError(0); EXPECT_EQ(si(h, C_BASIC, &bi, sizeof bi), FALSE); EXPECT_ERR(ERROR_INVALID_PARAMETER);
     CloseHandle(h); fa_rml("si_bneg.txt");
@@ -353,15 +355,32 @@ TEST(fsinfo_set_dispex_posix_semantics_removes_name_immediately) {
     if (!real_ntfs()) { t_skip("needs real NTFS"); return; }
     HANDLE h = mk("si_dxp.txt", GENERIC_READ | DELETE);
     char p[MAX_PATH * 2]; fa_path(p, "si_dxp.txt");
+    /* a second, independent handle stays open across the delete (this is what separates POSIX from normal delete) */
+    HANDLE o = fa_open(p, GENERIC_READ, FA_SHARE_ALL, OPEN_EXISTING, 0);
+    CHECKF(o != INVALID_HANDLE_VALUE, "second handle: err %lu", GetLastError());
     FILE_DISPOSITION_INFO_EX di = { FILE_DISPOSITION_FLAG_DELETE | FILE_DISPOSITION_FLAG_POSIX_SEMANTICS };
     SetLastError(0);
-    if (!si(h, C_DISPEX, &di, sizeof di)) { t_note("POSIX delete unsupported err=%lu", GetLastError()); CloseHandle(h); fa_rm(p); return; }
-    SetLastError(0);
+    if (!si(h, C_DISPEX, &di, sizeof di)) { t_note("POSIX delete unsupported err=%lu", GetLastError()); CloseHandle(h); if (o != INVALID_HANDLE_VALUE) CloseHandle(o); fa_rm(p); return; }
+    { /* diagnostics only: state while the POSIX delete handle is still open */
+        SetLastError(0); BOOL ex = fa_exists(p);
+        DWORD ae = GetLastError(); FILE_STANDARD_INFO st; memset(&st, 0, sizeof st);
+        BOOL g = gi(h, C_STANDARD, &st, sizeof st);
+        t_note("before close: exists=%d GetFileAttributes err=%lu, standard info ok=%d DeletePending=%d", (int)ex, ae, (int)g, (int)st.DeletePending);
+    }
+    /* FILE_DISPOSITION_INFORMATION_EX remarks: with POSIX semantics "the link is removed from the visible namespace
+     * as soon as the POSIX delete handle has been closed, but the file's data streams remain accessible by other
+     * existing handles until the last handle has been closed". */
+    CloseHandle(h);
     CHECK(!fa_exists(p));
     HANDLE n = fa_open(p, GENERIC_WRITE, FA_SHARE_ALL, CREATE_NEW, 0);
-    CHECKF(n != INVALID_HANDLE_VALUE, "re-create with same name while old handle open: err %lu", GetLastError());
+    CHECKF(n != INVALID_HANDLE_VALUE, "re-create with same name after closing the POSIX delete handle, other handle still open: err %lu", GetLastError());
     if (n != INVALID_HANDLE_VALUE) CloseHandle(n);
-    CloseHandle(h); fa_rm(p);
+    if (o != INVALID_HANDLE_VALUE) {
+        char b[16]; DWORD got = 0; LARGE_INTEGER z; z.QuadPart = 0; SetFilePointerEx(o, z, NULL, FILE_BEGIN);
+        CHECKF(ReadFile(o, b, 10, &got, NULL) && got == 10 && !memcmp(b, "0123456789", 10), "read through surviving handle: got %lu err %lu", got, GetLastError());
+        CloseHandle(o);
+    }
+    fa_rm(p);
 }
 TEST(fsinfo_set_dispex_ignore_readonly) {
     REQUIRE(U(SetFileInformationByHandle));
@@ -525,9 +544,10 @@ TEST(fsinfo_set_io_priority_valid_values) {
     REQUIRE(U(SetFileInformationByHandle));
     HANDLE h = mk("si_io.txt", GENERIC_READ | GENERIC_WRITE);
     for (int v = 0; v <= 2; v++) {
-        FILE_IO_PRIORITY_HINT_INFO io; io.PriorityHint = (PRIORITY_HINT)v;
+        _Alignas(8) FILE_IO_PRIORITY_HINT_INFO io; io.PriorityHint = (PRIORITY_HINT)v; /* P1b: NT requires 8-byte alignment for class 0x2b */
         SetLastError(0);
-        CHECKF(si(h, C_IOPRIO, &io, sizeof io), "hint %d err %lu", v, GetLastError());
+        BOOL ok = si(h, C_IOPRIO, &io, sizeof io); DWORD ge = GetLastError(); /* P1: capture error before the check args are evaluated */
+        CHECKF(ok, "hint %d err %lu", v, ge);
     }
     CloseHandle(h); fa_rml("si_io.txt");
 }
@@ -536,7 +556,7 @@ TEST(fsinfo_set_io_priority_invalid_values) {
     HANDLE h = mk("si_io2.txt", GENERIC_READ | GENERIC_WRITE);
     static const int bad[] = { 3, 4, 100, 0x7fffffff };
     for (unsigned i = 0; i < sizeof bad / sizeof *bad; i++) {
-        FILE_IO_PRIORITY_HINT_INFO io; io.PriorityHint = (PRIORITY_HINT)bad[i];
+        _Alignas(8) FILE_IO_PRIORITY_HINT_INFO io; io.PriorityHint = (PRIORITY_HINT)bad[i];
         SetLastError(0); EXPECT_EQ(si(h, C_IOPRIO, &io, sizeof io), FALSE); EXPECT_ERR(ERROR_INVALID_PARAMETER);
     }
     CloseHandle(h); fa_rml("si_io2.txt");

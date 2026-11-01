@@ -102,9 +102,23 @@ TEST(gap18_cpau_impersonation_token_rejected) {
     STARTUPINFOW si = si0(); PROCESS_INFORMATION pi; memset(&pi, 0, sizeof pi);
     SET_ERR(0);
     BOOL ok = U(CreateProcessAsUserW)(dup, NULL, cl, NULL, NULL, FALSE, CREATE_SUSPENDED, NULL, NULL, &si, &pi);
-    CHECK(!ok);
-    t_note("impersonation token as process token -> err %lu (expect ERROR_BAD_TOKEN_TYPE=1415)", GetLastError());
-    if (ok) reap(&pi);
+    DWORD e = GetLastError();
+    t_note("impersonation token as process token -> ok %d err %lu", ok, e);
+    if (!ok) {
+        /* no token-type check exists on the kernel path, so only the environment-dependent privilege/access
+           refusals (as in gap18_cpau_primary_dup) are acceptable; ERROR_BAD_TOKEN_TYPE would contradict the decomp */
+        CHECKF(e == ERROR_PRIVILEGE_NOT_HELD || e == ERROR_ACCESS_DENIED, "err %lu", e);
+    } else {
+        /* Win10 22H2: the kernel does not reject the token type; the new process always gets a primary token */
+        HANDLE ct = NULL; TOKEN_TYPE tt = (TOKEN_TYPE)0; DWORD rl = 0;
+        CHECK(OpenProcessToken(pi.hProcess, TOKEN_QUERY, &ct));
+        if (ct) {
+            CHECK(GetTokenInformation(ct, TokenType, &tt, sizeof tt, &rl));
+            CHECK(tt == TokenPrimary);
+            CloseHandle(ct);
+        }
+        reap(&pi);
+    }
     CloseHandle(dup); CloseHandle(tok);
 }
 TEST(gap18_cpau_token_without_assign_primary_right) {

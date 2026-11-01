@@ -635,8 +635,13 @@ TEST(mv_fm_access_matrix_readonly_mapping) {
     void *v = MVF(m, FILE_MAP_READ, 0, 0, 0);
     CHECK(v != NULL);
     if (v) { EXPECT_EQ(mv_q(v).Protect, PAGE_READONLY); UMVF(v); }
-    DWORD denied[] = { FILE_MAP_WRITE, FILE_MAP_COPY, FILE_MAP_ALL_ACCESS, FILE_MAP_READ | FILE_MAP_EXECUTE };
-    for (int i = 0; i < 4; i++) {
+    /* FILE_MAP_COPY (== SECTION_QUERY, copy-on-write view) is allowed on a read-only mapping */
+    SET_ERR(0);
+    v = MVF(m, FILE_MAP_COPY, 0, 0, 0);
+    CHECKF(v != NULL, "FILE_MAP_COPY err %lu", GetLastError());
+    if (v) { t_note("FILE_MAP_COPY on PAGE_READONLY mapping: prot=0x%lx", mv_q(v).Protect); UMVF(v); }
+    DWORD denied[] = { FILE_MAP_WRITE, FILE_MAP_ALL_ACCESS, FILE_MAP_READ | FILE_MAP_EXECUTE };
+    for (int i = 0; i < 3; i++) {
         SET_ERR(0);
         v = MVF(m, denied[i], 0, 0, 0);
         CHECKF(v == NULL, "access 0x%lx", denied[i]);
@@ -1169,13 +1174,19 @@ TEST(mv_mapviewoffile3_address_requirements) {
     REQUIRE(U(MapViewOfFile3)); REQUIRE(CFMA);
     HANDLE m = CFMA(PAGEFILE, NULL, PAGE_READWRITE, 0, GR, NULL);
     MEM_ADDRESS_REQUIREMENTS req; memset(&req, 0, sizeof req);
-    req.Alignment = 4 * GR;
     MEM_EXTENDED_PARAMETER ep; memset(&ep, 0, sizeof ep);
     ep.Type = MemExtendedParameterAddressRequirements; ep.Pointer = &req;
+    /* all-zero requirements are accepted */
     SET_ERR(0);
     void *v = U(MapViewOfFile3)(m, NULL, NULL, 0, 0, 0, PAGE_READWRITE, &ep, 1);
-    CHECKF(v != NULL, "err %lu", GetLastError());
-    if (v) { CHECK(((ULONG_PTR)v & (4 * GR - 1)) == 0); UMVF(v); }
+    CHECKF(v != NULL, "zero requirements err %lu", GetLastError());
+    if (v) UMVF(v);
+    /* section views take no Alignment: any non-zero value is rejected (Win10 MiMapExParametersInitialize) */
+    req.Alignment = 4 * GR;
+    SET_ERR(0);
+    v = U(MapViewOfFile3)(m, NULL, NULL, 0, 0, 0, PAGE_READWRITE, &ep, 1);
+    CHECK(v == NULL);
+    if (v) UMVF(v); else ERR1(ERROR_INVALID_PARAMETER);
     req.Alignment = 3 * GR;                    /* not a power of two */
     SET_ERR(0);
     v = U(MapViewOfFile3)(m, NULL, NULL, 0, 0, 0, PAGE_READWRITE, &ep, 1);

@@ -23,7 +23,9 @@ static void run_norm(const nfv_t *v, int n, const char *tag) {
         if (r == dl) {
             char g[256], e[256]; sc_wdump(g, sizeof g, out, r); sc_wdump(e, sizeof e, v[i].dst, dl);
             CHECKF(sc_weq(out, v[i].dst, dl), "%s vec %d content form %d got [%s] want [%s]", tag, i, v[i].form, g, e);
-            CHECKF(out[dl] == 0x7777, "%s vec %d terminated/wrote past explicit length", tag, i);
+            /* Win10 composes in the destination buffer and rewinds the output pointer (NormBuffer__RewindOutputCharacter),
+             * so units past the returned length may be clobbered when the result is shorter than the source. */
+            if (dl >= sl) CHECKF(out[dl] == 0x7777, "%s vec %d terminated/wrote past explicit length", tag, i);
         }
         /* -1: terminated, length includes the NUL */
         r = U(NormalizeString)(v[i].form, v[i].src, -1, out, 128);
@@ -140,7 +142,8 @@ TEST(norm_param_errors) {
     if (!t_is_wine()) {
         SET_ERR(0); r = U(NormalizeString)(NFC, L"abc", 3, NULL, 5);
         t_note("NormalizeString dst NULL with size 5 -> %d err=%lu", r, GetLastError());
-        CHECK(r <= 0);
+        /* Win10: RtlpNormalizeStringWorker treats a NULL destination as a size query regardless of cwDstLength */
+        CHECK(r > 0);
     }
 }
 TEST(norm_invalid_unicode) {
@@ -381,8 +384,8 @@ TEST(idn_nameprep) {
 TEST(scripts_get) {
     REQUIRE(U(GetStringScripts));
     static const struct { const WCHAR *s; const WCHAR *scr; } v[] = {
-        {L"abc", L"Latn;"}, {L"\x03b1\x03b2\x03b3", L"Grek;"}, {L"abc\x03b1\x03b2\x03b3", L"Latn;Grek;"}, {L"\x4e2d\x6587", L"Hani;"}, {L"\x3042", L"Hira;"}, {L"\x30a2", L"Kana;"}, {L"\x043f\x0440", L"Cyrl;"},
-        {L"\x05d0\x05d1", L"Hebr;"}, {L"\x0627\x0628", L"Arab;"}, {L"\x0e01", L"Thai;"}, {L"\xac00", L"Hang;"}, {L"\x0905", L"Deva;"}, {L"\x00e9", L"Latn;"}, {L"a\x043f", L"Latn;Cyrl;"}, {L"\x043f" L"a", L"Cyrl;Latn;"},
+        {L"abc", L"Latn;"}, {L"\x03b1\x03b2\x03b3", L"Grek;"}, {L"abc\x03b1\x03b2\x03b3", L"Grek;Latn;"}, {L"\x4e2d\x6587", L"Hani;"}, {L"\x3042", L"Hira;"}, {L"\x30a2", L"Kana;"}, {L"\x043f\x0440", L"Cyrl;"},
+        {L"\x05d0\x05d1", L"Hebr;"}, {L"\x0627\x0628", L"Arab;"}, {L"\x0e01", L"Thai;"}, {L"\xac00", L"Hang;"}, {L"\x0905", L"Deva;"}, {L"\x00e9", L"Latn;"}, {L"a\x043f", L"Cyrl;Latn;"}, {L"\x043f" L"a", L"Cyrl;Latn;"},
         {L"abcabc", L"Latn;"},
     };
     for (int i = 0; i < ARRAY_N(v); i++) {

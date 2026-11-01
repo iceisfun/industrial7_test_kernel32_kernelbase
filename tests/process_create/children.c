@@ -34,7 +34,7 @@ CHILD(pc_crash) {
     else if (!strcmp(k, "hlt")) { __asm__ volatile("hlt"); }
     else if (!strcmp(k, "so")) { return rec(0); }
     else if (!strcmp(k, "fastfail")) { __asm__ volatile("movl $7,%%ecx\n\tint $0x29" ::: "ecx"); }
-    else if (!strcmp(k, "raise")) { U(RaiseException)((DWORD)strtoul(argv[2], NULL, 0), 0, 0, NULL); }
+    else if (!strcmp(k, "raise")) { U(SetUnhandledExceptionFilter)(NULL); /* drop the CRT filter: it resumes ARRAY_BOUNDS_EXCEEDED on x64 */ U(RaiseException)((DWORD)strtoul(argv[2], NULL, 0), 0, 0, NULL); return 56; /* distinct from the generic fallthrough 55: RaiseException returned */ }
     else if (!strcmp(k, "uef_handler")) { U(SetUnhandledExceptionFilter)(uef_handler); *np = 1; }
     else if (!strcmp(k, "uef_search")) { U(SetUnhandledExceptionFilter)(uef_search); *np = 1; }
     else if (!strcmp(k, "uef_exit")) { U(SetUnhandledExceptionFilter)(uef_exit); *np = 1; }
@@ -265,7 +265,7 @@ CHILD(pc_job) {
 /* ---- self-checking scenarios: CHILD pc_scn <name> ---- */
 static int g_cf;
 #define CK(c) do { if (!(c)) { pc_out("fail=%s (line %d, err %lu)\n", #c, __LINE__, GetLastError()); g_cf++; } } while (0)
-#define CKE(c, e) do { DWORD e__ = GetLastError(); if (!(c)) { pc_out("fail=%s (line %d)\n", #c, __LINE__); g_cf++; } else if (e__ != (DWORD)(e)) { pc_out("fail=%s: error %lu want %lu (line %d)\n", #c, e__, (DWORD)(e), __LINE__); g_cf++; } } while (0)
+#define CKE(c, e) do { BOOL ok__ = !!(c); DWORD e__ = GetLastError(); if (!ok__) { pc_out("fail=%s (line %d)\n", #c, __LINE__); g_cf++; } else if (e__ != (DWORD)(e)) { pc_out("fail=%s: error %lu want %lu (line %d)\n", #c, e__, (DWORD)(e), __LINE__); g_cf++; } } while (0)
 #define NOTE(...) do { char b__[300]; snprintf(b__, sizeof b__, __VA_ARGS__); pc_out("note=%s\n", b__); } while (0)
 
 static void scn_prio_bg(void) {
@@ -330,8 +330,8 @@ static void scn_shutdown(void) {
     CK(U(GetProcessShutdownParameters)(&lvl, &fl)); CK(lvl == 0x280);
 }
 static void scn_mitig_set(void) {
-    DWORD p = 1, q = 0; BOOL ok; HANDLE self = GetCurrentProcess();
-    /* StrictHandleCheck is one-way: it is turned on and never asserted off again */
+    DWORD p = 3, q = 0; BOOL ok; HANDLE self = GetCurrentProcess();
+    /* StrictHandleCheck is one-way: it is turned on (Raise|Permanent = 3; Raise alone is rejected with 87) and never asserted off again */
     ok = U(SetProcessMitigationPolicy)((PROCESS_MITIGATION_POLICY)3, &p, 4); CK(ok);
     if (ok) {
         CK(U(GetProcessMitigationPolicy)(self, (PROCESS_MITIGATION_POLICY)3, &q, 4)); CK((q & 1) == 1);
@@ -438,7 +438,7 @@ CHILD(pc_pty) {
     CONSOLE_SCREEN_BUFFER_INFO csbi; char b[256]; int n;
     BOOL outcon = U(GetConsoleMode)(o, &mode), incon = U(GetConsoleMode)(i, &mode), sb;
     memset(&csbi, 0, sizeof csbi); sb = GetConsoleScreenBufferInfo(o, &csbi);
-    n = snprintf(b, sizeof b, "PTYHELLO outcon=%d incon=%d sb=%d cols=%d rows=%d\r\n", outcon, incon, sb, csbi.srWindow.Right - csbi.srWindow.Left + 1, csbi.srWindow.Bottom - csbi.srWindow.Top + 1);
+    n = snprintf(b, sizeof b, "PTYHELLO outcon=%d incon=%d sb=%d cols=%d rows=%d otype=%lu itype=%lu o=%p i=%p\r\n", outcon, incon, sb, csbi.srWindow.Right - csbi.srWindow.Left + 1, csbi.srWindow.Bottom - csbi.srWindow.Top + 1, (unsigned long)GetFileType(o), (unsigned long)GetFileType(i), (void *)o, (void *)i);
     WriteFile(o, b, n, &w, NULL);
     return 0;
 }

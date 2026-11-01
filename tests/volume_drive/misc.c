@@ -133,7 +133,11 @@ TEST(vd_ioctl_is_volume_mounted) {
     HANDLE h = vd_open_volume(vd_sysletter()); if (h == INVALID_HANDLE_VALUE) { t_skip("open %lu", GetLastError()); return; }
     DWORD ret = 0xFFFF; SET_ERR(0);
     BOOL ok = U(DeviceIoControl)(h, VD_FSCTL_IS_VOLUME_MOUNTED, NULL, 0, NULL, 0, &ret, NULL);
-    CHECKF(ok, "err %lu", GetLastError()); EXPECT_EQ(ret, 0);
+    DWORD ioerr = GetLastError();
+    t_note("FSCTL_IS_VOLUME_MOUNTED on zero-access volume handle: ok=%d GetLastError=%lu", ok, ioerr);
+    /* Zero-access open of \\.\C: is a direct device open (IopParseDevice): the FSCTL goes to the volume device,
+       not the file system, and fails (observed on Windows 10: FALSE, ERROR_INVALID_FUNCTION, bytes untouched). */
+    CHECKF(!ok, "unexpected success"); EXPECT_EQ(ret, 0xFFFF);
     CloseHandle(h);
 }
 TEST(vd_ioctl_storage_device_number) {

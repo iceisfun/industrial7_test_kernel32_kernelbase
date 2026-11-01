@@ -69,8 +69,10 @@ TEST(mv_rpm_self_bad_source) {
         SET_ERR(0);
         BOOL r = RPM(GetCurrentProcess(), srcs[i], dst, 16, &got);
         CHECKF(!r, "src %p", srcs[i]);
+        DWORD e = GetLastError();
         ERR2(ERROR_PARTIAL_COPY, ERROR_NOACCESS);
-        EXPECT_EQ(got, 0);
+        /* *lpNumberOfBytesRead is only defined for ERROR_PARTIAL_COPY; on other failures kernelbase stores an unset local */
+        if (e == ERROR_PARTIAL_COPY) EXPECT_EQ(got, 0);
     }
 }
 TEST(mv_rpm_self_noaccess_page) {

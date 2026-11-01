@@ -57,16 +57,16 @@ TEST(jobmisc_usergrant_job_needs_set_attributes) {
 TEST(jobmisc_createjobset_zero_jobs) {
     REQUIRE(U(CreateJobSet));
     SetLastError(0); BOOL r = U(CreateJobSet)(0, NULL, 0);
-    CHECK(!r); EXPECT_ERR(ERROR_INVALID_PARAMETER);
+    CHECK(!r); EXPECT_ERR(ERROR_NOT_SUPPORTED);   /* Win10 NtCreateJobSet is a stub returning STATUS_NOT_SUPPORTED */
 }
 TEST(jobmisc_createjobset_nonzero_flags) {
     REQUIRE(U(CreateJobSet));
     HANDLE j = jc_job(); CHECK(j); if (!j) return;
     JOB_SET_ARRAY a[1]; a[0].JobHandle = j; a[0].MemberLevel = 0; a[0].Flags = 0;
     SetLastError(0); BOOL r = U(CreateJobSet)(1, a, 1);
-    CHECK(!r); EXPECT_ERR(ERROR_INVALID_PARAMETER);
+    CHECK(!r); EXPECT_ERR(ERROR_NOT_SUPPORTED);
     SetLastError(0); r = U(CreateJobSet)(1, a, 0x80000000);
-    CHECK(!r); EXPECT_ERR(ERROR_INVALID_PARAMETER);
+    CHECK(!r); EXPECT_ERR(ERROR_NOT_SUPPORTED);
     CloseHandle(j);
 }
 TEST(jobmisc_createjobset_null_array) {

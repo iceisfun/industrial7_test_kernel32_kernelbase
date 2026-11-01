@@ -137,7 +137,12 @@ TEST(ns_create_open_close_basic) {
             U(DeleteBoundaryDescriptor)(bd); continue;
         }
         SET_ERR(0);
-        HANDLE ns2 = ns_open(w, bd, al);
+        /* Win10: the alias prefix is registered per process (BasepAddPrefixAlias); reusing the alias of
+         * the live namespace fails with ERROR_DUP_NAME, so the second open uses its own alias. */
+        { HANDLE nd = ns_open(w, bd, al); CHECKF(nd == NULL, "same alias reopen succeeded"); if (nd) U(ClosePrivateNamespace)(nd, 0); else EXPECT_ERR(ERROR_DUP_NAME); }
+        char al2[80]; so_name(al2, sizeof al2, "alc");
+        SET_ERR(0);
+        HANDLE ns2 = ns_open(w, bd, al2);
         CHECKF(ns2 != NULL, "open err %lu", GetLastError());
         if (ns2) { CHECK(ns2 != ns); EXPECT_EQ(U(ClosePrivateNamespace)(ns2, 0), TRUE); }
         EXPECT_EQ(U(ClosePrivateNamespace)(ns, 1), TRUE);

@@ -19,7 +19,13 @@ TEST(gap5_mod_exports) {
         CHECKF(t_proc_kb(n[i]) != NULL, "kernelbase!%s", n[i]);
         char k[64]; snprintf(k, sizeof k, "K32%s", n[i]);
         CHECKF(t_proc_k32(k) != NULL, "kernel32!%s", k);
-        CHECKF(t_proc_k32(k) == t_proc_kb(k), "%s same target", k);
+        /* kernel32 exports K32* as a local 'jmp qword ptr [rip+disp32]' thunk through its import table, not a forwarder */
+        FARPROC kp = t_proc_k32(k), bp = t_proc_kb(k);
+        const BYTE *c = (const BYTE *)kp;
+        if (kp && c[0] == 0x48 && c[1] == 0xFF && c[2] == 0x25) {
+            FARPROC tgt = *(FARPROC *)(c + 7 + *(const INT32 *)(c + 3));
+            CHECKF(tgt == bp, "%s thunk target is kernelbase", k);
+        } else CHECKF(kp == bp, "%s same target", k);
     }
 }
 
@@ -371,7 +377,9 @@ TEST(gap5_modinfo_exe_and_system) {
         CHECK(MODINFO(GetCurrentProcess(), mods[i], &mi, sizeof mi));
         EXPECT_EQ(mi.lpBaseOfDll, mods[i]);
         EXPECT_EQ(mi.SizeOfImage, nth(mods[i])->OptionalHeader.SizeOfImage);
-        EXPECT_EQ(mi.EntryPoint, (char *)mods[i] + nth(mods[i])->OptionalHeader.AddressOfEntryPoint);
+        /* the loader records a NULL entry point for an image without one (ntdll.dll has AddressOfEntryPoint 0) */
+        DWORD aoe = nth(mods[i])->OptionalHeader.AddressOfEntryPoint;
+        EXPECT_EQ(mi.EntryPoint, aoe ? (char *)mods[i] + aoe : (char *)NULL);
     }
 }
 TEST(gap5_modinfo_struct_size) {

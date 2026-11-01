@@ -267,7 +267,9 @@ TEST(eed_fm_alloc_min_size_a) {
     char *p = NULL;
     DWORD r = U(FormatMessageA)(FM_SYS | FM_IGN | FORMAT_MESSAGE_ALLOCATE_BUFFER, NULL, 5, LANG_US, (LPSTR)&p, 700, NULL);
     CHECK(r > 0 && r < 700); CHECK(p != NULL);
-    if (p) { CHECKF(LocalSize(p) >= 700, "LocalSize %zu", (size_t)LocalSize(p)); U(LocalFree)(p); }
+    /* Windows 10 FormatMessageA hands back the exact ANSI conversion (RtlUnicodeStringToAnsiString, allocate=TRUE) and
+       discards the nSize-sized wide buffer, so the minimum-size promise of the docs is not honored for the A variant. */
+    if (p) { CHECKF(LocalSize(p) >= r + 1, "LocalSize %zu", (size_t)LocalSize(p)); U(LocalFree)(p); }
 }
 TEST(eed_fm_alloc_from_string_long_insert) {
     REQUIRE(U(FormatMessageW)); REQUIRE(U(LocalFree));

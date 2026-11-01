@@ -82,7 +82,9 @@ TEST(gap29_local_unwind_both_modules) {
   FARPROC a = t_proc_k32("_local_unwind"), b = t_proc_kb("_local_unwind");
   REQUIRE(a); REQUIRE(b);
   if (t_is_wine()) { t_skip("stub layout differs on wine"); return; }
-  CHECK(a != b);  /* separate stubs in each module */
+  /* both exports are forwarders to NTDLL._local_unwind, so both resolve to the same ntdll function */
+  CHECK(a == b);
+  CHECK(a == GetProcAddress(GetModuleHandleA("ntdll.dll"), "_local_unwind"));
 }
 TEST(gap29_ordinal_lookup_matches_name_lookup) {
   for (size_t i = 0; i < N29(k32_names); i++) {
@@ -109,14 +111,17 @@ TEST(gap29_exports_are_not_forwarders) {
     HMODULE owner = NULL;
     GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCSTR)p, &owner);
     CHECKF(owner != NULL, "%s has no owning module", k32_names[i]);
-    if (strncmp(k32_names[i], "uaw_lstrcmp", 11)) CHECKF(owner == t_kernel32(), "%s not located in kernel32", k32_names[i]);
+    /* _local_unwind is an export forwarder "NTDLL._local_unwind" in the Win10 image: it resolves into ntdll */
+    if (!strcmp(k32_names[i], "_local_unwind")) CHECKF(owner == GetModuleHandleA("ntdll.dll"), "%s not forwarded to ntdll", k32_names[i]);
+    else if (strncmp(k32_names[i], "uaw_lstrcmp", 11)) CHECKF(owner == t_kernel32(), "%s not located in kernel32", k32_names[i]);
   }
   for (size_t i = 0; i < N29(kb_names); i++) {
     FARPROC p = t_proc_kb(kb_names[i]);
     if (!p) continue;
     HMODULE owner = NULL;
     GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCSTR)p, &owner);
-    CHECKF(owner == t_kernelbase(), "%s not located in kernelbase", kb_names[i]);
+    if (!strcmp(kb_names[i], "_local_unwind")) CHECKF(owner == GetModuleHandleA("ntdll.dll"), "%s not forwarded to ntdll", kb_names[i]);
+    else CHECKF(owner == t_kernelbase(), "%s not located in kernelbase", kb_names[i]);
   }
 }
 TEST(gap29_uaw_lstrcmp_alias_identity) {

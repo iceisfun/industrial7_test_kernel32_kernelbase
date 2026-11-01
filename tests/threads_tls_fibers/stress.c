@@ -171,7 +171,13 @@ static LONG CALLBACK rec_veh(PEXCEPTION_POINTERS ep) {
     else if (c == EXCEPTION_INT_DIVIDE_BY_ZERO && rip == (ULONG_PTR)tf_fault_div_ins) to = (ULONG_PTR)tf_fault_div_after;
     else if (c == EXCEPTION_ILLEGAL_INSTRUCTION && rip == (ULONG_PTR)tf_fault_ud_ins) to = (ULONG_PTR)tf_fault_ud_after;
     else if (c == EXCEPTION_PRIV_INSTRUCTION && rip == (ULONG_PTR)tf_fault_hlt_ins) to = (ULONG_PTR)tf_fault_hlt_after;
-    else if (c == EXCEPTION_BREAKPOINT && (ULONG_PTR)er->ExceptionAddress >= (ULONG_PTR)tf_fault_bp_ins && (ULONG_PTR)er->ExceptionAddress < (ULONG_PTR)tf_fault_bp_ins + 2) { veh_code = c; veh_addr = (ULONG_PTR)er->ExceptionAddress; return EXCEPTION_CONTINUE_EXECUTION; }
+    else if (c == EXCEPTION_BREAKPOINT && (ULONG_PTR)er->ExceptionAddress >= (ULONG_PTR)tf_fault_bp_ins && (ULONG_PTR)er->ExceptionAddress < (ULONG_PTR)tf_fault_bp_ins + 2) {
+        veh_code = c; veh_addr = (ULONG_PTR)er->ExceptionAddress;
+        /* Windows x64: KiDispatchException backs Rip up onto the int3 before dispatch, so
+           continuing without advancing re-executes it forever. */
+        if (ep->ContextRecord->Rip == (ULONG_PTR)er->ExceptionAddress) ep->ContextRecord->Rip += 1;
+        return EXCEPTION_CONTINUE_EXECUTION;
+    }
     if (!to) return EXCEPTION_CONTINUE_SEARCH;
     veh_code = c; veh_addr = (ULONG_PTR)er->ExceptionAddress;
     veh_info0 = er->NumberParameters > 0 ? er->ExceptionInformation[0] : 0xCC;

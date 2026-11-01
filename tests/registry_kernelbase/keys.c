@@ -34,9 +34,9 @@ TEST(regkb_create_null_subkey_returns_same_key) {
     REQUIRE(U(RegCreateKeyExW));
     HKEY r = FRESH(); REQUIRE(r); HKEY h = NULL; DWORD disp = 0;
     LSTATUS s = U(RegCreateKeyExW)(r, NULL, 0, NULL, 0, KEY_ALL_ACCESS, NULL, &h, &disp);
-    if (s == 0) { CHECK(h != NULL); CHECK(h != r); EQ(disp, REG_OPENED_EXISTING_KEY); sc_sz(h, L"v", L"x"); WCHAR b[8]; DWORD c = sizeof b; EQ(RegQueryValueExW(r, L"v", NULL, NULL, (BYTE *)b, &c), 0); RegCloseKey(h); }
-    else t_note("RegCreateKeyExW(NULL subkey) = %ld", (long)s);
-    EQ(s, 0);
+    /* p1: RegCreateKeyExInternalW returns ERROR_BADKEY when lpSubKey (or phkResult) is NULL; only L"" is accepted */
+    if (s == 0 && h) RegCloseKey(h);
+    EQ(s, ERROR_BADKEY);
     RegCloseKey(r);
 }
 TEST(regkb_create_empty_subkey_returns_same_key) {
@@ -473,10 +473,13 @@ TEST(regkb_read_handle_cannot_write) {
     DWORD v = 7;
     EQ(U(RegSetValueExW)(ro, L"x", 0, REG_DWORD, (BYTE *)&v, 4), ERROR_ACCESS_DENIED);
     HKEY k = NULL;
-    EQ(U(RegCreateKeyExW)(ro, L"sub", 0, NULL, 0, KEY_READ, NULL, &k, NULL), ERROR_ACCESS_DENIED);
+    /* p1: subkey creation is access-checked (CmpCheckCreateAccess) against the parent's security descriptor and
+     * the caller's token, not the handle's granted rights, so this succeeds for the owner of the scratch key. */
+    EQ(U(RegCreateKeyExW)(ro, L"sub", 0, NULL, 0, KEY_READ, NULL, &k, NULL), 0);
+    if (k) { RegCloseKey(k); RegDeleteKeyW(r, L"sub"); }
     EQ(U(RegDeleteValueW)(ro, L"exists"), ERROR_ACCESS_DENIED);
     EQ(U(RegSetKeyValueW)(ro, NULL, L"y", REG_DWORD, &v, 4), ERROR_ACCESS_DENIED);
-    CHECK(!rk_exists(r, "sub"));
+    CHECK(!rk_exists(r, "sub"));              /* removed again above */
     DWORD cb = 4, t; EQ(RegQueryValueExW(r, L"exists", NULL, &t, (BYTE *)&v, &cb), 0);
     RegCloseKey(ro); RegCloseKey(r);
 }

@@ -314,9 +314,11 @@ TEST(dir_create_reserved_device_name) {
         sub(p, sizeof p, d, n[i]); dh_w(w, MAX_PATH, p);
         SET_ERR(0);
         BOOL ok = U(CreateDirectoryW)(w, NULL);
+        DWORD e = GetLastError();   /* P1c audit: read before t_is_wine(), whose failing GetProcAddress sets ERROR_PROC_NOT_FOUND (127) */
         if (t_is_wine() && ok) { RemoveDirectoryW(w); continue; }
+        if (ok && (!strcmp(n[i], "NUL") || !strcmp(n[i], "nul"))) { t_note("CreateDirectory(%s) succeeded (NUL device accepts the open)", n[i]); continue; }
         CHECKF(!ok, "device %s", n[i]);
-        if (!ok) { DWORD e = GetLastError(); if (!t_is_wine()) CHECKF(e == ERROR_DIRECTORY, "%s err %lu", n[i], e); t_note("CreateDirectory(%s) err=%lu", n[i], e); }
+        if (!ok) { if (!t_is_wine()) CHECKF(e == ERROR_DIRECTORY, "%s err %lu", n[i], e); t_note("CreateDirectory(%s) err=%lu", n[i], e); }
     }
 }
 TEST(dir_create_nul_exact_error) {
@@ -324,8 +326,8 @@ TEST(dir_create_nul_exact_error) {
     char *d = dh_dir("cr_nul"), p[MAX_PATH]; WCHAR w[MAX_PATH];
     sub(p, sizeof p, d, "NUL"); dh_w(w, MAX_PATH, p);
     if (t_is_wine()) { t_skip("wine creates a dir named NUL"); return; }
-    CHECK(!U(CreateDirectoryW)(w, NULL));
-    EXPECT_ERR(ERROR_DIRECTORY);   /* kernelbase maps failures on DOS device names to STATUS_NOT_A_DIRECTORY */
+    /* kernelbase returns TRUE whenever NtCreateFile on the NUL device succeeds; ERROR_DIRECTORY applies only to failures on DOS device names */
+    CHECK(U(CreateDirectoryW)(w, NULL));
 }
 TEST(dir_create_component_255) {
     REQUIRE(U(CreateDirectoryW)); REQUIRE(U(RemoveDirectoryW));
@@ -411,7 +413,8 @@ TEST(dir_create_length_over_max_path) {
     SET_ERR(0);
     CHECK(!U(CreateDirectoryA)(p, NULL));
     DWORD e = GetLastError();
-    CHECKF(e == ERROR_FILENAME_EXCED_RANGE, "err %lu", e);
+    /* >260 chars, parents missing: without long-path support ntdll's path conversion fails (-> 3); with it NtCreateFile fails on the missing parents (-> 3) */
+    CHECKF(e == ERROR_PATH_NOT_FOUND, "err %lu", e);
 }
 TEST(dir_create_raw_long_nested) {
     REQUIRE(U(CreateDirectoryW)); REQUIRE(U(RemoveDirectoryW));

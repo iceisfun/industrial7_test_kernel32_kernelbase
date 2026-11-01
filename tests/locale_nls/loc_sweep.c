@@ -123,6 +123,7 @@ TEST(locsweep_neutral_names_have_no_country_data) {
     CHECK(n > 20);
     int bad = 0;
     for (int i = 0; i < n; i++) {
+        if (!g_names[i][0]) continue;   /* P1: Win10 LOCALE_NEUTRALDATA also enumerates the invariant name "" (INEUTRAL 0) */
         int ok; DWORD v = nls_num(g_names[i], L_INEUTRAL, &ok);
         if (!ok || v != 1) { if (++bad < 5) t_note("neutral %ls INEUTRAL=%lu ok=%d", g_names[i], v, ok); }
     }

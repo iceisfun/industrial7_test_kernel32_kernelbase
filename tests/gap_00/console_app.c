@@ -359,9 +359,14 @@ TEST(gap0_awe_requires_lock_memory_privilege) {
         ULONG_PTR pages = counts[i], arr[2] = {0, 0};
         SET_ERR(0);
         BOOL r = U(AllocateUserPhysicalPagesNuma)(GetCurrentProcess(), &pages, arr, 0xFFFFFFFF);
-        CHECKF(!r, "pages %lu", (unsigned long)counts[i]);
-        if (counts[i] == 0) { DWORD e0 = GetLastError(); CHECKF(e0 == ERROR_PRIVILEGE_NOT_HELD || e0 == ERROR_INVALID_PARAMETER, "pages 0 err %lu", e0); }   /* order of kernel checks for 0 pages unverified */
-        else EXPECT_ERR(ERROR_PRIVILEGE_NOT_HELD);   /* NtAllocateUserPhysicalPages: STATUS_PRIVILEGE_NOT_HELD via BaseSetLastNTError */
+        if (counts[i] == 0) {
+            /* Win10 MiAllocateUserPhysicalPages returns STATUS_SUCCESS for a zero page request before any privilege check */
+            CHECKF(r, "pages 0 err %lu", GetLastError());
+            EXPECT_EQ(pages, 0);
+        } else {
+            CHECKF(!r, "pages %lu", (unsigned long)counts[i]);
+            EXPECT_ERR(ERROR_PRIVILEGE_NOT_HELD);   /* NtAllocateUserPhysicalPages: STATUS_PRIVILEGE_NOT_HELD via BaseSetLastNTError */
+        }
         EXPECT_EQ(arr[0], 0);
     }
 }

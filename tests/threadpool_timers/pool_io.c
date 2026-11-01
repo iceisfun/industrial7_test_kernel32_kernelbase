@@ -307,8 +307,11 @@ TEST(tp_io_create_with_invalid_handles) {
     NEED_IO();
     io_rec r; io_rec_init(&r);
     HANDLE evh = tp_ev(FALSE);
+    /* NULL: Win10 TpAllocIoCompletion raises STATUS_INVALID_PARAMETER instead of returning, so it runs in a child */
+    int nul_in_proc = t_is_wine();
+    if (!nul_in_proc) { DWORD x = tp_exc_run("io_null_handle"); CHECKF(x == 0xC000000D, "NULL handle: child exit 0x%08lx", x); }
     HANDLE bad[] = { NULL, INVALID_HANDLE_VALUE, evh };
-    for (int i = 0; i < 3; i++) {
+    for (int i = nul_in_proc ? 0 : 1; i < 3; i++) {
         SET_ERR(0);
         PTP_IO io = U(CreateThreadpoolIo)(bad[i], io_cb, &r, NULL);
         CHECKF(io == NULL, "handle %p", bad[i]);

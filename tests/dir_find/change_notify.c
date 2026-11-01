@@ -344,10 +344,10 @@ static int has_ev(ev_t *e, int n, DWORD action, const char *name) {
 static int collect(watch_t *w, BOOL subtree, DWORD filter, DWORD quiet_ms, ev_t *out, int max) {
     int total = 0;
     for (;;) {
-        ev_t e[64]; DWORD b;
-        int n = watch_get(w, quiet_ms, e, 64, &b);
+        static ev_t e[512]; DWORD b;
+        int n = watch_get(w, quiet_ms, e, 512, &b);
         if (n < 0) return n == -1 ? total : -2;
-        for (int i = 0; i < n && i < 64; i++) if (total < max) out[total++] = e[i];
+        for (int i = 0; i < n && i < 512; i++) if (total < max) out[total++] = e[i];
         if (!watch_start(w, subtree, filter, sizeof w->buf)) return -2;
     }
 }
@@ -426,12 +426,25 @@ TEST(notify_rdc_directory_events_need_dir_filter) {
     watch_t *w = watch_new(d);
     CHECK(watch_start(w, FALSE, FILE_NOTIFY_CHANGE_FILE_NAME, sizeof w->buf));
     dh_mkdir(d, "newdir");
-    ev_t e[8]; DWORD b;
+    ev_t e[8]; DWORD b = 0;
     CHECK(watch_get(w, 400, e, 8, &b) == -1);          /* file-name filter does not report directories */
     CancelIoEx(w->h, NULL); WaitForSingleObject(w->ov.hEvent, 1000);
     CHECK(watch_start(w, FALSE, FILE_NOTIFY_CHANGE_DIR_NAME, sizeof w->buf));
     RemoveDirectoryA(sub(p, sizeof p, d, "newdir"));
     int n = watch_get(w, 5000, e, 8, &b);
+    if (n < 1) {
+        /* diagnostic only (the CHECK below stays strict): does a FRESH dir-name watch, without the cancel/re-arm sequence, see the removal? */
+        t_note("dir-name watch: n=%d bytes=%lu err=%lu", n, b, GetLastError());
+        CancelIoEx(w->h, NULL); WaitForSingleObject(w->ov.hEvent, 1000);
+        watch_free(w);
+        dh_mkdir(d, "newdir2");
+        w = watch_new(d);
+        if (watch_start(w, FALSE, FILE_NOTIFY_CHANGE_DIR_NAME, sizeof w->buf)) {
+            RemoveDirectoryA(sub(p, sizeof p, d, "newdir2"));
+            int n2 = watch_get(w, 5000, e, 8, &b);
+            t_note("fresh dir-name watch: n=%d bytes=%lu first_action=%lu", n2, b, n2 >= 1 ? (unsigned long)e[0].action : 0ul);
+        }
+    }
     CHECK(n >= 1);
     if (n >= 1) { EXPECT_EQ(e[0].action, FILE_ACTION_REMOVED); EXPECT_STR(e[0].name, "newdir"); }
     CancelIoEx(w->h, NULL);
@@ -676,6 +689,13 @@ TEST(notify_rdc_zero_length_buffer) {
     }
     watch_free(w);
 }
+typedef struct { char dir[MAX_PATH]; volatile LONG stop; } maker_t;
+static DWORD WINAPI maker_thread(LPVOID p) {
+    maker_t *m = p;
+    Sleep(300);
+    for (int i = 0; i < 20 && !m->stop; i++) { char n[32]; snprintf(n, sizeof n, "sync%d", i); dh_mkfile(m->dir, n, 0); Sleep(400); }
+    return 0;
+}
 TEST(notify_rdc_not_directory_handle_flag_missing) {
     REQUIRE(U(ReadDirectoryChangesW));
     char *d = dh_dir("rd_syncwait");
@@ -685,18 +705,16 @@ TEST(notify_rdc_not_directory_handle_flag_missing) {
     if (h == INVALID_HANDLE_VALUE) return;
     OVERLAPPED ov; memset(&ov, 0, sizeof ov); ov.hEvent = CreateEventA(NULL, TRUE, FALSE, NULL);
     static DWORD buf[1024];
+    /* GUARD: on a synchronous handle the call blocks until a change arrives, so a helper thread must create files while it waits */
+    static maker_t m; strcpy(m.dir, d); m.stop = 0;
+    HANDLE th = CreateThread(NULL, 0, maker_thread, &m, 0, NULL);
     SET_ERR(0);
     BOOL ok = U(ReadDirectoryChangesW)(h, buf, sizeof buf, FALSE, FILE_NOTIFY_CHANGE_FILE_NAME, NULL, &ov, NULL);
     t_note("non-overlapped handle + OVERLAPPED: ok=%d err=%lu internal=0x%llx", ok, GetLastError(), (unsigned long long)ov.Internal);
-    if (ok) { dh_mkfile(d, "go", 0); WaitForSingleObject(ov.hEvent, 3000); }
+    if (ok) WaitForSingleObject(ov.hEvent, 3000);
+    InterlockedExchange(&m.stop, 1);
+    WaitForSingleObject(th, 15000); CloseHandle(th);
     CloseHandle(h); CloseHandle(ov.hEvent);
-}
-typedef struct { char dir[MAX_PATH]; volatile LONG stop; } maker_t;
-static DWORD WINAPI maker_thread(LPVOID p) {
-    maker_t *m = p;
-    Sleep(300);
-    for (int i = 0; i < 20 && !m->stop; i++) { char n[32]; snprintf(n, sizeof n, "sync%d", i); dh_mkfile(m->dir, n, 0); Sleep(400); }
-    return 0;
 }
 TEST(notify_rdc_synchronous_call) {
     REQUIRE(U(ReadDirectoryChangesW));

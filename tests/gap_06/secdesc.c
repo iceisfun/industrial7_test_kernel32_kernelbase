@@ -409,8 +409,10 @@ TEST(gap6_sdrm_does_not_set_lasterror) {
     REQUIRE(U(GetSecurityDescriptorRMControl)); if (t_is_wine()) { t_skip("GetSecurityDescriptorRMControl unimplemented in wine"); return; }
     SECURITY_DESCRIPTOR sd; init_sd(&sd);
     UCHAR rm;
+    /* resolve first: the GetProcAddress miss in kernel32 would itself set last error 127 */
+    DWORD (WINAPI *pfn)(PSECURITY_DESCRIPTOR, PUCHAR) = (void *)U(GetSecurityDescriptorRMControl);
     SET_ERR(4242);
-    U(GetSecurityDescriptorRMControl)(&sd, &rm);
+    pfn(&sd, &rm);
     EXPECT_ERR(4242);                      /* the failure is the return value, not last error */
 }
 TEST(gap6_sdrm_survives_selfrelative) {

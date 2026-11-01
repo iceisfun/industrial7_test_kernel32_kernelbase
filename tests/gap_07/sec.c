@@ -227,13 +227,17 @@ TEST(gap7_isvalidacl_corrupt) {
     LocalFree(everyone);
 }
 
+/* NULL-pointer probes run in a child process: on Windows 10 these fault inside the callee
+ * (undocumented behaviour), so the fault must not take down the test run. */
+static LONG WINAPI g7_null_filter(PEXCEPTION_POINTERS ep) { (void)ep; ExitProcess(0xE0000001); return EXCEPTION_EXECUTE_HANDLER; }
+CHILD(g7_isvalidacl_null) { SetErrorMode(SEM_NOGPFAULTERRORBOX); SetUnhandledExceptionFilter(g7_null_filter); U(IsValidAcl)(NULL); return 0; }
+CHILD(g7_isvalidsd_null) { SetErrorMode(SEM_NOGPFAULTERRORBOX); SetUnhandledExceptionFilter(g7_null_filter); U(IsValidSecurityDescriptor)(NULL); return 0; }
+
 TEST(gap7_isvalidacl_null) {
     REQUIRE(U(IsValidAcl));
-    if (t_is_wine()) { t_skip("faults here"); return; }
-    SET_ERR(0);
-    BOOL r = U(IsValidAcl)(NULL);
-    CHECK(!r);
-    t_note("IsValidAcl(NULL) last error %lu", GetLastError());
+    DWORD rc = t_run_child("g7_isvalidacl_null", NULL, 15000);
+    CHECK(rc != 0xDEAD0000 && rc != 0xDEAD0001);
+    t_note("IsValidAcl(NULL) child exit 0x%08lx (0xE0000001 = faulted)", rc);
 }
 
 /* ---------- IsValidSecurityDescriptor ---------- */
@@ -284,10 +288,9 @@ TEST(gap7_isvalidsd_self_relative) {
 
 TEST(gap7_isvalidsd_null) {
     REQUIRE(U(IsValidSecurityDescriptor));
-    SET_ERR(0);
-    BOOL r = U(IsValidSecurityDescriptor)(NULL);
-    CHECK(!r);
-    t_note("IsValidSecurityDescriptor(NULL) last error %lu", GetLastError());
+    DWORD rc = t_run_child("g7_isvalidsd_null", NULL, 15000);
+    CHECK(rc != 0xDEAD0000 && rc != 0xDEAD0001);
+    t_note("IsValidSecurityDescriptor(NULL) child exit 0x%08lx (0xE0000001 = faulted)", rc);
 }
 
 /* ---------- MapGenericMask ---------- */
@@ -740,15 +743,15 @@ TEST(gap7_objectclosealarm_requires_audit_privilege) {
     REQUIRE(U(ObjectCloseAuditAlarmW));
     if (have_audit_priv()) { t_skip("SeAuditPrivilege held: not exercised"); return; }
     DWORD id = 0; BOOL r;
+    BOOL (WINAPI *pClose)(LPCWSTR, LPVOID, BOOL) = U(ObjectCloseAuditAlarmW);
+    /* GenerateOnClose == FALSE: the kernel returns success without the privilege check */
+    CHECK(pClose(L"k32t", &id, FALSE));
     SET_ERR(0);
-    CHECK(!U(ObjectCloseAuditAlarmW)(L"k32t", &id, FALSE));
-    EXPECT_ERR(ERROR_PRIVILEGE_NOT_HELD);
-    SET_ERR(0);
-    CHECK(!U(ObjectCloseAuditAlarmW)(L"k32t", &id, TRUE));
+    CHECK(!pClose(L"k32t", &id, TRUE));
     EXPECT_ERR(ERROR_PRIVILEGE_NOT_HELD);
     SET_ERR(0);
     /* NULL HandleId / empty name: kernel probe order not verified from user mode */
-    r = U(ObjectCloseAuditAlarmW)(L"", NULL, FALSE);
+    r = pClose(L"", NULL, FALSE);
     t_note("ObjectCloseAuditAlarmW(L\"\", NULL) -> %d err %lu", r, GetLastError());
 }
 
@@ -756,11 +759,11 @@ TEST(gap7_objectdeletealarm_requires_audit_privilege) {
     REQUIRE(U(ObjectDeleteAuditAlarmW));
     if (have_audit_priv()) { t_skip("SeAuditPrivilege held: not exercised"); return; }
     DWORD id = 0;
+    BOOL (WINAPI *pDel)(LPCWSTR, LPVOID, BOOL) = U(ObjectDeleteAuditAlarmW);
+    /* GenerateOnClose == FALSE: the kernel returns success without the privilege check */
+    CHECK(pDel(L"k32t", &id, FALSE));
     SET_ERR(0);
-    CHECK(!U(ObjectDeleteAuditAlarmW)(L"k32t", &id, FALSE));
-    EXPECT_ERR(ERROR_PRIVILEGE_NOT_HELD);
-    SET_ERR(0);
-    CHECK(!U(ObjectDeleteAuditAlarmW)(L"k32t", &id, TRUE));
+    CHECK(!pDel(L"k32t", &id, TRUE));
     EXPECT_ERR(ERROR_PRIVILEGE_NOT_HELD);
 }
 

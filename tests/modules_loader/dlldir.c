@@ -3,6 +3,8 @@
 #include "ml.h"
 
 #define S(n, c) do { if (!(c)) return (n); } while (0)
+/* Win10 22H2 GetDllDirectoryA returns the ANSI length minus one for a non-empty directory (kernel32!GetDllDirectoryA: "return (ushort)Length - 1" after converting the L wide characters LdrGetDllDirectory copies without the NUL); the documented value is L. Accept both. */
+#define DD_ALEN_OK(rv, L) ((rv) == (L) || (rv) == (L) - 1)
 
 static WCHAR g_dirw[MAX_PATH];
 static const char *dd_prep(const char *sub, int with_dll) {
@@ -42,33 +44,36 @@ CHILD(dd_set_get_roundtrip) {
     const char *d = argv[1]; size_t L = strlen(d);
     WCHAR wd[MAX_PATH]; MultiByteToWideChar(CP_ACP, 0, d, -1, wd, MAX_PATH);
     S(1, U(SetDllDirectoryA)(d));
+    DWORD bad = 0;   /* bit n set = step n failed; steps after a failure still run so one run shows all of them */
+#define SS(n, c) do { if (!(c)) bad |= 1u << (n); } while (0)
     char a[MAX_PATH + 8]; WCHAR w[MAX_PATH + 8];
     SetLastError(0x1111);
-    S(2, U(GetDllDirectoryA)(MAX_PATH, a) == L);
-    S(3, !strcmp(a, d));
-    S(4, U(GetDllDirectoryW)(MAX_PATH, w) == L);
-    S(5, !lstrcmpW(w, wd));
-    S(6, GetLastError() == 0);
+    { DWORD rv = U(GetDllDirectoryA)(MAX_PATH, a); SS(2, DD_ALEN_OK(rv, L)); if (rv == L - 1) t_note("GetDllDirectoryA returned L-1 (%lu)", (unsigned long)rv); }
+    SS(3, !strcmp(a, d));
+    SS(4, U(GetDllDirectoryW)(MAX_PATH, w) == L);
+    SS(5, !lstrcmpW(w, wd));
+    SS(6, GetLastError() == 0);
     /* exact fit */
     memset(w, 0x55, sizeof w);
-    S(7, U(GetDllDirectoryW)((DWORD)L + 1, w) == L && !lstrcmpW(w, wd));
+    SS(7, U(GetDllDirectoryW)((DWORD)L + 1, w) == L && !lstrcmpW(w, wd));
     memset(a, 0x55, sizeof a);
-    S(8, U(GetDllDirectoryA)((DWORD)L + 1, a) == L && !strcmp(a, d));
+    SS(8, DD_ALEN_OK(U(GetDllDirectoryA)((DWORD)L + 1, a), L) && !strcmp(a, d));
     /* too small: required size including NUL */
-    S(9, U(GetDllDirectoryW)((DWORD)L, w) == L + 1);
-    S(10, U(GetDllDirectoryA)((DWORD)L, a) == L + 1);
-    S(11, U(GetDllDirectoryW)(0, NULL) == L + 1);
-    S(12, U(GetDllDirectoryA)(0, NULL) == L + 1);
+    SS(9, U(GetDllDirectoryW)((DWORD)L, w) == L + 1);
+    SS(10, U(GetDllDirectoryA)((DWORD)L, a) == L + 1);
+    SS(11, U(GetDllDirectoryW)(0, NULL) == L + 1);
+    SS(12, U(GetDllDirectoryA)(0, NULL) == L + 1);
     /* clear again */
-    S(13, U(SetDllDirectoryA)(NULL));
-    S(14, U(GetDllDirectoryW)(MAX_PATH, w) == 0 && w[0] == 0);
+    SS(13, U(SetDllDirectoryA)(NULL));
+    SS(14, U(GetDllDirectoryW)(MAX_PATH, w) == 0 && w[0] == 0);
     /* wide variant */
-    S(15, U(SetDllDirectoryW)(wd));
-    S(16, U(GetDllDirectoryA)(MAX_PATH, a) == L && !strcmp(a, d));
-    S(17, U(SetDllDirectoryW)(NULL));
-    S(18, U(GetDllDirectoryA)(MAX_PATH, a) == 0);
-    return 0;
+    SS(15, U(SetDllDirectoryW)(wd));
+    SS(16, DD_ALEN_OK(U(GetDllDirectoryA)(MAX_PATH, a), L) && !strcmp(a, d));
+    SS(17, U(SetDllDirectoryW)(NULL));
+    SS(18, U(GetDllDirectoryA)(MAX_PATH, a) == 0);
+    return bad;
 }
+#undef SS
 TEST(dd_set_get_roundtrip) {
     REQUIRE(U(SetDllDirectoryA)); REQUIRE(U(SetDllDirectoryW)); REQUIRE(U(GetDllDirectoryA)); REQUIRE(U(GetDllDirectoryW));
     EXPECT_EQ(dd_run("dd_set_get_roundtrip", dd_prep("dd_rt", 0), NULL), 0);
@@ -110,7 +115,7 @@ TEST(dd_set_too_long_rejected) {
 CHILD(dd_set_nonexistent) {
     S(1, U(SetDllDirectoryA)("C:\\k32t_no_such_directory_xyz"));
     char a[MAX_PATH];
-    S(2, U(GetDllDirectoryA)(MAX_PATH, a) == strlen("C:\\k32t_no_such_directory_xyz"));
+    { DWORD rv = U(GetDllDirectoryA)(MAX_PATH, a); if (!DD_ALEN_OK(rv, strlen("C:\\k32t_no_such_directory_xyz"))) return 0x1000 + (int)rv; }   /* step 2; the return value is encoded for diagnosis */
     S(3, !strcmp(a, "C:\\k32t_no_such_directory_xyz"));
     /* relative path */
     BOOL r = U(SetDllDirectoryA)("relative_k32t");

@@ -20,7 +20,9 @@ TEST(jobinfo_struct_sizes) {
 TEST(jobquery_invalid_handles) {
     REQUIRE(U(QueryInformationJobObject));
     JOBOBJECT_BASIC_ACCOUNTING_INFORMATION a; HANDLE ev = CreateEventA(NULL, TRUE, FALSE, NULL); HANDLE j = jc_job(); CloseHandle(j);
-    SetLastError(0); CHECK(!Q(NULL, 1, &a, sizeof a, NULL)); EXPECT_ERR(ERROR_INVALID_HANDLE);
+    /* a NULL job handle means "the calling process's own job" (Win10 ntoskrnl NtQueryInformationJobObject); outside any job it is ACCESS_DENIED */
+    BOOL inj = FALSE; U(IsProcessInJob)(GetCurrentProcess(), NULL, &inj);
+    if (!inj) { SetLastError(0); CHECK(!Q(NULL, 1, &a, sizeof a, NULL)); EXPECT_ERR(ERROR_ACCESS_DENIED); }
     SetLastError(0); CHECK(!Q(INVALID_HANDLE_VALUE, 1, &a, sizeof a, NULL)); EXPECT_ERR(ERROR_INVALID_HANDLE);
     SetLastError(0); CHECK(!Q(ev, 1, &a, sizeof a, NULL)); EXPECT_ERR(ERROR_INVALID_HANDLE);
     SetLastError(0); CHECK(!Q(j, 1, &a, sizeof a, NULL)); EXPECT_ERR(ERROR_INVALID_HANDLE);
@@ -29,8 +31,11 @@ TEST(jobquery_invalid_handles) {
 TEST(jobquery_invalid_handles_basic_ext) {
     REQUIRE(U(QueryInformationJobObject));
     JOBOBJECT_EXTENDED_LIMIT_INFORMATION e; JOBOBJECT_BASIC_LIMIT_INFORMATION b;
-    SetLastError(0); CHECK(!Q(NULL, JobObjectExtendedLimitInformation, &e, sizeof e, NULL)); EXPECT_ERR(ERROR_INVALID_HANDLE);
-    SetLastError(0); CHECK(!Q(NULL, JobObjectBasicLimitInformation, &b, sizeof b, NULL)); EXPECT_ERR(ERROR_INVALID_HANDLE);
+    BOOL inj = FALSE; U(IsProcessInJob)(GetCurrentProcess(), NULL, &inj);   /* NULL handle = caller's own job; ACCESS_DENIED when none */
+    if (!inj) {
+        SetLastError(0); CHECK(!Q(NULL, JobObjectExtendedLimitInformation, &e, sizeof e, NULL)); EXPECT_ERR(ERROR_ACCESS_DENIED);
+        SetLastError(0); CHECK(!Q(NULL, JobObjectBasicLimitInformation, &b, sizeof b, NULL)); EXPECT_ERR(ERROR_ACCESS_DENIED);
+    }
 }
 TEST(jobset_invalid_handles) {
     REQUIRE(U(SetInformationJobObject));
@@ -116,7 +121,7 @@ TEST(jobquery_fresh_basic_limit) {
     EXPECT_EQ(rl, sizeof b);
     EXPECT_EQ(b.LimitFlags, 0); EXPECT_EQ(b.PerProcessUserTimeLimit.QuadPart, 0); EXPECT_EQ(b.PerJobUserTimeLimit.QuadPart, 0);
     EXPECT_EQ(b.MinimumWorkingSetSize, 0); EXPECT_EQ(b.MaximumWorkingSetSize, 0);
-    EXPECT_EQ(b.ActiveProcessLimit, 0); EXPECT_EQ(b.Affinity, 0); EXPECT_EQ(b.SchedulingClass, 0);
+    EXPECT_EQ(b.ActiveProcessLimit, 0); EXPECT_EQ(b.Affinity, 0); EXPECT_EQ(b.SchedulingClass, 5);   /* documented default scheduling class is 5 */
     /* user-mode wrapper translates the native priority index; an unset limit reads back as NORMAL_PRIORITY_CLASS */
     EXPECT_EQ(b.PriorityClass, NORMAL_PRIORITY_CLASS);
     CloseHandle(j);
@@ -407,7 +412,12 @@ TEST(jobset_basic_limit_priority_class_roundtrip) {
     for (unsigned i = 0; i < sizeof pc / sizeof *pc; i++) {
         JOBOBJECT_BASIC_LIMIT_INFORMATION b; memset(&b, 0, sizeof b);
         b.LimitFlags = JOB_OBJECT_LIMIT_PRIORITY_CLASS; b.PriorityClass = pc[i];
-        CHECKF(S(j, JobObjectBasicLimitInformation, &b, sizeof b), "class 0x%lx err %lu", pc[i], GetLastError());
+        SetLastError(0); BOOL sok = S(j, JobObjectBasicLimitInformation, &b, sizeof b); DWORD serr = GetLastError();
+        if (!sok && pc[i] == HIGH_PRIORITY_CLASS && serr == ERROR_PRIVILEGE_NOT_HELD) {   /* raising above ABOVE_NORMAL needs SE_INC_BASE_PRIORITY_NAME enabled */
+            t_note("HIGH priority class limit needs SeIncreaseBasePriorityPrivilege: err %lu", serr);
+            continue;
+        }
+        CHECKF(sok, "class 0x%lx err %lu", pc[i], serr);
         JOBOBJECT_BASIC_LIMIT_INFORMATION q; memset(&q, 0, sizeof q); CHECK(Q(j, JobObjectBasicLimitInformation, &q, sizeof q, NULL));
         EXPECT_EQ(q.PriorityClass, pc[i]); EXPECT_EQ(q.LimitFlags, JOB_OBJECT_LIMIT_PRIORITY_CLASS);
     }
@@ -758,7 +768,7 @@ TEST(jobset_assoc_port_invalid_handles) {
     HANDLE j = jc_job(), ev = CreateEventA(NULL, TRUE, FALSE, NULL); CHECK(j); if (!j) return;
     JOBOBJECT_ASSOCIATE_COMPLETION_PORT a;
     a.CompletionKey = (PVOID)1; a.CompletionPort = NULL;
-    SetLastError(0); CHECK(!S(j, JobObjectAssociateCompletionPortInformation, &a, sizeof a)); EXPECT_ERR(ERROR_INVALID_HANDLE);
+    SetLastError(0); CHECK(S(j, JobObjectAssociateCompletionPortInformation, &a, sizeof a));   /* Windows 8+: NULL port removes the association (success even if none) */
     a.CompletionPort = INVALID_HANDLE_VALUE;
     SetLastError(0); CHECK(!S(j, JobObjectAssociateCompletionPortInformation, &a, sizeof a)); EXPECT_ERR(ERROR_INVALID_HANDLE);
     a.CompletionPort = ev;
@@ -965,16 +975,18 @@ TEST(jobcpu_invalid_flag_combinations) {
     REQUIRE(U(SetInformationJobObject));
     HANDLE j = jc_job(); CHECK(j); if (!j) return;
     static const DWORD bad[] = {
-        JOB_OBJECT_CPU_RATE_CONTROL_ENABLE,                                                              /* neither weight nor hard cap */
         JOB_OBJECT_CPU_RATE_CONTROL_ENABLE | JOB_OBJECT_CPU_RATE_CONTROL_WEIGHT_BASED | JOB_OBJECT_CPU_RATE_CONTROL_HARD_CAP, /* both */
         JOB_OBJECT_CPU_RATE_CONTROL_HARD_CAP,                                                            /* without ENABLE */
         JOB_OBJECT_CPU_RATE_CONTROL_WEIGHT_BASED,
         0x20, 0x80000000, 0xFFFFFFFF };
     for (unsigned i = 0; i < sizeof bad / sizeof *bad; i++) {
         SetLastError(0); BOOL r = cpu_set(j, bad[i], 5000); DWORD e = GetLastError();
-        if (i < 2) CHECKF(!r && e == ERROR_INVALID_PARAMETER, "flags 0x%lx ret %d err %lu", bad[i], r, e);
+        if (i < 1) CHECKF(!r && e == ERROR_INVALID_PARAMETER, "flags 0x%lx ret %d err %lu", bad[i], r, e);
         else t_note("cpu rate flags 0x%lx: ret %d err %lu", bad[i], r, e);   /* kernel-side flag validation unverified */
     }
+    /* ENABLE alone (neither WEIGHT_BASED nor HARD_CAP) is a valid rate-based (CpuRate) policy: WEIGHT_BASED clear => CpuRate is used */
+    SetLastError(0); BOOL r1 = cpu_set(j, JOB_OBJECT_CPU_RATE_CONTROL_ENABLE, 5000);
+    CHECKF(r1, "ENABLE alone ret %d err %lu", r1, GetLastError());
     CloseHandle(j);
 }
 TEST(jobcpu_disable_with_zero_flags) {

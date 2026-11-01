@@ -510,7 +510,7 @@ TEST(gap5_ids_observed_result) {
     HRESULT hr = IDS(&d);
     t_note("GetIntegratedDisplaySize hr=0x%08lx size=%f", hr, d);
     if (SUCCEEDED(hr)) CHECK(d > 3.0 && d < 100.0);          /* inches, diagonal */
-    else EXPECT_EQ(d, -1.0);                                  /* untouched on failure */
+    else CHECK(d == -1.0);                                    /* untouched on failure (EXPECT_EQ would cast the double to an integer) */
     if (!SUCCEEDED(hr)) CHECK(hr < 0);
 }
 TEST(gap5_ids_repeatable) {
@@ -538,7 +538,8 @@ TEST(gap5_cyc_null_returned_length) {
 TEST(gap5_cyc_size_query) {
     REQUIRE(GCYC);
     DWORD len = 0; SET_ERR(0);
-    EXPECT_EQ(GCYC(0, NULL, &len), 0);
+    BOOL r0 = GCYC(0, NULL, &len);      /* single evaluation: the call updates len */
+    EXPECT_EQ(r0, 0);
     EXPECT_ERR(ERROR_INSUFFICIENT_BUFFER);
     DWORD ncpu = GetActiveProcessorCount(0);
     CHECK(len % 8 == 0);
@@ -546,9 +547,11 @@ TEST(gap5_cyc_size_query) {
     CHECK(len >= 8);
     SYSTEM_PROCESSOR_CYCLE_TIME_INFORMATION one;
     len = sizeof one - 1; SET_ERR(0);
-    EXPECT_EQ(GCYC(0, &one, &len), 0); EXPECT_ERR(ERROR_INSUFFICIENT_BUFFER);
+    BOOL r1 = GCYC(0, &one, &len); DWORD e1 = GetLastError();
+    EXPECT_EQ(r1, 0); EXPECT_EQ(e1, ERROR_INSUFFICIENT_BUFFER);
     len = 0; SET_ERR(0);
-    EXPECT_EQ(GCYC(0, &one, &len), 0); EXPECT_ERR(ERROR_INSUFFICIENT_BUFFER);
+    BOOL r2 = GCYC(0, &one, &len); DWORD e2 = GetLastError();
+    EXPECT_EQ(r2, 0); EXPECT_EQ(e2, ERROR_INSUFFICIENT_BUFFER);
 }
 TEST(gap5_cyc_fetch) {
     REQUIRE(GCYC);
@@ -568,7 +571,8 @@ TEST(gap5_cyc_fetch) {
     BOOL r = GCYC(0, b, &len);
     t_note("oversized buffer: ret=%d len=%lu (need %lu) err=%lu", r, len, need, GetLastError());
     /* one entry short */
-    if (n > 1) { len = need - 8; SET_ERR(0); EXPECT_EQ(GCYC(0, b, &len), 0); EXPECT_ERR(ERROR_INSUFFICIENT_BUFFER); }
+    /* call once: GCYC updates len, and EXPECT_EQ evaluates its argument twice */
+    if (n > 1) { len = need - 8; SET_ERR(0); BOOL r1 = GCYC(0, b, &len); DWORD e1 = GetLastError(); EXPECT_EQ(r1, 0); EXPECT_EQ(e1, ERROR_INSUFFICIENT_BUFFER); }
     free(b);
 }
 TEST(gap5_cyc_monotonic) {

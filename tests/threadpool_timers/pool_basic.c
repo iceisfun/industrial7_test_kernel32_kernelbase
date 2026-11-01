@@ -303,8 +303,9 @@ TEST(tp_env_persistent_with_explicit_pool_rejected) {
     e.u.Flags |= 2;                                          /* Persistent */
     SET_ERR(0);
     PTP_WORK w = U(CreateThreadpoolWork)(env_work_ok, NULL, &e);
+    DWORD err = GetLastError();      /* before t_is_wine(): its failing GetProcAddress overwrites the error (127) */
     if (t_is_wine() && w) t_note("wine accepts a persistent environment with a pool");
-    else { CHECK(w == NULL); EXPECT_ERR(ERROR_INVALID_PARAMETER); }
+    else { CHECK(w == NULL); CHECKF(err == ERROR_INVALID_PARAMETER, "GetLastError got %lu want 87", err); }
     if (w) U(CloseThreadpoolWork)(w);
     U(CloseThreadpool)(p);
 }

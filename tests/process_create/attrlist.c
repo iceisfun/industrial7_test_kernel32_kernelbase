@@ -423,10 +423,12 @@ TEST(pcattr_group_affinity_applies_to_initial_thread) {
     memset(&ga, 0, sizeof ga); ga.Mask = pm & (~pm + 1); ga.Group = 0;
     CHECK(upd(l, A_GROUPAFF, &ga, sizeof ga));
     exopts(&o, &sx, l, "pc_exit77", "", CREATE_SUSPENDED);
-    CHECK(pc_launch(&o, &pi));
-    memset(&got, 0xCC, sizeof got);
-    CHECK(U(GetThreadGroupAffinity)(pi.hThread, &got)); EQV(got.Mask, ga.Mask); EQV(got.Group, 0);
-    pc_kill(&pi); rel(l);
+    /* GROUP_AFFINITY is a thread-class attribute (0x30003): CreateProcess rejects it (BasepConvertWin32AttributeList, process list), it is for CreateRemoteThreadEx */
+    SET_ERR(0);
+    BOOL ok = pc_launch(&o, &pi); DWORD e = GetLastError();
+    CHECKF(!ok, "GROUP_AFFINITY accepted by CreateProcess"); if (ok) pc_kill(&pi); else EQV(e, ERROR_INVALID_PARAMETER);
+    (void)got;
+    rel(l);
 }
 TEST(pcattr_group_affinity_zero_mask_observed) {
     REQUIRE(UK(CreateProcessW));
@@ -444,10 +446,12 @@ TEST(pcattr_ideal_processor_applies_to_initial_thread) {
     memset(&pn, 0, sizeof pn); pn.Group = 0; pn.Number = si.dwNumberOfProcessors > 1 ? 1 : 0;
     CHECK(upd(l, A_IDEALCPU, &pn, sizeof pn));
     exopts(&o, &sx, l, "pc_exit77", "", CREATE_SUSPENDED);
-    CHECK(pc_launch(&o, &pi));
-    memset(&got, 0xCC, sizeof got);
-    CHECK(U(GetThreadIdealProcessorEx)(pi.hThread, &got)); EQV(got.Number, pn.Number); EQV(got.Group, 0);
-    pc_kill(&pi); rel(l);
+    /* IDEAL_PROCESSOR is a thread-class attribute (0x30005): CreateProcess rejects it (BasepConvertWin32AttributeList, process list), it is for CreateRemoteThreadEx */
+    SET_ERR(0);
+    BOOL ok = pc_launch(&o, &pi); DWORD e = GetLastError();
+    CHECKF(!ok, "IDEAL_PROCESSOR accepted by CreateProcess"); if (ok) pc_kill(&pi); else EQV(e, ERROR_INVALID_PARAMETER);
+    (void)got;
+    rel(l);
 }
 TEST(pcattr_preferred_node_zero_accepted) {
     REQUIRE(UK(CreateProcessW));
@@ -493,7 +497,8 @@ TEST(pcattr_child_process_policy_restricted) {
     REQUIRE(UK(CreateProcessW));
     DWORD pol = 1; STARTUPINFOEXW sx; pc_opts o; AL l = mk(1); char out[2048]; DWORD code;
     CHECK(upd(l, A_CHILDPOL, &pol, 4));
-    exopts(&o, &sx, l, "pc_childpol_child", "", CREATE_NO_WINDOW);
+    /* DETACHED_PROCESS: CREATE_NO_WINDOW makes the console client spawn conhost.exe, itself a child process the restriction blocks (child dies 0xC0000142) */
+    exopts(&o, &sx, l, "pc_childpol_child", "", DETACHED_PROCESS);
     CHECK(pc_capture(&o, out, sizeof out, NULL, 0, &code, PC_TIMEOUT)); EQV(code, 0);
     EQV(pc_num(out, "cok", -1), 1); EQV(pc_num(out, "nochild", -1), 1);
     EQV(pc_num(out, "created", -1), 0);

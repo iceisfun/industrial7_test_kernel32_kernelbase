@@ -556,7 +556,7 @@ TEST(gap18_ofmw_name_is_case_sensitive) {
     WCHAR n[96], up[96]; om_name(n, "CaseTest");
     HANDLE fm = CreateFileMappingW(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, 4096, n);
     CHECK(fm); if (!fm) return;
-    lstrcpyW(up, n); CharUpperW(up);
+    lstrcpyW(up, n); CharUpperW(up + 6);   /* upper-case only the leaf, keep the "Local\\" prefix intact */
     SET_ERR(0);
     HANDLE o = U(OpenFileMappingW)(FILE_MAP_READ, FALSE, up);
     CHECK(o == NULL);               /* named-object comparison is case sensitive */

@@ -407,7 +407,8 @@ TEST(gap6_tape_getstatus_file_handle) {
     if (f == INVALID_HANDLE_VALUE) { t_skip("create"); return; }
     DWORD r = U(GetTapeStatus)(f);
     CHECK(r != ERROR_SUCCESS);
-    CHECKF(r == ERROR_INVALID_FUNCTION || r == ERROR_NOT_SUPPORTED, "r=%lu", r);
+    /* the error is whatever the file system returns for a foreign IOCTL (NTFS: ERROR_INVALID_PARAMETER) */
+    CHECKF(r == ERROR_INVALID_FUNCTION || r == ERROR_NOT_SUPPORTED || r == ERROR_INVALID_PARAMETER, "r=%lu", r);
     t_note("GetTapeStatus(file) = %lu", r);
     CloseHandle(f); DeleteFileA(p);
 }
@@ -469,7 +470,9 @@ TEST(gap6_tape_getparameters_size_too_small) {
         CHECKF(sz == 0x20, "op %d size %lu -> %lu", op, sizes[i], sz);
     }
     DWORD sz = 0;
-    EXPECT_EQ(U(GetTapeParameters)(NULL, GET_TAPE_DRIVE_INFORMATION, &sz, NULL), ERROR_MORE_DATA);
+    /* EXPECT_EQ evaluates its arguments more than once and the call updates sz: store the result */
+    DWORD r0 = U(GetTapeParameters)(NULL, GET_TAPE_DRIVE_INFORMATION, &sz, NULL);
+    EXPECT_EQ(r0, ERROR_MORE_DATA);
     EXPECT_EQ(sz, 0x20);
 }
 TEST(gap6_tape_getparameters_enough_size_bad_handle) {
@@ -516,7 +519,11 @@ TEST(gap6_ums_completion_list_event) {
         CHECKF(w == WAIT_TIMEOUT, "wait %lu", w);   /* nothing queued */
         HANDLE ev2 = NULL;
         CHECK(U(GetUmsCompletionListEvent)(list, &ev2));
-        EXPECT_EQ(ev2, ev);                          /* same event each time */
+        /* each call returns a freshly duplicated handle (RtlGetUmsCompletionListEvent uses
+           NtDuplicateObject): distinct handle values, same underlying event (still unsignalled) */
+        CHECK(ev2 != NULL && ev2 != ev);
+        if (ev2) { CHECKF(WaitForSingleObject(ev2, 0) == WAIT_TIMEOUT, "ev2 wait"); CloseHandle(ev2); }
+        CloseHandle(ev);
     }
     CHECK(U(DeleteUmsCompletionList)(list));
 }
@@ -645,7 +652,12 @@ CHILD(gap6_wsw) {
     CC(!UN(GetWsChanges)(self, buf, 0));
     SetLastError(0);
     CC(!UN(GetWsChanges)(self, buf, 4));
-    /* Ex variant */
+    /* Ex variant: the previous query emptied the log, so generate fresh faults first */
+    {
+        BYTE *m2 = (BYTE *)VirtualAlloc(NULL, 64 * 4096, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+        CC(m2 != NULL);
+        for (int i = 0; i < 64; i++) m2[i * 4096] = (BYTE)i;
+    }
     cb = sizeof buf;
     SetLastError(0);
     r = UN(GetWsChangesEx)(self, buf, &cb);

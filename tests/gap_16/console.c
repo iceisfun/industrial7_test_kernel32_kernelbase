@@ -38,6 +38,8 @@ typedef BOOL (WINAPI *wi_t)(HANDLE, const INPUT_RECORD *, DWORD, LPDWORD);
 #define WIA ((wi_t)t_proc("WriteConsoleInputA"))
 
 /* ---- WriteConsoleA / WriteConsoleW ---- */
+static DWORD cjkdiag; /* diagnostic: CJK check failure: r<<28 | b[0]<<12 */
+static DWORD nwdiag; /* diagnostic: no-wrap cursor Y<<22 | X<<12 when Y != 0 */
 static int m_wc(void) {
     DWORD n; BOOL r; WCHAR b[256];
     clear(); n = 99; r = WCWp(out, L"Hello", 5, &n, NULL); KC(r && n == 5); KC(streqw(0, 0, L"Hello")); KC(cur().X == 5 && cur().Y == 0);
@@ -62,7 +64,7 @@ static int m_wc(void) {
         rdw(0, 1, 3, b); KC(b[0] == big[sz.X] && b[2] == big[sz.X + 2]); HeapFree(GetProcessHeap(), 0, big); }
     /* no wrap: processed output only */
     clear(); setmode(ENABLE_PROCESSED_OUTPUT); gotoxy(sz.X - 2, 0); WCWp(out, L"abcd", 4, &n, NULL); KC(n == 4);
-    printf("no-wrap cursor after overflow: %d,%d\n", cur().X, cur().Y); KC(cur().Y == 0); setmode(PW);
+    { COORD cc = cur(); printf("no-wrap cursor after overflow: %d,%d\n", cc.X, cc.Y); KC(cc.Y == 0); if (cc.Y != 0) nwdiag = ((DWORD)(cc.Y & 0x3ff) << 22) | ((DWORD)(cc.X & 0x3ff) << 12); } setmode(PW);
     /* large write */
     clear(); { DWORD big = 20000; WCHAR *p = HeapAlloc(GetProcessHeap(), 0, big * 2); for (DWORD i = 0; i < big; i++) p[i] = L'x'; n = 0; r = WCWp(out, p, big, &n, NULL); KC(r && n == big); HeapFree(GetProcessHeap(), 0, p); }
     clear(); { DWORD big = 70000; char *p = HeapAlloc(GetProcessHeap(), 0, big); memset(p, 'y', big); n = 0; r = WCAp(out, p, big, &n, NULL); printf("70000 A: r=%d n=%lu\n", r, n); KC(r); HeapFree(GetProcessHeap(), 0, p); }
@@ -70,7 +72,7 @@ static int m_wc(void) {
     clear(); if (SetConsoleOutputCP(1252)) { gotoxy(0, 0); n = 0; r = WCAp(out, "\xe9", 1, &n, NULL); KC(r && n == 1); rdw(0, 0, 1, b); KC(b[0] == 0x00e9); }
     clear(); if (SetConsoleOutputCP(437)) { gotoxy(0, 0); WCAp(out, "\xe9", 1, &n, NULL); rdw(0, 0, 1, b); KC(b[0] == 0x0398); }
     clear(); if (SetConsoleOutputCP(65001)) { gotoxy(0, 0); n = 0; r = WCAp(out, "\xc3\xa9z", 3, &n, NULL); KC(r); printf("utf8 n=%lu\n", n); rdw(0, 0, 2, b); KC(b[0] == 0x00e9 && b[1] == L'z');
-        gotoxy(0, 1); r = WCAp(out, "\xe4\xb8\xad", 3, &n, NULL); KC(r); rdw(0, 1, 1, b); KC(b[0] == 0x4e2d); printf("cjk cursor x=%d\n", cur().X);
+        gotoxy(0, 1); r = WCAp(out, "\xe4\xb8\xad", 3, &n, NULL); KC(r); rdw(0, 1, 1, b); KC(b[0] == 0x4e2d); if (!r || b[0] != 0x4e2d) cjkdiag = ((DWORD)(r ? 1 : 0) << 28) | ((DWORD)b[0] << 12); printf("cjk cursor x=%d\n", cur().X);
         gotoxy(0, 2); r = WCAp(out, "\xff", 1, &n, NULL); printf("invalid utf8 -> %d n=%lu\n", r, n); }
     /* unicode through the W entry */
     clear(); SetConsoleOutputCP(437); WCWp(out, L"\x00e9\x20ac\x00df", 3, &n, NULL); KC(n == 3); rdw(0, 0, 3, b); KC(b[0] == 0x00e9 && b[1] == 0x20ac && b[2] == 0x00df);
@@ -114,7 +116,7 @@ static int m_woc(void) {
     c.X = 0; c.Y = 5; n = 99; r = WOCW(out, L"zzz", 0, c, &n); KC(r && n == 0); KC(streqw(0, 5, L" "));
     n = 99; r = WOCA(out, "zzz", 0, c, &n); KC(r && n == 0);
     c.X = 0; c.Y = 5; r = WOCA(out, "1234", 2, c, &n); KC(r && n == 2); KC(streqw(0, 5, L"12 "));
-    c.X = 0; c.Y = 5; r = WOCW(out, L"WXYZ", 4, c, NULL); printf("NULL written ptr: %d\n", r);
+    c.X = 0; c.Y = 5; r = WOCW(out, L"WXYZ", 4, c, &n); KC(r && n == 4);   /* lpNumberOfCharsWritten is required: Win10 writes it unconditionally */
     /* clipping at end of buffer */
     c.X = sz.X - 2; c.Y = sz.Y - 1; n = 99; r = WOCW(out, L"0123456789", 10, c, &n); KC(r); printf("end-of-buffer clip n=%lu\n", n); KC(n == 2);
     c.X = sz.X - 2; c.Y = sz.Y - 1; n = 99; r = WOCA(out, "0123456789", 10, c, &n); KC(r && n == 2);
@@ -198,8 +200,8 @@ static int m_wob_err(void) {
     CHAR_INFO c1 = ci(L'x', 7); COORD s = { 1, 1 }, z = { 0, 0 }; SMALL_RECT g = { 0, 0, 0, 0 }; DWORD e; BOOL r;
     HANDLE ev = CreateEventA(NULL, TRUE, FALSE, NULL), dead = CreateEventA(NULL, TRUE, FALSE, NULL); CloseHandle(dead); HANDLE hs[] = { NULL, INVALID_HANDLE_VALUE, dead, ev };
     for (int i = 0; i < 4; i++) {
-        SetLastError(0); r = WOW(hs[i], &c1, s, z, &g); e = GetLastError(); KC(!r && e == ERROR_INVALID_HANDLE);
-        SetLastError(0); r = WOAA(hs[i], &c1, s, z, &g); e = GetLastError(); KC(!r && e == ERROR_INVALID_HANDLE);
+        g.Left = g.Top = g.Right = g.Bottom = 0; SetLastError(0); r = WOW(hs[i], &c1, s, z, &g); e = GetLastError(); KC(!r && e == ERROR_INVALID_HANDLE); if (kc_bad) return (e & 0xfff) << 20 | i << 16 | 0x8000 | kc_bad;
+        g.Left = g.Top = g.Right = g.Bottom = 0; SetLastError(0); r = WOAA(hs[i], &c1, s, z, &g); e = GetLastError(); KC(!r && e == ERROR_INVALID_HANDLE); if (kc_bad) return (e & 0xfff) << 20 | i << 16 | kc_bad;
     }
     SetLastError(0); r = WOW(in, &c1, s, z, &g); printf("WriteConsoleOutputW to input handle: r=%d err=%lu\n", r, GetLastError()); KC(!r);
     CloseHandle(ev); return kc_bad;
@@ -283,7 +285,7 @@ CHILD(gap16_con) {
     const char *m = argc > 1 ? argv[1] : "";
     if (!strcmp(m, "nocon")) return m_nocon();
     if (!setup()) return NOCON;
-    if (!strcmp(m, "wc")) { int rc = m_wc(); kc_dump(); return rc; }
+    if (!strcmp(m, "wc")) { int rc = m_wc(); kc_dump(); return (int)((DWORD)rc | nwdiag | cjkdiag); }
     if (!strcmp(m, "wcerr")) return m_wc_err();
     if (!strcmp(m, "woc")) { int rc = m_woc(); kc_dump(); return rc; }
     if (!strcmp(m, "wocerr")) return m_woc_err();
@@ -302,7 +304,7 @@ static DWORD run_con(const char *mode, DWORD flags) {
 static void con_test(const char *mode) {
     DWORD c = run_con(mode, CREATE_NEW_CONSOLE);
     if (c == NOCON || c == 0xDEAD0000 || c == 0xDEAD0001) { if (t_is_wine()) { t_skip("console child unavailable (0x%lx)", c); return; } }
-    CHECKF(c == 0, "console child '%s' result %lu (line %lu)", mode, c, c);
+    CHECKF(c == 0, "console child '%s' result %lu (0x%lx, line %lu, no-wrap cursor x=%lu y=%lu if mode wc; cjk diag r=%lu b0=0x%lx if line 74)", mode, c, c, c & 0xfff, (c >> 12) & 0x3ff, c >> 22, (c >> 28) & 1, (c >> 12) & 0xffff);
 }
 #define CTEST(name, mode, need) TEST(name) { REQUIRE(t_proc(need)); con_test(mode); }
 CTEST(gap16_conw_write_console_basic_controls_wrap_vt_codepages, "wc", "WriteConsoleW")

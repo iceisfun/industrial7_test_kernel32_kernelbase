@@ -358,10 +358,17 @@ TEST(gap12_control_matches_getter) {
 TEST(gap12_control_interest_masks_set) {
     REQUIRE(U(SetSecurityDescriptorControl));
     SECURITY_DESCRIPTOR sd; sd_init(&sd);
-    /* ToSet bits outside BitsOfInterest are ignored */
-    CHECK(U(SetSecurityDescriptorControl)(&sd, SE_DACL_PROTECTED, SE_DACL_PROTECTED | SE_SACL_PROTECTED));
+    /* P1 (gap_12): ToSet bits outside BitsOfInterest are not ignored: ntdll!RtlSetControlSecurityDescriptor rejects
+     * the call with STATUS_INVALID_PARAMETER when (ToSet & ~Interest) != 0 and leaves the control word unchanged. */
+    SET_ERR(0xBAD);
+    CHECK(!U(SetSecurityDescriptorControl)(&sd, SE_DACL_PROTECTED, SE_DACL_PROTECTED | SE_SACL_PROTECTED));
+    EXPECT_ERR(ERROR_INVALID_PARAMETER);
+    EXPECT_EQ(sd_ctl(&sd), 0);
+    CHECK(U(SetSecurityDescriptorControl)(&sd, SE_DACL_PROTECTED, SE_DACL_PROTECTED));
     EXPECT_EQ(sd_ctl(&sd), SE_DACL_PROTECTED);
-    CHECK(U(SetSecurityDescriptorControl)(&sd, 0, SE_SACL_PROTECTED | SE_DACL_AUTO_INHERITED));
+    SET_ERR(0xBAD);
+    CHECK(!U(SetSecurityDescriptorControl)(&sd, 0, SE_SACL_PROTECTED | SE_DACL_AUTO_INHERITED));
+    EXPECT_ERR(ERROR_INVALID_PARAMETER);
     EXPECT_EQ(sd_ctl(&sd), SE_DACL_PROTECTED);
     /* interest=SACL_PROTECTED, set=0 only clears that one */
     CHECK(U(SetSecurityDescriptorControl)(&sd, SE_SACL_PROTECTED, SE_SACL_PROTECTED));
@@ -536,8 +543,11 @@ static const struct { DWORD si; DWORD want; } k_sam[] = {
     { UNPROTECTED_DACL_SECURITY_INFORMATION, 0 },
     { PROTECTED_SACL_SECURITY_INFORMATION, 0 },
     { UNPROTECTED_SACL_SECURITY_INFORMATION, 0 },
-    { DACL_SECURITY_INFORMATION | PROTECTED_SACL_SECURITY_INFORMATION, WRITE_DAC | ACCESS_SYSTEM_SECURITY },
-    { DACL_SECURITY_INFORMATION | UNPROTECTED_SACL_SECURITY_INFORMATION, WRITE_DAC | ACCESS_SYSTEM_SECURITY },
+    /* P1 (gap_12): kernelbase!SetSecurityAccessMask adds ACCESS_SYSTEM_SECURITY for the PROTECTED/UNPROTECTED_SACL bits
+     * (0x50000000) only when a SACL/label/attribute/scope/etc. bit (mask 0x1f8) is also present; DACL (0x4) is not in
+     * 0x1f8, so DACL|PROTECTED_SACL needs only WRITE_DAC (consistent with PROTECTED_SACL alone needing 0 above). */
+    { DACL_SECURITY_INFORMATION | PROTECTED_SACL_SECURITY_INFORMATION, WRITE_DAC },
+    { DACL_SECURITY_INFORMATION | UNPROTECTED_SACL_SECURITY_INFORMATION, WRITE_DAC },
     { DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION, WRITE_DAC },
     { OWNER_SECURITY_INFORMATION | PROTECTED_SACL_SECURITY_INFORMATION, WRITE_OWNER },
     { 0xFFFFFFFF, WRITE_DAC | WRITE_OWNER | ACCESS_SYSTEM_SECURITY },

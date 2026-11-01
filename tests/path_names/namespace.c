@@ -232,10 +232,20 @@ TEST(path_names_ns_open_volume_with_zero_access) {
 TEST(path_names_ns_open_directory_requires_backup_semantics) {
     REQUIRE(U(CreateFileA));
     char d[MAX_PATH]; snprintf(d, sizeof d, "%s", t_tmpdir());
+    /* kernelbase!CreateFileInternal maps STATUS_FILE_IS_A_DIRECTORY to ERROR_ACCESS_DENIED, except that a
+       name with a trailing backslash yields ERROR_PATH_NOT_FOUND (t_tmpdir() ends in a backslash) */
+    char nb[MAX_PATH]; snprintf(nb, sizeof nb, "%s", d);
+    nb[strlen(nb) - 1] = 0;
     SET_ERR(0);
-    HANDLE h = U(CreateFileA)(d, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+    HANDLE h = U(CreateFileA)(nb, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
     CHECK(h == INVALID_HANDLE_VALUE);
     EXPECT_ERR(ERROR_ACCESS_DENIED);
+    if (h != INVALID_HANDLE_VALUE) CloseHandle(h);
+    SET_ERR(0);
+    h = U(CreateFileA)(d, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+    DWORD e_tb = GetLastError();   /* capture first: t_is_wine() does a failing GetProcAddress (sets 127) */
+    CHECK(h == INVALID_HANDLE_VALUE);
+    if (!t_is_wine()) CHECKF(e_tb == ERROR_PATH_NOT_FOUND, "GetLastError got %lu want %lu", e_tb, (DWORD)ERROR_PATH_NOT_FOUND);
     if (h != INVALID_HANDLE_VALUE) CloseHandle(h);
     h = U(CreateFileA)(d, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
     CHECK(h != INVALID_HANDLE_VALUE);

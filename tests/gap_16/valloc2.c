@@ -43,12 +43,12 @@ TEST(gap16_va2_invalid_size_and_type) {
 TEST(gap16_va2_absurd_sizes_fail) {
     NEED; void *p;
     static const SIZE_T sz[] = { (SIZE_T)1 << 47, (SIZE_T)1 << 48, (SIZE_T)-1, (SIZE_T)-4096, (SIZE_T)0x7FFFFFFF0000ull };
-    for (int i = 0; i < 5; i++) { SET_ERR(0); p = VA2()(NULL, NULL, sz[i], MEM_RESERVE, PAGE_READWRITE, NULL, 0); CHECKF(p == NULL, "size %zx", sz[i]); if (p) rel(p); else { EXPECT_ERR2(ERROR_INVALID_PARAMETER, ERROR_NOT_ENOUGH_MEMORY); t_note("size %zx err %lu", sz[i], GetLastError()); } }
+    for (int i = 0; i < 5; i++) { SET_ERR(0); p = VA2()(NULL, NULL, sz[i], MEM_RESERVE, PAGE_READWRITE, NULL, 0); CHECKF(p == NULL, "size %zx", sz[i]); if (p) rel(p); else { if (sz[i] == (SIZE_T)0x7FFFFFFF0000ull) { DWORD e_ = GetLastError(); CHECKF(e_ == ERROR_INVALID_ADDRESS || e_ == ERROR_INVALID_PARAMETER || e_ == ERROR_NOT_ENOUGH_MEMORY, "err %lu", e_); } else EXPECT_ERR2(ERROR_INVALID_PARAMETER, ERROR_NOT_ENOUGH_MEMORY); t_note("size %zx err %lu", sz[i], GetLastError()); } }
 }
 TEST(gap16_va2_invalid_protection) {
     NEED; void *p;
     static const ULONG bad[] = { 0, 3, 6, PAGE_GUARD, 0xFFFFFFFFu, PAGE_READONLY | PAGE_READWRITE };
-    for (int i = 0; i < 6; i++) { SET_ERR(0); p = VA2()(NULL, NULL, 4096, RW, bad[i], NULL, 0); CHECKF(p == NULL, "prot 0x%lx", bad[i]); if (p) rel(p); else EXPECT_ERR(ERROR_INVALID_PARAMETER); }
+    for (int i = 0; i < 6; i++) { SET_ERR(0); p = VA2()(NULL, NULL, 4096, RW, bad[i], NULL, 0); CHECKF(p == NULL, "prot 0x%lx", bad[i]); if (p) rel(p); else EXPECT_ERR(bad[i] == 0xFFFFFFFFu ? ERROR_NOT_SUPPORTED : ERROR_INVALID_PARAMETER); }
 }
 TEST(gap16_va2_protection_table) {
     NEED; MEMORY_BASIC_INFORMATION m;
@@ -146,7 +146,7 @@ TEST(gap16_va2_extparam_second_entry_checked) {
 }
 TEST(gap16_va2_extparam_ignored_when_count_zero) {
     NEED; g16_mep e; memset(&e, 0, sizeof e); e.Type = 99; SET_ERR(0);
-    char *p = VA2()(NULL, NULL, 4096, RW, PAGE_READWRITE, &e, 0); CHECKF(p != NULL, "err %lu", GetLastError()); rel(p);
+    char *p = VA2()(NULL, NULL, 4096, RW, PAGE_READWRITE, &e, 0); CHECK(p == NULL); EXPECT_ERR(ERROR_INVALID_PARAMETER); if (p) rel(p);
 }
 TEST(gap16_va2_addr_requirements_alignment) {
     NEED;

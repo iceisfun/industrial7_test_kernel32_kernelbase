@@ -823,7 +823,11 @@ TEST(ev_duplicate_close_source_flag) {
     HANDLE h = U(CreateEventA)(NULL, TRUE, TRUE, NULL), d = NULL;
     CHECK(h != NULL); if (!h) return;
     CHECK(DuplicateHandle(GetCurrentProcess(), h, GetCurrentProcess(), &d, 0, FALSE, DUPLICATE_SAME_ACCESS | DUPLICATE_CLOSE_SOURCE));
-    SET_ERR(0); EXPECT_EQ(U(SetEvent)(h), FALSE); EXPECT_ERR(ERROR_INVALID_HANDLE);
+    /* Win10 ObDuplicateObject closes the source before creating the target handle, so in the same
+     * process the new handle can reuse the closed value (d == h). */
+    SET_ERR(0);
+    if (d != h) { EXPECT_EQ(U(SetEvent)(h), FALSE); EXPECT_ERR(ERROR_INVALID_HANDLE); }
+    else EXPECT_EQ(U(SetEvent)(h), TRUE);
     if (d) { EXPECT_EQ(WaitForSingleObject(d, 0), WAIT_OBJECT_0); CloseHandle(d); }
 }
 TEST(ev_handle_flags_protect_from_close) {

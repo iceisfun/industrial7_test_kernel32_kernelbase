@@ -64,15 +64,27 @@ TEST(gap6_impself_revert_clears) {
 }
 TEST(gap6_impself_twice_replaces) {
     REQUIRE(U(ImpersonateSelf));
+    /* Identification first: RtlImpersonateSelfEx opens the process token (NtOpenProcessTokenEx)
+       while the thread holds the identification-level token, and the kernel access check
+       (SeAccessCheckWithHintWithAdminlessChecks: client token with level < SecurityImpersonation
+       -> STATUS_BAD_IMPERSONATION_LEVEL) refuses it, so the second call fails. */
     CHECK(U(ImpersonateSelf)(SecurityIdentification));
+    SET_ERR(0);
+    BOOL r2 = U(ImpersonateSelf)(SecurityImpersonation);
+    DWORD e2 = GetLastError();
+    RevertToSelf();
+    CHECK(!r2);
+    t_note("ImpersonateSelf(Impersonation) under an identification token -> %d err %lu (1346 = ERROR_BAD_IMPERSONATION_LEVEL)", r2, e2);
+    /* Impersonation first, then Identification: the second call replaces the token */
     CHECK(U(ImpersonateSelf)(SecurityImpersonation));
+    CHECK(U(ImpersonateSelf)(SecurityIdentification));
     HANDLE t = NULL; DWORD lv = 0, rl;
     BOOL ok = OpenThreadToken(GetCurrentThread(), TOKEN_QUERY, TRUE, &t);
     BOOL g = ok && GetTokenInformation(t, TokenImpersonationLevel, &lv, 4, &rl);
     RevertToSelf();
     CHECK(ok && g);
-    /* second call impersonates the (impersonating) thread's process again: level is the new one */
-    EXPECT_EQ(lv, SecurityImpersonation);
+    /* second call impersonates the process again: the thread token has the new level */
+    EXPECT_EQ(lv, SecurityIdentification);
     if (t) CloseHandle(t);
 }
 TEST(gap6_impself_same_user_as_process) {
@@ -365,9 +377,12 @@ TEST(gap6_imppipe_before_read_fails) {
     SET_ERR(0);
     BOOL r = U(ImpersonateNamedPipeClient)(s);
     DWORD e = GetLastError();
+    /* npfs captures the client security context when the client end is opened (NpCreateClientEnd),
+       so impersonation succeeds before any data is read; STATUS_CANNOT_IMPERSONATE only when no
+       context has been captured. */
+    CHECKF(r, "err %lu", e);
+    CHECK(r ? thread_has_token() : !thread_has_token());
     if (r) RevertToSelf();
-    CHECK(!r);
-    t_note("before any data read: err %lu (documented ERROR_CANNOT_IMPERSONATE=1368)", e);
     CHECK(!thread_has_token());
     CloseHandle(c); CloseHandle(s);
 }

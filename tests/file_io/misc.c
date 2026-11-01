@@ -369,11 +369,17 @@ TEST(fio_nobuffering_misaligned_rejected) {
     EXPECT_FAIL_B(U(ReadFile)(h, b, 1, &n, NULL), ERROR_INVALID_PARAMETER);
     EXPECT_FAIL_B(U(WriteFile)(h, b + 1, 4096, &n, NULL), ERROR_INVALID_PARAMETER);
     EXPECT_FAIL_B(U(WriteFile)(h, b, 100, &n, NULL), ERROR_INVALID_PARAMETER);
-    hsetpos(h, 1);
-    EXPECT_FAIL_B(U(ReadFile)(h, b, 4096, &n, NULL), ERROR_INVALID_PARAMETER);                             /* offset */
-    EXPECT_FAIL_B(U(WriteFile)(h, b, 4096, &n, NULL), ERROR_INVALID_PARAMETER);
-    hsetpos(h, 100);
-    EXPECT_FAIL_B(U(ReadFile)(h, b, 4096, &n, NULL), ERROR_INVALID_PARAMETER);
+    /* offset: on a synchronous no-buffering handle the misaligned file position is rejected when it is
+       set (NtSetInformationFile FilePositionInformation), so the position stays at 0; ReadFile/WriteFile
+       with a NULL ByteOffset do not re-check it. Explicit misaligned offsets are covered by
+       fio_nobuffering_overlapped_offset_alignment. */
+    {
+        LARGE_INTEGER mp; mp.QuadPart = 1;
+        EXPECT_FAIL_B(SetFilePointerEx(h, mp, NULL, FILE_BEGIN), ERROR_INVALID_PARAMETER);
+        mp.QuadPart = 100;
+        EXPECT_FAIL_B(SetFilePointerEx(h, mp, NULL, FILE_BEGIN), ERROR_INVALID_PARAMETER);
+        EXPECT_EQ(fpos(h), 0);
+    }
     EXPECT_EQ(fsize_of(p), 16384);
     /* zero-length IO is not subject to alignment */
     hsetpos(h, 0);
@@ -410,10 +416,17 @@ TEST(fio_nobuffering_eof_partial_sector) {
     EXPECT_EQ(n, 0);
     hsetpos(h, 4096); n = 77;
     CHECK(U(ReadFile)(h, b, 4096, &n, NULL)); EXPECT_EQ(n, 0);
-    /* SetEndOfFile has no alignment requirement */
-    hsetpos(h, 0);
-    SetFilePointer(h, 37, NULL, FILE_BEGIN);
-    CHECK(U(SetEndOfFile)(h)); EXPECT_EQ(hsize(h), 37);
+    /* SetEndOfFile truncates at the file position, and a no-buffering handle cannot be positioned at an
+       unaligned offset; an unaligned EOF is set through FileEndOfFileInfo (UNVERIFIED-until-rerun) */
+    {
+        LARGE_INTEGER mp; mp.QuadPart = 37;
+        EXPECT_FAIL_B(SetFilePointerEx(h, mp, NULL, FILE_BEGIN), ERROR_INVALID_PARAMETER);
+        FILE_END_OF_FILE_INFO ei; ei.EndOfFile.QuadPart = 37;
+        CHECK(SetFileInformationByHandle(h, FileEndOfFileInfo, &ei, sizeof ei));
+        EXPECT_EQ(hsize(h), 37);
+        CHECK(hsetpos(h, 512) == 512);
+        CHECK(U(SetEndOfFile)(h)); EXPECT_EQ(hsize(h), 512);
+    }
     CLOSE(h); VirtualFree(b, 0, MEM_RELEASE); rmfile(p);
 }
 TEST(fio_write_through_roundtrip) {

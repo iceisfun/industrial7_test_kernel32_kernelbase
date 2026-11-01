@@ -17,7 +17,7 @@ static const struct { DWORD cls; DWORD fixed; const char *name; } classes[] = {
     {TokenRestrictedSids, 0, "RestrictedSids"}, {TokenSessionId, 4, "SessionId"},
     {TokenGroupsAndPrivileges, 0, "GroupsAndPrivileges"}, {TokenSandBoxInert, 4, "SandBoxInert"},
     {TokenOrigin, 8, "Origin"}, {TokenElevationType, 4, "ElevationType"}, {TokenElevation, 4, "Elevation"},
-    {TokenHasRestrictions, 4, "HasRestrictions"}, {TokenAccessInformation, 0, "AccessInformation"},
+    {TokenHasRestrictions, 1, "HasRestrictions"}, {TokenAccessInformation, 0, "AccessInformation"},
     {TokenVirtualizationAllowed, 4, "VirtualizationAllowed"}, {TokenVirtualizationEnabled, 4, "VirtualizationEnabled"},
     {TokenIntegrityLevel, 0, "IntegrityLevel"}, {TokenUIAccess, 4, "UIAccess"},
     {TokenMandatoryPolicy, 4, "MandatoryPolicy"}, {28, 0, "LogonSid"}, {29, 4, "IsAppContainer"},
@@ -26,14 +26,20 @@ static const struct { DWORD cls; DWORD fixed; const char *name; } classes[] = {
 
 TEST(gap6_gti_size_query_all_classes) {
     REQUIRE(U(GetTokenInformation));
-    HANDLE t = open_tok(TOKEN_QUERY); if (!t) { t_skip("token"); return; }
+    /* TokenSource additionally needs TOKEN_QUERY_SOURCE (checked before the length) */
+    HANDLE t = open_tok(TOKEN_QUERY | TOKEN_QUERY_SOURCE); if (!t) { t_skip("token"); return; }
     for (unsigned i = 0; i < NCLS; i++) {
         DWORD rl = 0xDEAD; SET_ERR(0);
         BOOL r = gti(t, classes[i].cls, NULL, 0, &rl);
         DWORD e = GetLastError();
         if (r) { t_note("%s: size query with len 0 succeeded", classes[i].name); continue; }
         if (e == ERROR_INVALID_PARAMETER || e == ERROR_NOT_FOUND || e == ERROR_NO_SUCH_GROUP) { t_note("%s unsupported err %lu", classes[i].name, e); continue; }
-        CHECKF(e == ERROR_INSUFFICIENT_BUFFER, "%s err %lu", classes[i].name, e);
+        if (classes[i].cls == TokenElevation) {
+            /* NtQueryInformationToken(TokenElevation) requires length == 4 exactly: any other length
+               is a length mismatch (ERROR_BAD_LENGTH), but the required size is still reported. */
+            CHECKF(e == ERROR_BAD_LENGTH, "%s err %lu", classes[i].name, e);
+        } else
+            CHECKF(e == ERROR_INSUFFICIENT_BUFFER, "%s err %lu", classes[i].name, e);
         CHECKF(rl != 0 && rl != 0xDEAD, "%s rl %lu", classes[i].name, rl);
         if (classes[i].fixed) CHECKF(rl == classes[i].fixed, "%s rl %lu want %lu", classes[i].name, rl, classes[i].fixed);
     }
@@ -145,7 +151,8 @@ TEST(gap6_gti_access_denied_without_query) {
     DWORD cls[] = {TokenUser, TokenType, TokenStatistics, TokenGroups, TokenElevation};
     for (unsigned i = 0; i < 5; i++) {
         SET_ERR(0);
-        CHECKF(!gti(t, cls[i], b, sizeof b, &rl), "class %lu", cls[i]);
+        /* TokenElevation requires an exact length of 4 (length is checked before access) */
+        CHECKF(!gti(t, cls[i], b, cls[i] == TokenElevation ? 4 : sizeof b, &rl), "class %lu", cls[i]);
         CHECKF(GetLastError() == ERROR_ACCESS_DENIED, "class %lu err %lu", cls[i], GetLastError());
     }
     CloseHandle(t);

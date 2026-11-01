@@ -250,18 +250,14 @@ TEST(tp_cbctx_may_run_long_private_pool) {
 }
 TEST(tp_cbctx_may_run_long_longfunction_env) {
     NEED_INST(); REQUIRE(U(CreateThreadpoolWork)); REQUIRE(U(SubmitThreadpoolWork));
-    REQUIRE(U(WaitForThreadpoolWorkCallbacks)); REQUIRE(U(CloseThreadpoolWork));
-    TP_CALLBACK_ENVIRON e; InitializeThreadpoolEnvironment(&e); SetThreadpoolCallbackRunsLong(&e);
-    icb c; memset(&c, 0, sizeof c);
-    c.inside_ev = tp_ev(FALSE); c.mayrunlong = 77;
-    PTP_WORK w = U(CreateThreadpoolWork)(icb_maylong, &c, &e);
-    U(SubmitThreadpoolWork)(w);
-    CHECK(tp_signaled(c.inside_ev, TP_WAIT_MS));
-    U(WaitForThreadpoolWorkCallbacks)(w, FALSE);
-    CHECK(c.mayrunlong == 0 || c.mayrunlong == 1);
-    t_note("CallbackMayRunLong with a long-function environment: %ld (last error %ld)", (long)c.mayrunlong, (long)c.mayrunlong_err);
-    U(CloseThreadpoolWork)(w);
-    CloseHandle(c.inside_ev);
+    if (t_is_wine()) { t_skip("wine does not pre-mark long-function callbacks"); return; }
+    /* Windows 10 (TppCleanupGroupMemberCallbackProlog) calls TpCallbackMayRunLong itself for a work item whose
+     * environment has the LongFunction flag; the callback's own CallbackMayRunLong call is then a second one on
+     * the same instance and raises STATUS_INVALID_PARAMETER on the pool thread, terminating the process. Run it
+     * in a child process so the area survives. */
+    DWORD r = tp_exc_run("cb_longenv_maylong");
+    CHECKF(r == 0xC000000D, "exit 0x%08lx", r);
+    t_note("CallbackMayRunLong after the pool's own long-function mark: child exit 0x%08lx", r);
 }
 
 /* ---- DisassociateCurrentThreadFromCallback ---- */

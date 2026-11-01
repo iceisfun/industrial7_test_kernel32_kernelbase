@@ -186,7 +186,9 @@ TEST(pgec_invalid_handles) {
     DWORD c = 0x77; HANDLE ev = CreateEventW(NULL, TRUE, FALSE, NULL); PROCESS_INFORMATION pi;
     SET_ERR(0); CHECK(!U(GetExitCodeProcess)(NULL, &c)); EQV(GetLastError(), ERROR_INVALID_HANDLE);
     SET_ERR(0); CHECK(!U(GetExitCodeProcess)((HANDLE)(ULONG_PTR)0x1234, &c)); EQV(GetLastError(), ERROR_INVALID_HANDLE);
-    SET_ERR(0); CHECK(!U(GetExitCodeProcess)(ev, &c)); EQV(GetLastError(), ERROR_INVALID_HANDLE);
+    { BOOL r; DWORD e; DWORD ty = 0; SET_ERR(0); r = U(GetExitCodeProcess)(ev, &c); e = GetLastError();
+      /* diagnostic only (round 3): report ret/err/out value of the event-handle case; expectation unchanged */
+      CHECKF(!r, "ret=%d err=%lu out=0x%lx ev=%p", (int)r, e, c, (void *)ev); EQV(e, ERROR_INVALID_HANDLE); (void)ty; }
     CHECK(pc_suspended("pc_sleep", "20000", 0, &pi));
     SET_ERR(0); CHECK(!U(GetExitCodeProcess)(pi.hThread, &c)); EQV(GetLastError(), ERROR_INVALID_HANDLE);
     SET_ERR(0); CHECK(!U(GetExitCodeThread)(pi.hProcess, &c)); EQV(GetLastError(), ERROR_INVALID_HANDLE);
@@ -306,8 +308,12 @@ TEST(popen_pid_zero_is_invalid_parameter) {
 }
 TEST(popen_nonexistent_pids_invalid_parameter) {
     REQUIRE(U(OpenProcess));
-    static const DWORD p[] = { 1, 2, 3, 5, 0x7FFFFFFF, 0xFFFFFFFC, 0xFFFFFFFF, 0x3FFFFFFC }; int i;
-    for (i = 0; i < 8; i++) { SET_ERR(0); HANDLE h = U(OpenProcess)(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, p[i]); CHECKF(h == NULL, "pid 0x%lx opened", p[i]); if (h) CloseHandle(h); else EQV(GetLastError(), ERROR_INVALID_PARAMETER); }
+    /* pid 5 is absent on purpose: the CID handle table ignores the low two bits of an id, so 5 aliases pid 4 (System) */
+    static const DWORD p[] = { 1, 2, 3, 0x7FFFFFFF, 0xFFFFFFFC, 0xFFFFFFFF, 0x3FFFFFFC }; int i;
+    for (i = 0; i < 7; i++) { SET_ERR(0); HANDLE h = U(OpenProcess)(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, p[i]); CHECKF(h == NULL, "pid 0x%lx opened", p[i]); if (h) CloseHandle(h); else EQV(GetLastError(), ERROR_INVALID_PARAMETER); }
+    /* P1 audit: the aliasing itself is the exact Win10 outcome: pid 5 opens the System process (pid 4) */
+    { HANDLE h = U(OpenProcess)(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, 5); CHECKF(h != NULL, "pid 5 err %lu", GetLastError());
+      if (h) { EQV(GetProcessId(h), 4); CloseHandle(h); } }
 }
 TEST(popen_system_process_is_protected) {
     REQUIRE(U(OpenProcess));

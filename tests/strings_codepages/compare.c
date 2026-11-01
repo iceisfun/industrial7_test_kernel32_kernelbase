@@ -507,8 +507,8 @@ TEST(findnls_ex_errors) {
     int found;
     SET_ERR(0); EXPECT_EQ(U(FindNLSStringEx)(INV, FIND_FROMSTART, NULL, -1, L"a", -1, &found, NULL, NULL, 0), -1); EXPECT_ERR(E_INVALID_PARAMETER);
     SET_ERR(0); EXPECT_EQ(U(FindNLSStringEx)(INV, FIND_FROMSTART, L"a", -1, NULL, -1, &found, NULL, NULL, 0), -1); EXPECT_ERR(E_INVALID_PARAMETER);
-    SET_ERR(0); EXPECT_EQ(U(FindNLSStringEx)(INV, FIND_FROMSTART, L"a", 0, L"a", -1, &found, NULL, NULL, 0), -1); EXPECT_ERR(E_INVALID_PARAMETER);
-    SET_ERR(0); EXPECT_EQ(U(FindNLSStringEx)(INV, FIND_FROMSTART, L"a", -1, L"a", 0, &found, NULL, NULL, 0), -1); EXPECT_ERR(E_INVALID_PARAMETER);
+    SET_ERR(0); EXPECT_EQ(U(FindNLSStringEx)(INV, FIND_FROMSTART, L"a", 0, L"a", -1, &found, NULL, NULL, 0), -1); EXPECT_ERR(0); /* P1c: cchSource==0 is not validated (kernel32!SortFindString), plain not-found */
+    SET_ERR(0); EXPECT_EQ(U(FindNLSStringEx)(INV, FIND_FROMSTART, L"a", -1, L"a", 0, &found, NULL, NULL, 0), 0); EXPECT_ERR(0); /* P1c: cchValue==0 is not validated; empty value matches at 0 (observed Win10) */
     SET_ERR(0); { int rr = (U(FindNLSStringEx)(INV, 0, L"a", -1, L"a", -1, &found, NULL, NULL, 0));  t_note("FindNLSStringEx flag-combo -> %d err=%lu (validated in the sort callee, not decompile-verified)", rr, GetLastError()); }
     SET_ERR(0); { int rr = (U(FindNLSStringEx)(INV, FIND_FROMSTART | FIND_FROMEND, L"a", -1, L"a", -1, &found, NULL, NULL, 0));  t_note("FindNLSStringEx flag-combo -> %d err=%lu (validated in the sort callee, not decompile-verified)", rr, GetLastError()); }
     SET_ERR(0); { int rr = (U(FindNLSStringEx)(INV, FIND_STARTSWITH | FIND_ENDSWITH, L"a", -1, L"a", -1, &found, NULL, NULL, 0));  t_note("FindNLSStringEx flag-combo -> %d err=%lu (validated in the sort callee, not decompile-verified)", rr, GetLastError()); }
@@ -528,8 +528,8 @@ TEST(findnls_lcid_basic) {
     EXPECT_EQ(U(FindNLSString)(0xdeadbeef, FIND_FROMSTART, L"a", -1, L"a", -1, &found), -1);
     EXPECT_ERR(E_INVALID_PARAMETER);
     SET_ERR(0);
-    EXPECT_EQ(U(FindNLSString)(LOCALE_INVARIANT, FIND_FROMSTART, L"abc", -1, L"", 0, &found), -1);
-    EXPECT_ERR(E_INVALID_PARAMETER);
+    EXPECT_EQ(U(FindNLSString)(LOCALE_INVARIANT, FIND_FROMSTART, L"abc", -1, L"", 0, &found), 0);
+    EXPECT_ERR(0); /* P1c: cchValue==0 not validated; empty value matches at 0 (observed Win10) */
 }
 TEST(findnls_pcchfound_null_ok) {
     REQUIRE(U(FindNLSString)); REQUIRE(U(FindNLSStringEx));

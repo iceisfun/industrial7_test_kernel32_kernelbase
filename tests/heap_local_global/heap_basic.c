@@ -167,11 +167,12 @@ TEST(heap_create_fixed_max_exhaustion) {
 }
 TEST(heap_create_fixed_max_block_limit) {
     REQUIRE(U(HeapCreate)); REQUIRE(U(HeapDestroy));
-    /* non-growable heaps cannot satisfy a block larger than 0x7FFF8 */
+    /* P1: a fixed-size heap cannot satisfy a block of about 512 KB (32-bit) or 1024 KB (64-bit) or more,
+       per the HeapCreate documentation (dwMaximumSize); the previous 0x7FFF9 is only the 32-bit limit. */
     HANDLE h = mk(0, 0, 0x400000);
     if (!h) { CHECK(h); return; }
     HLG_POISON();
-    void *p = U(HeapAlloc)(h, 0, 0x7FFF9);
+    void *p = U(HeapAlloc)(h, 0, sizeof(void *) == 8 ? 0x100000 : 0x80000);
     CHECK(p == NULL);
     EXPECT_ERR(HLG_NOMEM);
     void *q = U(HeapAlloc)(h, 0, 0x7F000);
@@ -687,7 +688,10 @@ CHILD(size_misaligned) {
 TEST(heap_size_invalid_pointer_returns_minus1) {
     REQUIRE(U(HeapSize));
     DWORD rc = t_run_child("size_misaligned", "", 20000);
-    CHECKF(rc == 0, "child rc 0x%lx", rc);
+    /* P1: documented -1 (child rc 0), or, with heap terminate-on-corruption (the Windows 10 behaviour:
+       ntdll RtlpHeapHandleError -> RtlReportCriticalFailure(STATUS_HEAP_CORRUPTION)), the child is
+       fail-fast terminated with 0xC0000374. Anything else (return codes 2..4, hang) is a failure. */
+    CHECKF(rc == 0 || rc == 0xC0000374, "child rc 0x%lx", rc);
 }
 
 /* ---------------- HeapValidate ---------------- */

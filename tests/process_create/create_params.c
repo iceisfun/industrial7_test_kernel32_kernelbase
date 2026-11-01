@@ -4,7 +4,8 @@
 static void u8(const WCHAR *w, char *out, size_t cap) { if (!WideCharToMultiByte(CP_UTF8, 0, w, -1, out, (int)cap, NULL, NULL)) out[0] = 0; }
 static int ends_with_i(const char *s, const char *suf) { size_t a = strlen(s), b = strlen(suf); return a >= b && !lstrcmpiA(s + a - b, suf); }
 static void tmpw(WCHAR *o, size_t cap, const char *leaf) { char p[MAX_PATH * 2]; t_tmpfile(p, sizeof p, leaf); pc_widen(o, cap, p); }
-static BOOL put(const char *rel) { return pc_copy_self(rel, NULL, 0); }
+static BOOL put_to(const char *rel, WCHAR *out) { BOOL r = pc_copy_self(rel, out, MAX_PATH * 2); if (!r) { DWORD e = GetLastError(); t_note("copy to %s failed err %lu", rel, e); } return r; }
+static BOOL put(const char *rel) { return put_to(rel, NULL); }
 static DWORD modname_of(const WCHAR *cmd, char *mod, size_t cap, DWORD flags) {
     pc_opts o; char out[4096]; DWORD code = 0; memset(&o, 0, sizeof o); o.raw_cmd = cmd; o.flags = flags;
     mod[0] = 0;
@@ -17,8 +18,9 @@ static DWORD modname_of(const WCHAR *cmd, char *mod, size_t cap, DWORD flags) {
 TEST(pcmd_unquoted_path_with_spaces_prefers_shorter_prefix) {
     REQUIRE(UK(CreateProcessW));
     WCHAR real[MAX_PATH * 2], cmd[MAX_PATH * 3]; pc_opts o;
-    /* tmp\sp.exe is a decoy: it is a copy of the test exe, which exits 0 when not given --child */
-    CHECK(put("sp.exe")); CHECK(pc_copy_self("sp ace\\app.exe", real, MAX_PATH * 2));
+    /* tmp\sp1.exe is a decoy: it is a copy of the test exe, which exits 0 when not given --child.
+       Each test uses its own copies; re-copying over an earlier test's file failed on Windows 10. */
+    CHECK(put("sp1.exe")); CHECK(put_to("sp1 ace\\app.exe", real));
     wsprintfW(cmd, L"%s --child pc_exit77", real);
     memset(&o, 0, sizeof o); o.raw_cmd = cmd;
     EQV(pc_run(&o, PC_TIMEOUT), 0);
@@ -26,7 +28,7 @@ TEST(pcmd_unquoted_path_with_spaces_prefers_shorter_prefix) {
 TEST(pcmd_quoted_path_with_spaces) {
     REQUIRE(UK(CreateProcessW));
     WCHAR real[MAX_PATH * 2], cmd[MAX_PATH * 3]; pc_opts o;
-    CHECK(put("sp.exe")); CHECK(pc_copy_self("sp ace\\app.exe", real, MAX_PATH * 2));
+    CHECK(put("sp2.exe")); CHECK(put_to("sp2 ace\\app.exe", real));
     wsprintfW(cmd, L"\"%s\" --child pc_exit77", real);
     memset(&o, 0, sizeof o); o.raw_cmd = cmd;
     EQV(pc_run(&o, PC_TIMEOUT), 77);
@@ -56,18 +58,20 @@ TEST(pcmd_application_name_overrides_command_line_first_token) {
 TEST(pcmd_command_line_without_extension_appends_exe) {
     REQUIRE(UK(CreateProcessW));
     WCHAR cmd[MAX_PATH * 3], base[MAX_PATH * 2]; char mod[MAX_PATH * 2];
-    CHECK(put("x1")); CHECK(put("x1.exe"));
+    /* only x1.exe exists: with both x1 and x1.exe present an absolute path runs the extensionless x1 as given (RtlDosSearchPath_Ustr tries the name as-is first) */
+    CHECK(put("x1.exe"));
     tmpw(base, MAX_PATH * 2, "x1"); wsprintfW(cmd, L"\"%s\" --child pc_modname", base);
     EQV(modname_of(cmd, mod, sizeof mod, 0), 0);
     CHECKF(ends_with_i(mod, "x1.exe"), "ran %s", mod);
 }
 TEST(pcmd_command_line_extensionless_file_alone_not_found) {
     REQUIRE(UK(CreateProcessW));
-    WCHAR cmd[MAX_PATH * 3], base[MAX_PATH * 2]; pc_opts o; PROCESS_INFORMATION pi;
+    WCHAR cmd[MAX_PATH * 3], base[MAX_PATH * 2]; pc_opts o;
     CHECK(put("x2"));
     tmpw(base, MAX_PATH * 2, "x2"); wsprintfW(cmd, L"\"%s\" --child pc_exit77", base);
     memset(&o, 0, sizeof o); o.raw_cmd = cmd;
-    SET_ERR(0); CHECK(!pc_launch(&o, &pi)); EXPECT_ERR(ERROR_FILE_NOT_FOUND);
+    /* an existing extensionless file addressed by absolute path is launched as given (no ".exe" is required) */
+    EQV(pc_run(&o, PC_TIMEOUT), 77);
 }
 TEST(pcmd_command_line_trailing_dot_suppresses_exe) {
     REQUIRE(UK(CreateProcessW));

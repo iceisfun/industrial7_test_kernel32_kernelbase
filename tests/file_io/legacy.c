@@ -145,7 +145,8 @@ TEST(fio_lclose) {
     SET_ERR(0);
     EXPECT_EQ(U(_lclose)(h), HFILE_ERROR); EXPECT_ERR(ERROR_INVALID_HANDLE);
     SET_ERR(0);
-    EXPECT_EQ(U(_lclose)((HFILE)-1), HFILE_ERROR); EXPECT_ERR(ERROR_INVALID_HANDLE);
+    /* _lclose is CloseHandle((HANDLE)(LONG_PTR)h): -1 is the current-process pseudo handle, closing it succeeds */
+    EXPECT_EQ(U(_lclose)((HFILE)-1), 0);
     SET_ERR(0);
     EXPECT_EQ(U(_lclose)(0), HFILE_ERROR); EXPECT_ERR(ERROR_INVALID_HANDLE);
     rmfile(p);

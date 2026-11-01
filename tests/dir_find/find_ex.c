@@ -7,7 +7,7 @@ TEST(findex_invalid_info_level) {
     REQUIRE(U(FindFirstFileExW)); REQUIRE(U(FindFirstFileExA));
     char *d = dh_dir("fx_badlevel"), p[MAX_PATH]; WCHAR w[MAX_PATH]; WIN32_FIND_DATAW fw; WIN32_FIND_DATAA fa;
     dh_mkfile(d, "f", 1); sub(p, sizeof p, d, "*"); dh_w(w, MAX_PATH, p);
-    int lv[] = { 2, 3, 7, 0xffff, -1 };
+    int lv[] = { 2, 3, 7, 0xffff };   /* -1 is accepted by Win10 (signed compare) */
     for (unsigned i = 0; i < sizeof lv / sizeof *lv; i++) {
         SET_ERR(0);
         CHECKF(U(FindFirstFileExW)(w, (FINDEX_INFO_LEVELS)lv[i], &fw, FindExSearchNameMatch, NULL, 0) == INVALID_HANDLE_VALUE, "W level %d", lv[i]);
@@ -16,17 +16,25 @@ TEST(findex_invalid_info_level) {
         CHECKF(U(FindFirstFileExA)(p, (FINDEX_INFO_LEVELS)lv[i], &fa, FindExSearchNameMatch, NULL, 0) == INVALID_HANDLE_VALUE, "A level %d", lv[i]);
         EXPECT_ERR(ERROR_INVALID_PARAMETER);
     }
+    /* P1 audit: level -1 passes the signed '1 < (int)fInfoLevelId' guard and is accepted (observed success, err 0) */
+    { HANDLE h = U(FindFirstFileExW)(w, (FINDEX_INFO_LEVELS)-1, &fw, FindExSearchNameMatch, NULL, 0);
+      CHECKF(h != INVALID_HANDLE_VALUE, "W level -1 err %lu", GetLastError()); if (h != INVALID_HANDLE_VALUE) FindClose(h);
+      h = U(FindFirstFileExA)(p, (FINDEX_INFO_LEVELS)-1, &fa, FindExSearchNameMatch, NULL, 0);
+      CHECKF(h != INVALID_HANDLE_VALUE, "A level -1 err %lu", GetLastError()); if (h != INVALID_HANDLE_VALUE) FindClose(h); }
 }
 TEST(findex_invalid_search_op) {
     REQUIRE(U(FindFirstFileExW));
     char *d = dh_dir("fx_badop"), p[MAX_PATH]; WCHAR w[MAX_PATH]; WIN32_FIND_DATAW fw;
     dh_mkfile(d, "f", 1); sub(p, sizeof p, d, "*"); dh_w(w, MAX_PATH, p);
-    int ops[] = { 3, 4, 100, -1 };
+    int ops[] = { 3, 4, 100 };   /* -1 is accepted by Win10 (signed compare) */
     for (unsigned i = 0; i < sizeof ops / sizeof *ops; i++) {
         SET_ERR(0);
         CHECKF(U(FindFirstFileExW)(w, FindExInfoStandard, &fw, (FINDEX_SEARCH_OPS)ops[i], NULL, 0) == INVALID_HANDLE_VALUE, "op %d", ops[i]);
         EXPECT_ERR(ERROR_INVALID_PARAMETER);
     }
+    /* P1 audit: op -1 passes the signed '1 < (int)fSearchOp' guard and is accepted (observed success, err 0) */
+    { HANDLE h = U(FindFirstFileExW)(w, FindExInfoStandard, &fw, (FINDEX_SEARCH_OPS)-1, NULL, 0);
+      CHECKF(h != INVALID_HANDLE_VALUE, "op -1 err %lu", GetLastError()); if (h != INVALID_HANDLE_VALUE) FindClose(h); }
 }
 TEST(findex_limit_to_devices_not_supported) {
     REQUIRE(U(FindFirstFileExW));

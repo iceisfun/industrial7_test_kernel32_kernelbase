@@ -4,6 +4,8 @@
 #include "t.h"
 
 #define CK(c) do { if (!(c)) return __LINE__; } while (0)
+/* error-code check that records the observed GetLastError in the exit code (bits 16..31) for diagnosis */
+#define CKERR(e) do { DWORD e_ = GetLastError(); if (!t_is_wine() && e_ != (DWORD)(e)) return __LINE__ | (e_ << 16); } while (0)
 
 static DWORD g3_run(const char *name, DWORD flags, DWORD timeout) {
     PROCESS_INFORMATION pi; DWORD code = 0xDEAD0000;
@@ -40,17 +42,17 @@ CHILD(gap3_con_detached) {
     for (unsigned i = 0; i < sizeof badev / sizeof badev[0]; i++) {
         SetLastError(0);
         CK(U(GenerateConsoleCtrlEvent)(badev[i], 0) == FALSE);
-        CK(t_is_wine() || GetLastError() == ERROR_INVALID_PARAMETER);
+        CKERR(ERROR_INVALID_PARAMETER);
         SetLastError(0);
         CK(U(GenerateConsoleCtrlEvent)(badev[i], GetCurrentProcessId() + 1) == FALSE);
-        CK(t_is_wine() || GetLastError() == ERROR_INVALID_PARAMETER);
+        CKERR(ERROR_INVALID_PARAMETER);
     }
     return 0;
 }
 TEST(gap3_console_no_console_invalid_handles) {
     REQUIRE(U(FillConsoleOutputCharacterW));
     DWORD c = g3_run("gap3_con_detached", DETACHED_PROCESS, 30000);
-    t_note("child line %lu", c);
+    t_note("child line %lu err %lu", c & 0xFFFF, c >> 16);
     EXPECT_EQ(c, 0);
 }
 
@@ -77,18 +79,18 @@ CHILD(gap3_con_expunge) {
     /* an empty or NULL executable name is rejected locally with ERROR_INVALID_PARAMETER */
     SetLastError(0);
     U(ExpungeConsoleCommandHistoryA)(NULL);
-    CK(t_is_wine() || GetLastError() == ERROR_INVALID_PARAMETER);
+    CKERR(ERROR_INVALID_PARAMETER);
     SetLastError(0);
     U(ExpungeConsoleCommandHistoryW)(NULL);
-    CK(t_is_wine() || GetLastError() == ERROR_INVALID_PARAMETER);
+    CKERR(ERROR_INVALID_PARAMETER);
     char e[1] = "";
     SetLastError(0);
     U(ExpungeConsoleCommandHistoryA)(e);
-    CK(t_is_wine() || GetLastError() == ERROR_INVALID_PARAMETER);
+    CKERR(ERROR_INVALID_PARAMETER);
     WCHAR we[1] = L"";
     SetLastError(0);
     U(ExpungeConsoleCommandHistoryW)((LPWSTR)we);
-    CK(t_is_wine() || GetLastError() == ERROR_INVALID_PARAMETER);
+    CKERR(ERROR_INVALID_PARAMETER);
     /* with a name and no console: returns (void), must not crash */
     char nm[] = "k32t_nonexistent_exe.exe";
     U(ExpungeConsoleCommandHistoryA)(nm);
@@ -99,7 +101,7 @@ CHILD(gap3_con_expunge) {
 TEST(gap3_expunge_history_detached) {
     REQUIRE(U(ExpungeConsoleCommandHistoryA));
     DWORD c = g3_run("gap3_con_expunge", DETACHED_PROCESS, 30000);
-    t_note("child line %lu", c);
+    t_note("child line %lu err %lu", c & 0xFFFF, c >> 16);
     EXPECT_EQ(c, 0);
 }
 TEST(gap3_expunge_history_exports_present) {
@@ -340,10 +342,10 @@ CHILD(gap3_con_ctrl) {
     /* invalid event types */
     SetLastError(0);
     CK(U(GenerateConsoleCtrlEvent)(2, 0) == FALSE);
-    CK(t_is_wine() || GetLastError() == ERROR_INVALID_PARAMETER);
+    CKERR(ERROR_INVALID_PARAMETER);
     SetLastError(0);
     CK(U(GenerateConsoleCtrlEvent)(0xFFFFFFFF, 0) == FALSE);
-    CK(t_is_wine() || GetLastError() == ERROR_INVALID_PARAMETER);
+    CKERR(ERROR_INVALID_PARAMETER);
     CK(g3_hits == 0);
     /* CTRL_BREAK to our own group (the only process on this console) */
     SetLastError(0);
@@ -373,7 +375,9 @@ CHILD(gap3_con_ctrl) {
 TEST(gap3_genctrl_private_console) {
     REQUIRE(U(GenerateConsoleCtrlEvent));
     if (t_is_wine()) { t_skip("wine new-console"); return; }
-    EXPECT_EQ(g3_run("gap3_con_ctrl", CREATE_NEW_CONSOLE, 30000), 0);
+    DWORD c = g3_run("gap3_con_ctrl", CREATE_NEW_CONSOLE, 30000);
+    t_note("child line %lu err %lu", c & 0xFFFF, c >> 16);
+    EXPECT_EQ(c, 0);
 }
 
 CHILD(gap3_con_freeconsole) {

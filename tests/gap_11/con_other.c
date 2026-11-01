@@ -15,6 +15,15 @@ static int hist_is(UINT size, UINT num, DWORD fl) {
     return g.cbSize == sizeof g && g.HistoryBufferSize == size && g.NumberOfHistoryBuffers == num && (g.dwFlags & 1) == fl;   /* only bit 0 is written by conhost; the rest of dwFlags is not initialised */
 }
 
+/* GetConsoleHistoryInfo only ORs bit 0 into a stack slot it never initialises (KERNELBASE passes the
+ * uninitialised dwFlags through; conhost sets bit 0 but never clears it), so a clear flag cannot be
+ * observed reliably after a call that left bit 0 set on the stack: compare size and count only. */
+static int hist_sc_is(UINT size, UINT num) {
+    CONSOLE_HISTORY_INFO g = hist(0xAAAA, 0xBBBB, 0xCCCC);
+    if (!GetConsoleHistoryInfo(&g)) return 0;
+    return g.HistoryBufferSize == size && g.NumberOfHistoryBuffers == num;
+}
+
 CT(gap11_con_history_struct_size) {
     CEQ(sizeof(CONSOLE_HISTORY_INFO), 16);
 }
@@ -80,7 +89,7 @@ CT(gap11_con_history_flag_limits) {
         BOOL r = SETHI(&h);
         CCF(r == FALSE, "flags 0x%lx", bad[i]);
         CCF(GetLastError() == ERROR_INVALID_PARAMETER, "flags 0x%lx err=%lu", bad[i], GetLastError());
-        CCF(hist_is(33, 3, 0), "unchanged after flags 0x%lx", bad[i]);
+        CCF(hist_sc_is(33, 3), "unchanged after flags 0x%lx", bad[i]);
     }
     SETHI(&orig);
 }
@@ -98,7 +107,7 @@ CT(gap11_con_history_repeat) {
     CREQ(SETHI);
     CONSOLE_HISTORY_INFO orig = hist(0, 0, 0); CC(GetConsoleHistoryInfo(&orig)); orig.dwFlags &= 1;
     for (UINT i = 0; i < 50; i++) { CONSOLE_HISTORY_INFO h = hist(i, i + 1, i & 1); CC(SETHI(&h)); }
-    CC(hist_is(49, 50, 0));
+    CC(hist_is(49, 50, 1));      /* last iteration i=49: i & 1 == 1 */
     SETHI(&orig);
 }
 CT(gap11_con_history_cbsize_checked_first) {
@@ -111,9 +120,10 @@ CTD(gap11_con_history_no_console) {
     CONSOLE_HISTORY_INFO h = hist(50, 4, 0);
     SetLastError(0xBAD);
     BOOL r = SETHI(&h);
+    DWORD le = GetLastError();      /* cnote() resets the last error */
     CEQ(r, FALSE);
-    cnote("SetConsoleHistoryInfo without console -> err=%lu", GetLastError());
-    CCF(GetLastError() == ERROR_INVALID_HANDLE, "err=%lu", GetLastError());
+    cnote("SetConsoleHistoryInfo without console -> err=%lu", le);
+    CCF(le == ERROR_INVALID_HANDLE, "err=%lu", le);
     h.cbSize = 5;
     FAILS(SETHI(&h), ERROR_INVALID_PARAMETER);      /* client-side size check precedes any console access */
 }

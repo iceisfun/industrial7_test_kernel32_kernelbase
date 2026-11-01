@@ -425,9 +425,10 @@ GT(envstr_limits) {
         b[k++] = 0; b[k++] = 0;
         SetLastError(0xBAD);
         BOOL r = U(SetEnvironmentStringsW)(b);
+        DWORD le = GetLastError(); /* t_is_wine() calls GetProcAddress and clobbers the last error (P1 gap_12) */
         BOOL want = (variant == 1 || variant == 3);
         GCF(r == want || (t_is_wine() && variant == 2), "variant %d (name %zu, value %zu) ret=%d", variant, nl, vl, r);
-        if (!r && !t_is_wine()) GERR(ERROR_INVALID_PARAMETER);
+        if (!r && !t_is_wine()) { SetLastError(le); GERR(ERROR_INVALID_PARAMETER); }
     }
     free(b);
     GC(U(SetEnvironmentStringsW)(orig));
@@ -590,20 +591,24 @@ TEST(gap12_affinity_update_mode_invalid_flags_precede_handle) {
     EXPECT_EQ(U(SetProcessAffinityUpdateMode)((HANDLE)(ULONG_PTR)0x7777, 0xFFFFFFFF), FALSE);
     EXPECT_ERR(ERROR_INVALID_PARAMETER);
 }
+/* P1 (gap_12): ntoskrnl!NtSetInformationProcess(ProcessAffinityUpdateMode=0x2d) accepts only the current-process
+ * pseudo handle (-1) and returns STATUS_INVALID_PARAMETER for every other handle value, before any handle lookup. So
+ * NULL, closed, wrong-type, thread pseudo-handle and real (even full-access or query-only) process handles all give
+ * ERROR_INVALID_PARAMETER. */
 TEST(gap12_affinity_update_mode_bad_handles) {
     REQUIRE(U(SetProcessAffinityUpdateMode));
     if (t_is_wine()) { t_skip("emulator does not implement SetProcessAffinityUpdateMode"); return; }
     SET_ERR(0xBAD);
     EXPECT_EQ(U(SetProcessAffinityUpdateMode)(NULL, 0), FALSE);
-    EXPECT_ERR(ERROR_INVALID_HANDLE);
+    EXPECT_ERR(ERROR_INVALID_PARAMETER);
     HANDLE e = CreateEventW(NULL, TRUE, FALSE, NULL); CloseHandle(e);
     SET_ERR(0xBAD);
     EXPECT_EQ(U(SetProcessAffinityUpdateMode)(e, 0), FALSE);
-    EXPECT_ERR(ERROR_INVALID_HANDLE);
+    EXPECT_ERR(ERROR_INVALID_PARAMETER);
     e = CreateEventW(NULL, TRUE, FALSE, NULL);
     SET_ERR(0xBAD);
     EXPECT_EQ(U(SetProcessAffinityUpdateMode)(e, 0), FALSE);
-    EXPECT_ERR(ERROR_INVALID_HANDLE);
+    EXPECT_ERR(ERROR_INVALID_PARAMETER);
     CloseHandle(e);
 }
 TEST(gap12_affinity_update_mode_thread_handle_wrong_type) {
@@ -611,7 +616,7 @@ TEST(gap12_affinity_update_mode_thread_handle_wrong_type) {
     if (t_is_wine()) { t_skip("emulator does not implement SetProcessAffinityUpdateMode"); return; }
     SET_ERR(0xBAD);
     EXPECT_EQ(U(SetProcessAffinityUpdateMode)(GetCurrentThread(), 0), FALSE);
-    EXPECT_ERR(ERROR_INVALID_HANDLE);
+    EXPECT_ERR(ERROR_INVALID_PARAMETER);
 }
 TEST(gap12_affinity_update_mode_query_only_handle) {
     REQUIRE(U(SetProcessAffinityUpdateMode));
@@ -620,19 +625,32 @@ TEST(gap12_affinity_update_mode_query_only_handle) {
     if (!p) { t_skip("OpenProcess"); return; }
     SET_ERR(0xBAD);
     EXPECT_EQ(U(SetProcessAffinityUpdateMode)(p, 0), FALSE);
-    EXPECT_ERR(ERROR_ACCESS_DENIED);
+    EXPECT_ERR(ERROR_INVALID_PARAMETER);
     CloseHandle(p);
 }
 GT(affinity_update_mode_valid) {
     GREQ(U(SetProcessAffinityUpdateMode));
     GWINESKIP("not implemented by the emulator");
+    /* P1 (gap_12): ntoskrnl!PspSetProcessAffinityUpdateMode: selecting the manual (flags 0) mode locks it for the life
+     * of the process; a later request for a different mode fails with STATUS_UNSUCCESSFUL. Auto-update first, then
+     * manual; repeating the same mode is accepted. */
     SetLastError(0xBAD);
-    GEQ(U(SetProcessAffinityUpdateMode)(GetCurrentProcess(), 0), TRUE);
+    GEQ(U(SetProcessAffinityUpdateMode)(GetCurrentProcess(), PROCESS_AFFINITY_ENABLE_AUTO_UPDATE), TRUE);
     GEQ(U(SetProcessAffinityUpdateMode)(GetCurrentProcess(), PROCESS_AFFINITY_ENABLE_AUTO_UPDATE), TRUE);
     GEQ(U(SetProcessAffinityUpdateMode)(GetCurrentProcess(), 0), TRUE);
+    GEQ(U(SetProcessAffinityUpdateMode)(GetCurrentProcess(), 0), TRUE);
+    SetLastError(0xBAD);
+    GEQ(U(SetProcessAffinityUpdateMode)(GetCurrentProcess(), PROCESS_AFFINITY_ENABLE_AUTO_UPDATE), FALSE);
+    GERR(ERROR_GEN_FAILURE);
+    /* a real process handle is rejected whatever its access (see the bad_handles test) */
     HANDLE p = OpenProcess(PROCESS_SET_INFORMATION | PROCESS_QUERY_LIMITED_INFORMATION, FALSE, GetCurrentProcessId());
-    if (p) { GEQ(U(SetProcessAffinityUpdateMode)(p, 1), TRUE); GEQ(U(SetProcessAffinityUpdateMode)(p, 0), TRUE); CloseHandle(p); }
-    for (int i = 0; i < 1000; i++) if (!U(SetProcessAffinityUpdateMode)(GetCurrentProcess(), i & 1)) { GCF(0, "iteration %d", i); return; }
+    if (p) {
+        SetLastError(0xBAD);
+        GEQ(U(SetProcessAffinityUpdateMode)(p, 0), FALSE);
+        GERR(ERROR_INVALID_PARAMETER);
+        CloseHandle(p);
+    }
+    for (int i = 0; i < 1000; i++) if (!U(SetProcessAffinityUpdateMode)(GetCurrentProcess(), 0)) { GCF(0, "iteration %d", i); return; }
 }
 
 /* ---------------- SetProcessDEPPolicy ---------------- */
@@ -830,14 +848,24 @@ TEST(gap12_firmware_without_privilege) {
     if (priv_enabled("SeSystemEnvironmentPrivilege")) { t_skip("SeSystemEnvironmentPrivilege is enabled in this token; not touching firmware"); return; }
     /* deleting a variable that does not exist (value NULL, size 0) under a throw-away GUID: the privilege check
      * rejects the request before the firmware is consulted */
+    /* P1 (gap_12): ntoskrnl!NtSetSystemEnvironmentValueEx only reaches the privilege check on a UEFI boot; on a legacy
+     * BIOS boot it returns STATUS_NOT_IMPLEMENTED (ERROR_INVALID_FUNCTION) first. Accept that only when the firmware
+     * type is BIOS. */
+    DWORD want = ERROR_PRIVILEGE_NOT_HELD;
+    {
+        typedef BOOL (WINAPI *gft_t)(DWORD *);
+        gft_t gft = (gft_t)GetProcAddress(GetModuleHandleW(L"kernel32.dll"), "GetFirmwareType");
+        DWORD ft = 0;
+        if (gft && gft(&ft) && ft == 1 /* FirmwareTypeBios */) want = ERROR_INVALID_FUNCTION;
+    }
     SET_ERR(0xBAD);
     BOOL r = U(SetFirmwareEnvironmentVariableW)(L"k32t_nonexistent", L"{6b32c0de-0000-4000-8000-000000000001}", NULL, 0);
     CHECK(r == FALSE);
-    EXPECT_ERR(ERROR_PRIVILEGE_NOT_HELD);
+    EXPECT_ERR(want);
     SET_ERR(0xBAD);
     r = U(SetFirmwareEnvironmentVariableA)("k32t_nonexistent", "{6b32c0de-0000-4000-8000-000000000001}", NULL, 0);
     CHECK(r == FALSE);
-    EXPECT_ERR(ERROR_PRIVILEGE_NOT_HELD);
+    EXPECT_ERR(want);
 }
 
 /* ---------------- SetIoRateControlInformationJobObject ---------------- */

@@ -103,7 +103,6 @@ ROW(createthread_absurd_stack,       U(CreateThread)(NULL, (SIZE_T)1 << 60, nop_
 ROW(getstdhandle_bad,                U(GetStdHandle)(0))
 ROW(getstdhandle_bad2,               U(GetStdHandle)(5))
 ROW(createmem_resnotif_badtype,      U(CreateMemoryResourceNotification)((MEMORY_RESOURCE_NOTIFICATION_TYPE)5))
-ROW(createconsolescreenbuffer_badflags, U(CreateConsoleScreenBuffer)(GENERIC_READ | GENERIC_WRITE, 0, NULL, 0, NULL))
 
 #define E(nm, kind, err) { #nm, row_##nm, kind, err }
 static const row_t g_rows[] = {
@@ -156,7 +155,7 @@ static const row_t g_rows[] = {
     E(createthread_absurd_stack, R_NULL, 0),
     E(getstdhandle_bad, R_INV, 0), E(getstdhandle_bad2, R_INV, 0),
     E(createmem_resnotif_badtype, R_NULL, ERROR_INVALID_PARAMETER),
-    E(createconsolescreenbuffer_badflags, R_INV, 0),
+    /* createconsolescreenbuffer_badflags removed: dwFlags other than 2 is not validated and flags 0 succeeds */
 };
 
 static void rows_setup(HANDLE *mutex, HANDLE *event, HANDLE *file) {
@@ -300,9 +299,11 @@ TEST(ho_ret_named_case_insensitive) {
     HANDLE a = CreateEventA(NULL, TRUE, FALSE, n);
     SET_ERR(0);
     HANDLE b = U(CreateEventA)(NULL, TRUE, FALSE, up);
-    CHECK(b != NULL); EXPECT_ERR(ERROR_ALREADY_EXISTS);
+    /* Win32 named-object lookup is case-sensitive (kernelbase passes no OBJ_CASE_INSENSITIVE): a name that
+       differs only in case creates a distinct object. */
+    CHECK(b != NULL); EXPECT_ERR(0);
     SetEvent(a);
-    if (b) EXPECT_EQ(WaitForSingleObject(b, 0), WAIT_OBJECT_0);
+    if (b) EXPECT_EQ(WaitForSingleObject(b, 0), WAIT_TIMEOUT);
     HANDLE c = U(OpenEventA)(SYNCHRONIZE, FALSE, up);
     CHECK(c != NULL);
     CloseHandle(a); if (b) CloseHandle(b); if (c) CloseHandle(c);
@@ -404,9 +405,24 @@ TEST(ho_ret_type_confusion_matrix) {
             if (k == K_PIPE && !strcmp(g_ops[o].n, "ReadFile")) continue;   /* could block on an empty pipe */
             if (g_ops[o].okmask & (1u << k)) continue;     /* the right type: covered by the positive tests */
             SET_ERR(0);
+            /* NtSetTimer/NtCancelTimer reference the handle with TIMER_MODIFY_STATE (0x2) and no object type,
+               so the access check runs before the type check: a wrong-type handle lacking bit 0x2 gives
+               ACCESS_DENIED, one holding it gives the type mismatch (ERROR_INVALID_HANDLE). */
+            DWORD want = ERROR_INVALID_HANDLE;
+            if ((!strcmp(g_ops[o].n, "SetWaitableTimer") || !strcmp(g_ops[o].n, "CancelWaitableTimer")) && !(ho_access(g_kh[k]) & 0x2))
+                want = ERROR_ACCESS_DENIED;
             BOOL r = g_ops[o].f(g_kh[k]); DWORD e = GetLastError();
+            /* kernel32!GetExitCodeProcess: when kernelbase fails it falls back to BaseCheckForVDM(h, &code), which does
+               NtQueryEvent(h) and a CSR call (legacy VDM wait-event path). For a real event handle both succeed, the
+               exit code is filled in and TRUE is returned while the last error from the failed query (6) is left. */
+            if (!strcmp(g_ops[o].n, "GetExitCodeProcess") && k == K_EVENT) {
+                CHECKF(r == TRUE, "GetExitCodeProcess on event handle: legacy VDM fallback returns TRUE");
+                CHECKF(e == ERROR_INVALID_HANDLE, "GetExitCodeProcess on event: stale err=%lu want %lu", e, (DWORD)ERROR_INVALID_HANDLE);
+                continue;
+            }
+            if (r) t_note("P1b diag: %s on %s handle %p succeeded (err=%lu access=0x%lx)", g_ops[o].n, g_kn[k], (void *)g_kh[k], e, (unsigned long)ho_access(g_kh[k]));
             CHECKF(r == FALSE, "%s on %s handle succeeded", g_ops[o].n, g_kn[k]);
-            CHECKF(e == ERROR_INVALID_HANDLE, "%s on %s: err=%lu want 6", g_ops[o].n, g_kn[k], e);
+            CHECKF(e == want, "%s on %s: err=%lu want %lu", g_ops[o].n, g_kn[k], e, want);
         }
     }
     kinds_free();

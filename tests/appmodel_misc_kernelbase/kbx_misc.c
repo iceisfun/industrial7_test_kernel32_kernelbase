@@ -145,7 +145,20 @@ TEST(pwr_duplicate_handle_shares_request) {
     HANDLE h = pw_create(L"k32t dup");
     if (!h || h == INVALID_HANDLE_VALUE) return;
     HANDLE d = NULL;
-    CHECK(DuplicateHandle(GetCurrentProcess(), h, GetCurrentProcess(), &d, 0, FALSE, DUPLICATE_SAME_ACCESS));
+    BOOL dup_ok = DuplicateHandle(GetCurrentProcess(), h, GetCurrentProcess(), &d, 0, FALSE, DUPLICATE_SAME_ACCESS);
+    DWORD dup_err = GetLastError();
+    CHECKF(dup_ok, "DuplicateHandle(power request) err %lu", dup_err);
+    if (!dup_ok) {
+        /* diagnostics only (round 2 UNRESOLVED): does an explicit access mask change the outcome? */
+        HANDLE d2 = NULL;
+        BOOL ok2 = DuplicateHandle(GetCurrentProcess(), h, GetCurrentProcess(), &d2, SYNCHRONIZE, FALSE, 0);
+        t_note("DuplicateHandle(power request, SYNCHRONIZE) -> %d err %lu", ok2, ok2 ? 0 : GetLastError());
+        if (d2) CloseHandle(d2);
+        d2 = NULL;
+        ok2 = DuplicateHandle(GetCurrentProcess(), h, GetCurrentProcess(), &d2, 0, FALSE, DUPLICATE_SAME_ACCESS);
+        t_note("DuplicateHandle(power request) repeat -> %d err %lu", ok2, ok2 ? 0 : GetLastError());
+        if (d2) CloseHandle(d2);
+    }
     if (d) {
         CHECK(U(PowerSetRequest)(d, PowerRequestSystemRequired));
         CHECK(U(PowerClearRequest)(h, PowerRequestSystemRequired));
@@ -250,12 +263,12 @@ CHILD(kbx_enclave) {
         KC(!te(mem, TRUE));
         KC(GetLastError() != 0);
         SetLastError(0);
-        KC(!de(mem));
-        KC(GetLastError() != 0);
-        SetLastError(0);
         KC(!le(mem, L"k32t_no_such_enclave.dll"));
         KC(GetLastError() != 0);
-        VirtualFree(mem, 0, MEM_RELEASE);
+        /* ntdll!LdrDeleteEnclave falls through to NtFreeVirtualMemory(MEM_RELEASE) for a non-enclave address:
+           DeleteEnclave on plain memory frees it and succeeds */
+        KC(de(mem));
+        VirtualFree(mem, 0, MEM_RELEASE);   /* no-op if already released */
     }
     SetLastError(0);
     KC(!le(NULL, L"k32t_no_such_enclave.dll"));
@@ -755,13 +768,15 @@ TEST(inet_from_systemtime_table) {
 }
 TEST(inet_from_systemtime_weekday_recomputed) {
     REQUIRE(UN(InternetTimeFromSystemTimeA));
-    SYSTEMTIME t = st_(1994, 11, 7, 6, 8, 49, 37, 0);   /* wDayOfWeek out of range: derived from the date */
+    /* Win10 recomputes the weekday only when wDay > 6 (kernelbase asm: cmp word [rcx+6], 6); with wDay <= 6 the
+       wDayOfWeek is used as a raw table index, so an out-of-range value there is not a defined input. */
+    SYSTEMTIME t = st_(1994, 11, 7, 13, 8, 49, 37, 0);   /* wDayOfWeek out of range: derived from the date */
     char b[64];
     CHECK(UN(InternetTimeFromSystemTimeA)(&t, 0, b, sizeof b));
-    EXPECT_STR(b, "Sun, 06 Nov 1994 08:49:37 GMT");
+    EXPECT_STR(b, "Sun, 13 Nov 1994 08:49:37 GMT");
     t.wDayOfWeek = 0xFFFF;
     CHECK(UN(InternetTimeFromSystemTimeA)(&t, 0, b, sizeof b));
-    EXPECT_STR(b, "Sun, 06 Nov 1994 08:49:37 GMT");
+    EXPECT_STR(b, "Sun, 13 Nov 1994 08:49:37 GMT");
 }
 TEST(inet_from_systemtime_buffer_sizes) {
     REQUIRE(UN(InternetTimeFromSystemTimeA));
@@ -848,8 +863,9 @@ TEST(inet_to_systemtime_invalid) {
     CHECK(!UN(InternetTimeToSystemTimeA)("Sun, 06 Nov 1994 08:49:37 GMT", NULL, 0)); EXPECT_ERR(ERROR_INVALID_PARAMETER);
     CHECK(!UN(InternetTimeToSystemTimeA)("Sun, 06 Nov 1994 08:49:37 GMT", &t, 1)); EXPECT_ERR(ERROR_INVALID_PARAMETER);
     CHECK(!UN(InternetTimeToSystemTimeA)("Sun, 06 Nov 1994 08:49:37 GMT", &t, 0xFFFFFFFF)); EXPECT_ERR(ERROR_INVALID_PARAMETER);
-    /* "" is deliberately absent: FInternalParseHttpDate fills missing fields from the current time, so an empty string parses */
-    static const char *bad[] = { "garbage", "Sun, 32 Nov 1994 08:49:37 GMT", "Sun, 06 Xyz 1994 08:49:37 GMT", "Sun, 06 Nov 1994 25:49:37 GMT", "12345" };
+    /* "", "garbage" and "12345" are deliberately absent: FInternalParseHttpDate fills missing fields from the current
+       time ("garbage" reads as a 'G' (GMT) token, "12345" as one number), so they parse on Win10 */
+    static const char *bad[] = { "Sun, 32 Nov 1994 08:49:37 GMT", "Sun, 06 Xyz 1994 08:49:37 GMT", "Sun, 06 Nov 1994 25:49:37 GMT" };
     for (size_t i = 0; i < ARRAYSIZE(bad); i++) {
         SET_ERR(0);
         BOOL r = UN(InternetTimeToSystemTimeA)(bad[i], &t, 0);
@@ -865,10 +881,10 @@ TEST(inet_to_systemtime_wide_and_roundtrip) {
     SET_ERR(0);
     CHECK(!UN(InternetTimeToSystemTimeW)(NULL, &t, 0));
     CHECK(!UN(InternetTimeToSystemTimeW)(L"Sun, 06 Nov 1994 08:49:37 GMT", NULL, 0));
-    CHECK(!UN(InternetTimeToSystemTimeW)(L"nonsense", &t, 0));
+    CHECK(!UN(InternetTimeToSystemTimeW)(L"Sun, 32 Nov 1994 08:49:37 GMT", &t, 0));   /* day > 31 is rejected; "nonsense" parses as Nov on Win10 */
     /* round trip over a range of dates */
     for (int i = 0; i < 400; i++) {
-        SYSTEMTIME a = st_((WORD)(1980 + i % 60), (WORD)(1 + i % 12), 9, (WORD)(1 + i % 28), (WORD)(i % 24), (WORD)(i % 60), (WORD)((i * 7) % 60), 0), b;
+        SYSTEMTIME a = st_((WORD)(1980 + i % 60), (WORD)(1 + i % 12), (WORD)(i % 7), (WORD)(1 + i % 28), (WORD)(i % 24), (WORD)(i % 60), (WORD)((i * 7) % 60), 0), b;
         char s[64];
         if (!UN(InternetTimeFromSystemTimeA)(&a, 0, s, sizeof s)) { CHECK(0); break; }
         memset(&b, 0, sizeof b);
@@ -897,7 +913,8 @@ TEST(remoteptr_matches_local) {
     CHECK(UN(EncodeRemotePointer)(GetCurrentProcess(), p, &e) == S_OK);
     EXPECT_EQ(e, U(EncodePointer)(p));
     CHECK(U(DecodePointer)(e) == p);
-    HANDLE real = OpenProcess(PROCESS_QUERY_INFORMATION, FALSE, GetCurrentProcessId());
+    /* ntoskrnl NtQueryInformationProcess(ProcessCookie) references a non-pseudo handle with PROCESS_VM_WRITE (0x20) */
+    HANDLE real = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_WRITE, FALSE, GetCurrentProcessId());
     if (real) {
         PVOID e2 = NULL;
         CHECK(UN(EncodeRemotePointer)(real, p, &e2) == S_OK);

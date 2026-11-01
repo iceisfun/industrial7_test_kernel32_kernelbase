@@ -78,9 +78,10 @@ TEST(gap7_isprocesscritical_invalid_handle) {
     EXPECT_ERR(ERROR_INVALID_HANDLE);
     CHECK(crit == 0x55);
     SET_ERR(0);
-    CHECK(UN(IsProcessCritical)(INVALID_HANDLE_VALUE, &crit) == FALSE);
-    DWORD e = GetLastError();
-    CHECKF(e == ERROR_INVALID_HANDLE || e == ERROR_INVALID_PARAMETER, "err %lu", e);
+    /* (HANDLE)-1 is the current-process pseudo handle (GetCurrentProcess docs): the query succeeds */
+    CHECK(UN(IsProcessCritical)(INVALID_HANDLE_VALUE, &crit) == TRUE);
+    CHECK(crit == FALSE);
+    crit = 0x55;
     HANDLE ev = CreateEventA(NULL, TRUE, FALSE, NULL);
     SET_ERR(0);
     CHECK(UN(IsProcessCritical)(ev, &crit) == FALSE);

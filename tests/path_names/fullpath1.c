@@ -573,6 +573,9 @@ TEST(path_names_fullpath_transacted_null_transaction) {
     if (t_is_wine()) { t_skip("transacted stubs"); return; }
     WCHAR bw[MAX_PATH], *fw;
     SET_ERR(0);
+    /* Win10 kernel32!GetFullPathNameTransactedW rejects a NULL (0) or INVALID_HANDLE_VALUE transaction
+       handle with ERROR_INVALID_TRANSACTION (0x1a2c) before resolving the path */
     DWORD n = UK(GetFullPathNameTransactedW)(L"C:\\a\\..\\b", MAX_PATH, bw, &fw, NULL);
-    CHECK(n == 4 && pn_weq(bw, "C:\\b"));
+    CHECK(n == 0);
+    EXPECT_ERR(6700 /* ERROR_INVALID_TRANSACTION = 0x1a2c */);
 }

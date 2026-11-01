@@ -253,7 +253,8 @@ TEST(ftime_set_without_minus1_write_updates_time) {
     CHECK(CloseHandle(h));
     h = fa_openl("ft_upd.txt", GENERIC_READ, FA_SHARE_ALL, OPEN_EXISTING, 0);
     CHECK(U(GetFileTime)(h, NULL, NULL, &w));
-    CHECKF(fa_ft64(w) > fa_ft64(t1) + 1000 * FA_SEC, "write time %llx not updated", fa_ft64(w));
+    /* P1: an explicit write time set through a handle suppresses the automatic update from writes through that same handle, even without -1 (Win10 NTFS keeps t1 exactly) */
+    CHECKF(fa_ft64(w) == fa_ft64(t1), "write time %llx want %llx", fa_ft64(w), fa_ft64(t1));
     CloseHandle(h); fa_rml("ft_upd.txt");
 }
 TEST(ftime_set_explicit_time_survives_close_and_write) {
@@ -475,7 +476,9 @@ TEST(ftime_set_on_pipe_and_console_like_handles) {
     t_note("GetFileTime(pipe) = %d err=%lu", g, g ? 0 : GetLastError());
     SetLastError(0); BOOL s = U(SetFileTime)(w, &t, NULL, NULL);
     t_note("SetFileTime(pipe) = %d err=%lu", s, s ? 0 : GetLastError());
-    CHECK(!s);
+    /* P1: kernelbase SetFileTime is a plain NtSetInformationFile(FileBasicInformation); the named-pipe file system
+       accepts it on a pipe handle (Win10 baseline: 1, err 0), so kernel32 must pass that success through */
+    CHECK(s);
     CloseHandle(r); CloseHandle(w);
 }
 TEST(ftime_stress_set_get_loop) {

@@ -119,7 +119,7 @@ static void record(dsess *s, DEBUG_EVENT *e, ev_t *r) {
     case UNLOAD_DLL_DEBUG_EVENT: r->base = e->u.UnloadDll.lpBaseOfDll; break;
     case OUTPUT_DEBUG_STRING_EVENT: {
         r->uni = e->u.DebugString.fUnicode; r->slen = e->u.DebugString.nDebugStringLength;
-        SIZE_T n = r->slen * (r->uni ? 2 : 1); if (n > 256) n = 256; SIZE_T got = 0;
+        SIZE_T n = r->slen;   /* byte count for both variants on Windows 10 */ if (n > 256) n = 256; SIZE_T got = 0;
         if (r->uni) ReadProcessMemory(s->pi.hProcess, e->u.DebugString.lpDebugStringData, r->wstr, n, &got);
         else ReadProcessMemory(s->pi.hProcess, e->u.DebugString.lpDebugStringData, r->str, n, &got);
         break; }
@@ -305,7 +305,7 @@ TEST(eed_dbg_output_debug_string_wide_with_ex) {
     if (j >= 0) {
         EXPECT_EQ(s.ev[j].uni, 1);
         EXPECT_WSTR(s.ev[j].wstr, L"k32t-W-string");
-        EXPECT_EQ(s.ev[j].slen, wcslen(L"k32t-W-string") + 1);
+        EXPECT_EQ(s.ev[j].slen, (wcslen(L"k32t-W-string") + 1) * sizeof(WCHAR));   /* Windows 10 reports Unicode nDebugStringLength in bytes */
     }
     dbg_finish(&s);
 }
@@ -466,7 +466,13 @@ TEST(eed_dbg_breakpoint_context_rip_after_int3) {
     if (b2 >= 0) {
         EXPECT_EQ((ULONG_PTR)s.user, (ULONG_PTR)s.ev[b2].addr + 1);
         EXPECT_EQ(s.hits, 0xCC);
-        EXPECT_EQ((ULONG_PTR)s.ev[b2].addr, (ULONG_PTR)GetProcAddress(t_ntdll(), "DbgBreakPoint"));
+        /* Win7: kernel32!DebugBreak forwards to ntdll!DbgBreakPoint. Windows 10: kernelbase!DebugBreak carries its own int3 (nop; int3). Accept either. */
+        ULONG_PTR dbp = (ULONG_PTR)GetProcAddress(t_ntdll(), "DbgBreakPoint"), db = 0;
+        /* kernel32!DebugBreak is a jmp thunk into kernelbase on Windows 10; scan the kernelbase body (and kernel32 if there is no kernelbase). */
+        HMODULE kb = GetModuleHandleA("kernelbase.dll");
+        const unsigned char *dbf = (const unsigned char *)GetProcAddress(kb ? kb : t_kernel32(), "DebugBreak");
+        for (int k = 0; dbf && k < 8; k++) if (dbf[k] == 0xCC) { db = (ULONG_PTR)dbf + k; break; }
+        CHECKF((ULONG_PTR)s.ev[b2].addr == dbp || (db && (ULONG_PTR)s.ev[b2].addr == db), "bp at %p, DbgBreakPoint %p, DebugBreak int3 %p", s.ev[b2].addr, (void *)dbp, (void *)db);
     }
     dbg_finish(&s);
 }
@@ -565,10 +571,11 @@ TEST(eed_dbg_wait_timeout_121) {
     dsess s; dbg_start(&s, "dbg_idle", "", DBG_FLAGS, NULL, 0); if (!s.pi.hProcess) return;
     s.cb = NULL;
     /* drain the startup events (the loader breakpoint is the last one) */
-    DWORD t0 = GetTickCount(); int seen_bp = 0;
-    while (!seen_bp && GetTickCount() - t0 < 15000) {
+    DWORD t0 = GetTickCount(); int seen_bp = 0, quiet = 0;
+    /* more startup events (thread/DLL activity) can follow the loader breakpoint: drain until the queue has been quiet for 500 ms */
+    while (!quiet && GetTickCount() - t0 < 15000) {
         DEBUG_EVENT e;
-        if (!U(WaitForDebugEvent)(&e, 500)) continue;
+        if (!U(WaitForDebugEvent)(&e, 500)) { if (seen_bp) quiet = 1; continue; }
         if (e.dwDebugEventCode == EXCEPTION_DEBUG_EVENT) seen_bp = 1;
         if (e.dwDebugEventCode == LOAD_DLL_DEBUG_EVENT && e.u.LoadDll.hFile) CloseHandle(e.u.LoadDll.hFile);
         if (e.dwDebugEventCode == CREATE_PROCESS_DEBUG_EVENT && e.u.CreateProcessInfo.hFile) CloseHandle(e.u.CreateProcessInfo.hFile);

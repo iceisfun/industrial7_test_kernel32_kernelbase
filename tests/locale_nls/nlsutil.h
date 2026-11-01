@@ -71,7 +71,7 @@ UDECL(int, GetCalendarInfoEx, (LPCWSTR, CALID, LPCWSTR, CALTYPE, LPWSTR, int, LP
 UDECL(BOOL, EnumCalendarInfoExEx, (K_CALEXEX_PROC, LPCWSTR, CALID, LPCWSTR, CALTYPE, LPARAM));
 UDECL(BOOL, EnumTimeFormatsEx, (K_TIMEEX_PROC, LPCWSTR, DWORD, LPARAM));
 UDECL(BOOL, EnumDateFormatsExEx, (K_DATEEXEX_PROC, LPCWSTR, DWORD, LPARAM));
-UDECL(int, GetGeoInfoExK, (PWSTR, DWORD, PWSTR, int));
+UDECL(int, GetGeoInfoEx, (PWSTR, DWORD, PWSTR, int));
 
 static int nls_isascii(const WCHAR *s) { for (; *s; s++) if (*s > 0x7f) return 0; return 1; }
 

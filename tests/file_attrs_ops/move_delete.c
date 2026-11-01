@@ -84,9 +84,17 @@ TEST(fmove_replace_directory_dest_denied) {
 TEST(fmove_replace_dir_over_file_denied) {
     REQUIRE(U(MoveFileExW));
     char a[MAX_PATH * 2], b[MAX_PATH * 2]; fa_mkdir("mv_df1"); fa_mkfile_s("mv_df2.txt", "dst"); pp(a, "mv_df1"); pp(b, "mv_df2.txt");
-    SetLastError(0); EXPECT_EQ(mvexW(a, b, MOVEFILE_REPLACE_EXISTING), FALSE);
-    DWORD e = GetLastError(); CHECKF(e == ERROR_ACCESS_DENIED || e == ERROR_ALREADY_EXISTS, "err %lu", e);
-    CHECK(fa_content_is(b, "dst"));
+    SetLastError(0); BOOL r = mvexW(a, b, MOVEFILE_REPLACE_EXISTING);
+    DWORD e = GetLastError();
+    if (!r) {
+        CHECKF(e == ERROR_ACCESS_DENIED || e == ERROR_ALREADY_EXISTS, "err %lu", e);
+        CHECK(fa_content_is(b, "dst"));
+    } else {
+        /* P1: Win10 NTFS replaces the file with the directory (kernelbase issues a plain rename with ReplaceIfExists) */
+        DWORD at = fa_attr(b);
+        CHECK(at != INVALID_FILE_ATTRIBUTES && (at & FILE_ATTRIBUTE_DIRECTORY));
+        CHECK(!fa_exists(a));
+    }
     fa_rm(a); fa_rm(b);
 }
 TEST(fmove_replace_nonempty_dir_over_dir) {

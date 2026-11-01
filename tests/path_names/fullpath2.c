@@ -53,9 +53,14 @@ CHILD(fp_cwd_root) {
 }
 TEST(path_names_fullpath_cwd_root_child) { EXPECT_EQ(t_run_child("fp_cwd_root", NULL, 25000), 0); }
 
-CHILD(fp_drive_vars) {
+/* Win10 ntdll!RtlGetFullPathName_Ustr validates a "=X:" value (RtlpCheckRelativeDrive opens the directory) and
+   resets the variable to "X:\\" when it does not exist. The cases therefore need a real directory on a drive
+   other than the cwd drive: the child maps Q: to its scratch dir with DefineDosDevice (session-local, removed
+   before exit) and skips (exit 77) if Q: is already in use or the mapping cannot be created. */
+static int fp_drive_vars_body(void) {
     char got[MAX_PATH]; WCHAR gw[MAX_PATH];
     SetEnvironmentVariableA("=Q:", "Q:\\k32\\dir");
+    { DWORD n0 = U(GetFullPathNameA)("Q:foo", sizeof got, got, NULL); printf("  NOTE Q:foo -> [%s] n=%lu\n", got, n0); }
     CK(U(GetFullPathNameA)("Q:foo", sizeof got, got, NULL) == 14 && !strcmp(got, "Q:\\k32\\dir\\foo"), 10);
     CK(U(GetFullPathNameA)("q:foo", sizeof got, got, NULL) == 14 && !_stricmp(got, "Q:\\k32\\dir\\foo"), 11);
     CK(U(GetFullPathNameA)("Q:", sizeof got, got, NULL) == 10 && !strcmp(got, "Q:\\k32\\dir"), 12);
@@ -65,15 +70,26 @@ CHILD(fp_drive_vars) {
     char *fp = (char *)SENT;
     CK(U(GetFullPathNameA)("Q:foo.txt", sizeof got, got, &fp) && fp && !strcmp(fp, "foo.txt"), 16);
     CK(U(GetFullPathNameW)(L"Q:w", MAX_PATH, gw, NULL) == 12 && pn_weq(gw, "Q:\\k32\\dir\\w"), 17);
-    /* trailing backslash in the variable must not be doubled; a root value works */
+    /* trailing backslash in the variable: Win10 ntdll!RtlGetFullPathName_Ustr appends '\\' to any =X: value longer
+       than 3 chars without checking for an existing one, so the separator is doubled (Wine keeps the old expectation); a root
+       value works */
     SetEnvironmentVariableA("=Q:", "Q:\\k32\\dir\\");
-    CK(U(GetFullPathNameA)("Q:foo", sizeof got, got, NULL) && !strcmp(got, "Q:\\k32\\dir\\foo"), 20);
+    {   DWORD n20 = U(GetFullPathNameA)("Q:foo", sizeof got, got, NULL);
+        printf("  NOTE =Q:=Q:\\k32\\dir\\ : Q:foo -> [%s] n=%lu\n", got, n20);
+        if (t_is_wine()) CK(n20 && !strcmp(got, "Q:\\k32\\dir\\foo"), 20);
+        else CK(n20 == 15 && !strcmp(got, "Q:\\k32\\dir\\\\foo"), 20);
+    }
     SetEnvironmentVariableA("=Q:", "Q:\\");
     CK(U(GetFullPathNameA)("Q:foo", sizeof got, got, NULL) == 6 && !strcmp(got, "Q:\\foo"), 21);
     CK(U(GetFullPathNameA)("Q:", sizeof got, got, NULL) == 3 && !strcmp(got, "Q:\\"), 22);
     /* no variable: root of that drive */
     SetEnvironmentVariableA("=Q:", NULL);
     CK(U(GetFullPathNameA)("Q:foo", sizeof got, got, NULL) == 6 && !strcmp(got, "Q:\\foo"), 23);
+    if (!t_is_wine()) {
+        /* a variable naming a directory that does not exist is reset to the drive root */
+        SetEnvironmentVariableA("=Q:", "Q:\\k32\\nonexistent");
+        CK(U(GetFullPathNameA)("Q:foo", sizeof got, got, NULL) == 6 && !strcmp(got, "Q:\\foo"), 24);
+    }
     /* a variable naming a different drive is still used verbatim for the path part */
     SetEnvironmentVariableA("=Q:", "R:\\other");
     DWORD n = U(GetFullPathNameA)("Q:foo", sizeof got, got, NULL);
@@ -81,7 +97,35 @@ CHILD(fp_drive_vars) {
     SetEnvironmentVariableA("=Q:", NULL);
     return 0;
 }
-TEST(path_names_fullpath_drive_variables_child) { EXPECT_EQ(t_run_child("fp_drive_vars", NULL, 25000), 0); }
+CHILD(fp_drive_vars) {
+    char tgt[MAX_PATH + 8], sub[MAX_PATH + 16], dev[MAX_PATH];
+    if (QueryDosDeviceA("Q:", dev, sizeof dev)) { printf("  NOTE Q: in use, skipped\n"); return 77; }
+    snprintf(sub, sizeof sub, "%sk32", t_tmpdir());
+    CreateDirectoryA(sub, NULL);
+    snprintf(sub, sizeof sub, "%sk32\\dir", t_tmpdir());
+    CreateDirectoryA(sub, NULL);
+    snprintf(tgt, sizeof tgt, "\\??\\%s", t_tmpdir());
+    tgt[strlen(tgt) - 1] = 0;
+    if (!DefineDosDeviceA(DDD_RAW_TARGET_PATH, "Q:", tgt)) { printf("  NOTE DefineDosDevice failed %lu, skipped\n", GetLastError()); return 77; }
+    {   /* precondition: the mapping must resolve for this process, else the =Q: directory check cannot succeed */
+        char tg2[MAX_PATH] = "";
+        DWORD qa = GetFileAttributesA("Q:\\k32\\dir"), qe = GetLastError();
+        QueryDosDeviceA("Q:", tg2, sizeof tg2);
+        printf("  NOTE Q: -> [%s]; attrs(Q:\\k32\\dir)=0x%lx err %lu\n", tg2, qa, qe);
+        if (qa == INVALID_FILE_ATTRIBUTES) {
+            DefineDosDeviceA(DDD_REMOVE_DEFINITION | DDD_RAW_TARGET_PATH | DDD_EXACT_MATCH_ON_REMOVE, "Q:", tgt);
+            return 77;
+        }
+    }
+    int rc = fp_drive_vars_body();
+    DefineDosDeviceA(DDD_REMOVE_DEFINITION | DDD_RAW_TARGET_PATH | DDD_EXACT_MATCH_ON_REMOVE, "Q:", tgt);
+    return rc;
+}
+TEST(path_names_fullpath_drive_variables_child) {
+    DWORD rc = t_run_child("fp_drive_vars", NULL, 25000);
+    if (rc == 77) { t_skip("no free Q: drive letter or DefineDosDevice denied"); return; }
+    EXPECT_EQ(rc, 0);
+}
 
 CHILD(fp_cwd_other_drive) {
     /* the cwd drive is "same drive": X:foo with X = cwd drive uses the cwd, not the variable */

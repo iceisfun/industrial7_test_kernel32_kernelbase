@@ -80,6 +80,8 @@ static void g_check4(const char *fn, g_fnA4 fa, g_fnW4 fw, const g_case4 *c, siz
         } else {
             t_note("%s(\"%s\",0x%lx): A hr=0x%lx \"%s\"  W hr=0x%lx \"%s\"", fn, c[i].in, (unsigned long)c[i].flags,
                    (unsigned long)r.hrA, SUCCEEDED(r.hrA) ? r.a : "-", (unsigned long)r.hrW, SUCCEEDED(r.hrW) ? wn : "-");
+            /* Win10: the A entry points return S_FALSE for an empty result (ShStrA::_SetStr returns 1 on an empty string), W returns S_OK */
+            if (c[i].in[0] == 0 && r.hrA == S_FALSE && r.hrW == S_OK) continue;
             CHECKF(r.hrA == r.hrW, "%s A/W hr differ for \"%s\": 0x%lx vs 0x%lx", fn, c[i].in, (unsigned long)r.hrA, (unsigned long)r.hrW);
             if (r.hrA == S_OK && r.hrW == S_OK)
                 CHECKF(!strcmp(r.a, wn), "%s A/W output differ for \"%s\": \"%s\" vs \"%s\"", fn, c[i].in, r.a, wn);

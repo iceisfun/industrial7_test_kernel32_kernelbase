@@ -76,7 +76,13 @@ TEST(gap3_acceptlang_w_size_query_null_buffer) {
     HRESULT hr = U(GetAcceptLanguagesW)(b, &full);
     HRESULT hq = U(GetAcceptLanguagesW)(NULL, &q);
     t_note("size query: full=%lu (hr 0x%lx) null-buffer q=%lu (hr 0x%lx)", full, (unsigned long)hr, q, (unsigned long)hq);
-    if (!t_is_wine()) { CHECK(q != 0xFFFF); CHECK(SUCCEEDED(hq)); }
+    /* kernelbase GetAcceptLanguagesW with a NULL buffer: if the AcceptLanguage value exists the registry size query succeeds;
+     * if it is absent (default Win10 profile) the function reports the maximum locale-name size (0x55) and the
+     * ERROR_FILE_NOT_FOUND HRESULT from the registry lookup */
+    if (!t_is_wine()) {
+        CHECK(q != 0xFFFF);
+        CHECKF(SUCCEEDED(hq) || (hq == HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND) && q == 0x55), "hq 0x%lx q %lu", (unsigned long)hq, q);
+    }
 }
 TEST(gap3_acceptlang_w_small_buffers) {
     REQUIRE(U(GetAcceptLanguagesW));
@@ -89,7 +95,13 @@ TEST(gap3_acceptlang_w_small_buffers) {
         hr = U(GetAcceptLanguagesW)(b, &n);
         CHECKF(FAILED(hr), "cch %lu hr 0x%lx", cch, (unsigned long)hr);
         /* kernelbase GetAcceptLanguagesW: *psz = 0 up front, a too-small buffer fails (MORE_DATA / locale-name failure) without writing */
-        if (!t_is_wine()) CHECKF(b[0] == 0, "cch %lu buffer not terminated", cch);
+        /* registry path: *psz = 0 up front; locale-name fallback (value absent): StringCchCopyW truncates and null-terminates.
+         * Either way a terminator lies within the first cch characters. */
+        if (!t_is_wine()) {
+            DWORD term = 0;
+            for (DWORD i = 0; i < cch; i++) if (b[i] == 0) { term = 1; break; }
+            CHECKF(term, "cch %lu buffer not terminated", cch);
+        }
         CHECKF(b[cch] == 0x7777, "cch %lu overran buffer", cch);
     }
     WCHAR b[256]; DWORD n = nf + 1;

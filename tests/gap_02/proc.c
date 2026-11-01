@@ -85,10 +85,21 @@ TEST(gap2_cpau_impersonation_token_rejected) {
     src = g2_open_proc_token(TOKEN_DUPLICATE | TOKEN_QUERY);
     if (!src) { CHECK(0); return; }
     if (DuplicateTokenEx(src, MAXIMUM_ALLOWED, NULL, SecurityImpersonation, TokenImpersonation, &imp)) {
+        /* Win10: SeIsTokenAssignableToProcess only rejects impersonation tokens below
+           SecurityImpersonation (STATUS_BAD_TOKEN_TYPE), so a SecurityImpersonation token is accepted */
+        SET_ERR(0);
+        BOOL ok = launch_echo(f, imp, 5, 0, &pi);
+        t_note("impersonation token (level impersonation): ok=%d err=%lu", ok, ok ? 0 : GetLastError());
+        CHECK(ok);
+        if (ok) { DWORD xc = wait_exit(&pi); EXPECT_EQ(xc, 5); }
+        CloseHandle(imp);
+    }
+    imp = NULL;
+    if (DuplicateTokenEx(src, MAXIMUM_ALLOWED, NULL, SecurityIdentification, TokenImpersonation, &imp)) {
         SET_ERR(0);
         BOOL ok = launch_echo(f, imp, 5, 0, &pi);
         CHECK(!ok);
-        t_note("impersonation token: err=%lu", GetLastError());
+        t_note("impersonation token (identification level): err=%lu", GetLastError());
         if (ok) wait_exit(&pi);
         CloseHandle(imp);
     }
@@ -163,7 +174,14 @@ TEST(gap2_cpau_not_an_executable) {
     CloseHandle(h);
     SET_ERR(0);
     CHECK(!f(NULL, app, NULL, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi));
-    EXPECT_ERR(ERROR_BAD_EXE_FORMAT);
+    /* kernelbase CreateProcessInternalW picks 0xc1 (ERROR_BAD_EXE_FORMAT) or 0xd8 (ERROR_EXE_MACHINE_TYPE_MISMATCH)
+       from the caller PEB ImageSubsystemMajorVersion (> 3 gives 0xd8). The PEB field is the calling image's
+       OptionalHeader.MajorSubsystemVersion, so the expected code is derived from this test image, not tolerated. */
+    { const BYTE *base = (const BYTE *)GetModuleHandleA(NULL);
+      const IMAGE_NT_HEADERS *nt = (const IMAGE_NT_HEADERS *)(base + ((const IMAGE_DOS_HEADER *)base)->e_lfanew);
+      DWORD want = nt->OptionalHeader.MajorSubsystemVersion > 3 ? ERROR_EXE_MACHINE_TYPE_MISMATCH : ERROR_BAD_EXE_FORMAT;
+      DWORD e = GetLastError(); t_note("non-PE image: err=%lu (subsystem major %u)", e, nt->OptionalHeader.MajorSubsystemVersion);
+      CHECKF(e == want, "err %lu want %lu", e, want); }
     DeleteFileA(app);
 }
 TEST(gap2_cpau_inherit_handles_env_and_cwd) {

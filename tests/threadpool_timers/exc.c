@@ -60,6 +60,10 @@ static DWORD WINAPI x_wi_av(LPVOID p) { *(volatile int *)0 = 1; return 0; }
 static VOID CALLBACK x_wot_av(PVOID p, BOOLEAN f) { *(volatile int *)0 = 1; }
 static VOID NTAPI x_timer_raise(PTP_CALLBACK_INSTANCE i, PVOID p, PTP_TIMER t) { RaiseException(0xE0004321, 0, 0, NULL); }
 static VOID NTAPI x_work_raise(PTP_CALLBACK_INSTANCE i, PVOID p, PTP_WORK w) { RaiseException(0xE0005678, 0, 0, NULL); }
+static VOID NTAPI x_maylong(PTP_CALLBACK_INSTANCE i, PVOID p, PTP_WORK w) {
+    BOOL (WINAPI *f)(PTP_CALLBACK_INSTANCE) = (void *)t_proc("CallbackMayRunLong");
+    f(i);
+}
 static VOID NTAPI x_exit7(PTP_CALLBACK_INSTANCE i, PVOID p) { ExitProcess(7); }
 
 /* Runs `cb` once on the default pool via TrySubmitThreadpoolCallback; survives -> falls through. */
@@ -101,6 +105,15 @@ CHILD(tp_exc) {
     else if (!strcmp(c, "trysubmit_badflags")) {
         env.u.Flags = 4;
         CALL(BOOL (WINAPI *)(PTP_SIMPLE_CALLBACK, PVOID, PTP_CALLBACK_ENVIRON), "TrySubmitThreadpoolCallback")(exc_simple_cb, NULL, &env);
+    }
+    else if (!strcmp(c, "io_null_handle")) { CALL(PTP_IO (WINAPI *)(HANDLE, PTP_WIN32_IO_CALLBACK, PVOID, PTP_CALLBACK_ENVIRON), "CreateThreadpoolIo")(NULL, exc_io_cb, NULL, NULL); }
+    else if (!strcmp(c, "cb_longenv_maylong")) {
+        /* A LongFunction environment makes the pool call TpCallbackMayRunLong itself before the callback runs;
+         * a second, explicit CallbackMayRunLong in the callback then raises STATUS_INVALID_PARAMETER. */
+        SetThreadpoolCallbackRunsLong(&env);
+        PTP_WORK w = CALL(PTP_WORK (WINAPI *)(PTP_WORK_CALLBACK, PVOID, PTP_CALLBACK_ENVIRON), "CreateThreadpoolWork")(x_maylong, NULL, &env);
+        CALL(void (WINAPI *)(PTP_WORK), "SubmitThreadpoolWork")(w);
+        Sleep(6000);
     }
     else if (!strcmp(c, "submit_null")) { CALL(void (WINAPI *)(PTP_WORK), "SubmitThreadpoolWork")(NULL); }
     else if (!strcmp(c, "waitwork_null")) { CALL(void (WINAPI *)(PTP_WORK, BOOL), "WaitForThreadpoolWorkCallbacks")(NULL, FALSE); }

@@ -302,10 +302,15 @@ TEST(gap0_known_audit_success_failure_bits) {
         h = g0_ace(a2, 0);
         if (h) EXPECT_EQ(h->AceFlags, ((s ? SUCCESSFUL_ACCESS_ACE_FLAG : 0) | (f ? FAILED_ACCESS_ACE_FLAG : 0)));
     }
-    /* non-zero BOOLs are all treated as TRUE */
+    /* Win10 RtlAddAuditAccessAceEx takes the BOOLs as 'char' and tests only the low byte:
+       0x100 (low byte 0) is FALSE, 0x7fffffff (low byte 0xff) is TRUE */
     BYTE buf[64]; PACL acl = g0_acl(buf, sizeof buf, ACL_REVISION);
     CHECK(U(AddAuditAccessAceEx)(acl, ACL_REVISION, 0, 5, G0_SID(g0_sid_world), 0x100, 0x7fffffff));
     ACE_HEADER *h = g0_ace(acl, 0);
+    if (h) EXPECT_EQ(h->AceFlags, 0x80);
+    BYTE buf2[64]; PACL acl2 = g0_acl(buf2, sizeof buf2, ACL_REVISION);
+    CHECK(U(AddAuditAccessAceEx)(acl2, ACL_REVISION, 0, 5, G0_SID(g0_sid_world), 0x101, 0x7fffffff));
+    h = g0_ace(acl2, 0);
     if (h) EXPECT_EQ(h->AceFlags, 0xC0);
 }
 

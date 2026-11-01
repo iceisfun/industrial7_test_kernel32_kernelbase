@@ -243,7 +243,10 @@ TEST(gap5_ver_info_fixed_info_values) {
     VS_FIXEDFILEINFO *f = (VS_FIXEDFILEINFO *)(b + 0x28);
     EXPECT_EQ(f->dwSignature, 0xFEEF04BD);
     EXPECT_EQ(f->dwStrucVersion, 0x00010000);
-    EXPECT_EQ(HIWORD(f->dwFileVersionMS), 10);
+    /* GetFileVersionInfoExW rewrites dwFileVersionMS of a TrustedInstaller-owned file to 6.2 / 6.3 for a process
+     * without a Windows 10 compatibility manifest (the version lie); the product version is not touched. */
+    if (HIWORD(f->dwFileVersionMS) == 6) CHECK(f->dwFileVersionMS == 0x60002 || f->dwFileVersionMS == 0x60003);
+    else EXPECT_EQ(HIWORD(f->dwFileVersionMS), 10);
     EXPECT_EQ(HIWORD(f->dwProductVersionMS), 10);
     EXPECT_EQ(f->dwFileType, VFT_DLL);
     EXPECT_EQ(f->dwFileSubtype, 0);

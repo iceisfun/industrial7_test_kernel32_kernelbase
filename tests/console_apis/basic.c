@@ -1,7 +1,7 @@
 /* console_apis: standard handles, console modes, code pages, titles, window, process list */
 #include "ch.h"
 
-#define FAILS(call, err)  do { SetLastError(0xBAD); BOOL r_ = (call); CEQ(r_, 0); CERR(err); } while (0)
+#define FAILS(call, err)  do { SetLastError(0xBAD); BOOL r_ = (call); DWORD le_ = GetLastError(); CEQ(r_, 0); CERRV(le_, err); } while (0)
 
 UDECL(BOOL, SetStdHandleEx, (DWORD, HANDLE, PHANDLE));
 UDECL(BOOL, GetConsoleKeyboardLayoutNameA, (LPSTR));
@@ -131,7 +131,9 @@ CT(con_std_redirect_pipe) {
     FAILS(GetConsoleMode(hout_(), &m), ERROR_INVALID_HANDLE);
     FAILS(SetConsoleMode(hout_(), ENABLE_PROCESSED_OUTPUT), ERROR_INVALID_HANDLE);
     DWORD wr = 0;
-    FAILS(WriteConsoleW(hout_(), L"x", 1, &wr, NULL), ERROR_INVALID_HANDLE);
+    /* P1 EXPECT-FIX: Win10 WriteConsoleW sends the ConDrv ioctl straight to the handle; a pipe answers
+       ERROR_INVALID_FUNCTION (baseline 1). */
+    FAILS(WriteConsoleW(hout_(), L"x", 1, &wr, NULL), ERROR_INVALID_FUNCTION);
     CC(SetStdHandle(STD_OUTPUT_HANDLE, save));
     CloseHandle(r); CloseHandle(w);
 }
@@ -151,7 +153,8 @@ CT(con_std_redirect_file) {
     WCHAR wb[16]; DWORD got = 0;
     FAILS(GetConsoleMode(hin_(), &m), ERROR_INVALID_HANDLE);
     FAILS(SetConsoleMode(hin_(), 0), ERROR_INVALID_HANDLE);
-    FAILS(ReadConsoleW(hin_(), wb, 4, &got, NULL), ERROR_INVALID_HANDLE);
+    /* P1 EXPECT-FIX (audit: was a tolerance 6/1/87): a disk-file handle answers the ConDrv ioctl with its own status; baseline 87. */
+    FAILS(ReadConsoleW(hin_(), wb, 4, &got, NULL), ERROR_INVALID_PARAMETER);
     CC(SetStdHandle(STD_OUTPUT_HANDLE, so));
     CC(SetStdHandle(STD_INPUT_HANDLE, si));
     CloseHandle(f);
@@ -602,9 +605,15 @@ CT(con_title_buffer_sizes_a) {
         memset(b, 0x77, sizeof b);
         DWORD n = GetConsoleTitleA(b, sz);
         if (sz >= 7) { CEQ(n, 6); CSTR(b, "abcdef"); }
-        else {
+        else if (sz < 6) {
+            /* P1 EXPECT-FIX: Win10 GetConsoleTitleAImplHelper returns an empty string and 0 when the buffer is
+               shorter than the title (b[0] = 0, nothing else written). */
             cnote("GetConsoleTitleA size=%lu returned %lu", sz, n);
-            CCF(b[sz - 1] == 0, "size=%lu not NUL terminated", sz);
+            CEQ(n, 0); CEQ((unsigned char)b[0], 0);
+        } else {
+            /* sz == 6: exact fit; Win10 returns 6 and copies the 6 characters WITHOUT a terminating NUL. */
+            cnote("GetConsoleTitleA size=%lu returned %lu", sz, n);
+            CEQ(n, 6); CC(!memcmp(b, "abcdef", 6));
         }
         CEQ((unsigned char)b[sz], 0x77);
     }
@@ -680,13 +689,17 @@ CTF(con_title_original_matches_start_title, CREATE_NEW_CONSOLE, "k32t_title_orig
     WCHAR o[64], t[64]; char oa[64];
     DWORD n = GetConsoleOriginalTitleW(o, 64);
     cnote("original title \"%ls\" (%lu)", o, n);
+    /* P1b EXPECT-FIX: kernelbase GetConsoleOriginalTitleW is GetConsoleTitleInternal2(buf, nSize*2, 1) and, unlike
+       GetConsoleTitleW (which stores L'\0' at buf[n]), never terminates the string; the baseline printed the title
+       followed by stale stack text. Compare exactly n characters instead of relying on a terminator. UNVERIFIED-until-rerun */
+    cnote("o[n]=0x%x", n < 64 ? o[n] : 0xFFFF);
     /* an elevated console host may prefix the title; accept that */
-    CC(n >= 15 && !lstrcmpW(o + n - 15, L"k32t_title_orig"));
+    CC(n >= 15 && !memcmp(o + n - 15, L"k32t_title_orig", 15 * sizeof(WCHAR)));
     GetConsoleTitleW(t, 64);
     CC(lstrlenW(t) >= 15 && !lstrcmpW(t + lstrlenW(t) - 15, L"k32t_title_orig"));
     CC(SetConsoleTitleW(L"changed"));
     n = GetConsoleOriginalTitleW(o, 64);
-    CC(n >= 15 && !lstrcmpW(o + n - 15, L"k32t_title_orig"));
+    CC(n >= 15 && !memcmp(o + n - 15, L"k32t_title_orig", 15 * sizeof(WCHAR)));
     n = GetConsoleOriginalTitleA(oa, 64);
     CC(n >= 15 && !strcmp(oa + n - 15, "k32t_title_orig"));
 }
@@ -702,7 +715,13 @@ CTF(con_title_original_buffer_sizes, CREATE_NEW_CONSOLE, "k32t_title_orig") {
     CEQ(b[4], 0x7777);
     n = GetConsoleOriginalTitleW(b, 16);
     CEQ(n, 15);
-    CEQ(b[15], 0);
+    /* P1b EXPECT-FIX: GetConsoleOriginalTitleW does not store a terminator when the whole title fits (kernelbase
+       GetConsoleTitleInternal2 returns the server count and writes nothing, unlike GetConsoleTitleW which stores
+       buf[n] = 0 itself because the server reply carries no terminator); baseline b[15] stayed 0x7777.
+       Audit: the slot after the title is asserted untouched rather than left unchecked. UNVERIFIED-until-rerun */
+    CC(!memcmp(b, L"k32t_title_orig", 15 * sizeof(WCHAR)));
+    cnote("b[15]=0x%x after size 16", b[15]);
+    CEQ(b[15], 0x7777);
     n = GetConsoleOriginalTitleW(b, 15);
     cnote("original title size 15 -> %lu", n);
     CEQ(b[14], 0);

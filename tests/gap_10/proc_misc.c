@@ -92,8 +92,10 @@ TEST(gap10_qsam_overwrites_output) {
 }
 TEST(gap10_qsam_does_not_touch_last_error) {
     REQUIRE(U(QuerySecurityAccessMask)); WINE_QSAM();
-    DWORD m; SET_ERR(0x4242);
-    U(QuerySecurityAccessMask)(DACL_SECURITY_INFORMATION, &m);
+    DWORD m;
+    __typeof__(&QuerySecurityAccessMask) f = U(QuerySecurityAccessMask);   /* resolve first: a failed GetProcAddress sets the last error */
+    SET_ERR(0x4242);
+    f(DACL_SECURITY_INFORMATION, &m);
     EXPECT_ERR(0x4242);
 }
 TEST(gap10_qsam_vs_setsecurityaccessmask_differs) {
@@ -111,8 +113,9 @@ TEST(gap10_qsam_vs_setsecurityaccessmask_differs) {
 
 TEST(gap10_revert_without_impersonation) {
     REQUIRE(U(RevertToSelf));
+    __typeof__(&RevertToSelf) f = U(RevertToSelf);   /* resolve first: a failed GetProcAddress sets the last error */
     SET_ERR(0x1357);
-    BOOL r = U(RevertToSelf)();
+    BOOL r = f();
     EXPECT_EQ(r, TRUE);
     EXPECT_ERR(0x1357);
 }
@@ -876,11 +879,31 @@ TEST(gap10_badmem_register_unregister_loop) {
         if (h) { BOOL r = U(UnregisterBadMemoryNotification)(h); EQ1(r, TRUE); }
     }
 }
+/* GUARD: Win10 UnregisterBadMemoryNotification(NULL) dereferences the handle inside ntdll and raises an access violation;
+ * the call runs in its own thread and a vectored handler ends only that thread. */
+static volatile DWORD g_ubm_tid; static volatile int g_ubm_done; static volatile BOOL g_ubm_r;
+static LONG CALLBACK ubm_veh(PEXCEPTION_POINTERS ep) {
+    if (g_ubm_tid && g_ubm_tid == GetCurrentThreadId() && ep->ExceptionRecord->ExceptionCode == EXCEPTION_ACCESS_VIOLATION) {
+        g_ubm_tid = 0;
+        ExitThread(0xDEAD0000);
+    }
+    return EXCEPTION_CONTINUE_SEARCH;
+}
+static DWORD WINAPI ubm_thread(LPVOID arg) {
+    BOOL (WINAPI *f)(PVOID) = (BOOL (WINAPI *)(PVOID))arg;
+    g_ubm_tid = GetCurrentThreadId();
+    g_ubm_r = f(NULL);
+    g_ubm_tid = 0; g_ubm_done = 1;
+    return 0;
+}
 TEST(gap10_badmem_unregister_null) {
     REQUIRE(U(UnregisterBadMemoryNotification));
-    SET_ERR(0xBAD);
-    BOOL r = U(UnregisterBadMemoryNotification)(NULL);
-    t_note("UnregisterBadMemoryNotification(NULL) -> %d err=%lu", r, GetLastError());
+    g_ubm_done = 0; g_ubm_r = 0;
+    PVOID veh = AddVectoredExceptionHandler(1, ubm_veh);
+    HANDLE t = CreateThread(NULL, 0, ubm_thread, (LPVOID)U(UnregisterBadMemoryNotification), 0, NULL);
+    if (t) { WaitForSingleObject(t, 20000); CloseHandle(t); }
+    if (veh) RemoveVectoredExceptionHandler(veh);
+    t_note("UnregisterBadMemoryNotification(NULL): completed=%d ret=%d (0 completed = access violation in the callee)", g_ubm_done, (int)g_ubm_r);
 }
 TEST(gap10_badmem_callback_not_invoked_spuriously) {
     REQUIRE(U(RegisterBadMemoryNotification)); REQUIRE(U(UnregisterBadMemoryNotification));
@@ -950,9 +973,10 @@ TEST(gap10_rtg_w_stub_result) {
     SET_ERR(0xBAD);
     ULONG r = f(NULL, NULL, NULL, 0, NULL, NULL, NULL, NULL);
     t_note("kernelbase RegisterTraceGuidsW(all NULL) -> %lu (last error %lu)", r, GetLastError());
+    /* Win10: kernelbase forwards RegisterTraceGuidsW to ntdll!EtwRegisterTraceGuidsW, which rejects a NULL RegHandle/GUID/out-pointer */
     CHECK(r != ERROR_SUCCESS);
-    CHECK(r == ERROR_PROC_NOT_FOUND);
-    EXPECT_ERR(ERROR_PROC_NOT_FOUND);
+    CHECK(r == ERROR_INVALID_PARAMETER);
+    EXPECT_ERR(ERROR_INVALID_PARAMETER);
 }
 TEST(gap10_rtg_w_not_exported_by_kernel32) {
     CHECK(t_proc_kb("RegisterTraceGuidsW") != NULL || t_is_wine());

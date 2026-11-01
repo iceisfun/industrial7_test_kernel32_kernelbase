@@ -350,11 +350,11 @@ TEST(pmc_np_handlestate_wide_parity) {
     REQUIRE(U(CreateNamedPipeA)); REQUIRE(U(GetNamedPipeHandleStateA)); REQUIRE(U(GetNamedPipeHandleStateW));
     PIPE_NAME(nm);
     HANDLE s = pmc_server(nm, PIPE_ACCESS_DUPLEX, PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_NOWAIT, 2, 512, 512);
-    DWORD a = 1, w = 2, ca = 3, cw = 4, ma = 5, mw = 6, ta = 7, tw = 8;
-    CHECK(U(GetNamedPipeHandleStateA)(s, &a, &ca, &ma, &ta, NULL, 0));
-    CHECK(U(GetNamedPipeHandleStateW)(s, &w, &cw, &mw, &tw, NULL, 0));
-    EXPECT_EQ(a, w); EXPECT_EQ(ca, cw); EXPECT_EQ(ma, mw); EXPECT_EQ(ta, tw);
-    t_note("maxcollect=%lu collecttimeout=%lu", ma, ta);
+    DWORD a = 1, w = 2, ca = 3, cw = 4;
+    /* p1: documented: lpMaxCollectionCount/lpCollectDataTimeout must be NULL for a server-end handle or same-machine client */
+    CHECK(U(GetNamedPipeHandleStateA)(s, &a, &ca, NULL, NULL, NULL, 0));
+    CHECK(U(GetNamedPipeHandleStateW)(s, &w, &cw, NULL, NULL, NULL, 0));
+    EXPECT_EQ(a, w); EXPECT_EQ(ca, cw);
     CloseHandle(s);
 }
 TEST(pmc_np_handlestate_username) {

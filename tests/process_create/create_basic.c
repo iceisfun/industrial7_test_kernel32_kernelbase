@@ -209,9 +209,10 @@ TEST(pcreate_text_file_is_bad_exe_format) {
     pc_opts o; PROCESS_INFORMATION pi; WCHAR p[MAX_PATH * 2];
     pc_writefile("text.exe", t, sizeof t - 1); pc_tmpw(p, MAX_PATH * 2, "text.exe");
     memset(&o, 0, sizeof o); o.app = p; o.raw_cmd = L"x --child pc_exit77";
-    SET_ERR(0); CHECK(!pc_launch(&o, &pi)); EXPECT_ERR(ERROR_BAD_EXE_FORMAT);
+    /* a non-MZ file named .exe fails with 216 (EXE_MACHINE_TYPE_MISMATCH) on Windows 10 19041; 193 is the classic value (".txt" below gives 193) */
+    SET_ERR(0); CHECK(!pc_launch(&o, &pi)); { DWORD e = GetLastError(); CHECKF(e == ERROR_BAD_EXE_FORMAT || e == ERROR_EXE_MACHINE_TYPE_MISMATCH, "err %lu", e); }
     { static WCHAR qp[MAX_PATH * 2 + 4]; wsprintfW(qp, L"\"%s\"", p); o.app = NULL; o.raw_cmd = qp; }
-    SET_ERR(0); CHECK(!pc_launch(&o, &pi)); EXPECT_ERR(ERROR_BAD_EXE_FORMAT);
+    SET_ERR(0); CHECK(!pc_launch(&o, &pi)); { DWORD e = GetLastError(); CHECKF(e == ERROR_BAD_EXE_FORMAT || e == ERROR_EXE_MACHINE_TYPE_MISMATCH, "err %lu", e); }
 }
 TEST(pcreate_text_file_other_extension_is_bad_exe_format) {
     REQUIRE(UK(CreateProcessW));
@@ -233,7 +234,8 @@ TEST(pcreate_mz_only_is_bad_exe_format) {
     pc_opts o; PROCESS_INFORMATION pi; WCHAR p[MAX_PATH * 2];
     pc_writefile("mz.exe", "MZ", 2); pc_tmpw(p, MAX_PATH * 2, "mz.exe");
     memset(&o, 0, sizeof o); o.app = p; o.raw_cmd = L"x --child pc_exit77";
-    SET_ERR(0); CHECK(!pc_launch(&o, &pi)); { DWORD e = GetLastError(); CHECKF(e == ERROR_BAD_EXE_FORMAT || e == ERROR_FILE_INVALID, "err %lu", e); }
+    /* 216 (EXE_MACHINE_TYPE_MISMATCH) is what Windows 10 19041 reports for an invalid image named .exe */
+    SET_ERR(0); CHECK(!pc_launch(&o, &pi)); { DWORD e = GetLastError(); CHECKF(e == ERROR_BAD_EXE_FORMAT || e == ERROR_FILE_INVALID || e == ERROR_EXE_MACHINE_TYPE_MISMATCH, "err %lu", e); }
 }
 TEST(pcreate_truncated_pe_is_bad_exe_format) {
     REQUIRE(UK(CreateProcessW));
@@ -358,7 +360,13 @@ TEST(pcreate_winexec_error_returns) {
     EQV(U(WinExec)("k32t_no_such_program_zz.exe", SW_HIDE), 2);
     t_tmpfile(p, sizeof p, "no_such_dir\\x.exe"); { UINT r = U(WinExec)(p, SW_HIDE); CHECKF(r == 2 || r == 3, "got %u", r); }
     pc_writefile("winexec_bad.exe", "not an exe at all", 17); t_tmpfile(p, sizeof p, "winexec_bad.exe");
-    EQV(U(WinExec)(p, SW_HIDE), 11);
+    {   /* WinExec maps CreateProcess error 193 to 11 and any other error besides 2/3 to 0 */
+        STARTUPINFOA si; PROCESS_INFORMATION pi; char cmd[MAX_PATH * 2 + 4]; DWORD e; UINT want, r;
+        memset(&si, 0, sizeof si); si.cb = sizeof si; snprintf(cmd, sizeof cmd, "%s", p);
+        if (CreateProcessA(NULL, cmd, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) { TerminateProcess(pi.hProcess, 1); CloseHandle(pi.hProcess); CloseHandle(pi.hThread); want = 33; }
+        else { e = GetLastError(); want = e == ERROR_FILE_NOT_FOUND ? 2 : e == ERROR_PATH_NOT_FOUND ? 3 : e == ERROR_BAD_EXE_FORMAT ? 11 : 0; t_note("CreateProcess on the bad image: err %lu", e); }
+        r = U(WinExec)(p, SW_HIDE); CHECKF(r == want, "WinExec -> %u want %u", r, want);
+    }
 }
 TEST(pcreate_loadmodule_not_found) {
     REQUIRE(U(LoadModule));

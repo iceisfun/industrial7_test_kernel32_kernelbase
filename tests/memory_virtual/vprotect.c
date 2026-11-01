@@ -192,12 +192,13 @@ TEST(mv_vq_null_address_is_free) {
     EXPECT_EQ(m.AllocationBase, 0);
     EXPECT_EQ(m.State, MEM_FREE);
     EXPECT_EQ(m.Type, 0);
-    EXPECT_EQ(m.RegionSize, mv_sysinfo().lpMinimumApplicationAddress);
+    /* the free region runs from the queried page up to the next allocation, so its size depends on the process layout (Win10: 0x7ffe0000) */
+    CHECK(m.RegionSize >= (SIZE_T)(ULONG_PTR)mv_sysinfo().lpMinimumApplicationAddress && (m.RegionSize & (PG - 1)) == 0);
     EXPECT_EQ(m.Protect, PAGE_NOACCESS);
     t_note("free-region AllocationProtect=0x%lx", m.AllocationProtect);
     memset(&m, 0xEE, sizeof m);
     EXPECT_EQ(VQ((void *)0x1234, &m, sizeof m), sizeof m);
-    EXPECT_EQ(m.BaseAddress, 0);
+    EXPECT_EQ(m.BaseAddress, 0x1000);       /* free region: BaseAddress is the queried address rounded down to a page */
     EXPECT_EQ(m.State, MEM_FREE);
 }
 TEST(mv_vq_free_region_fields) {

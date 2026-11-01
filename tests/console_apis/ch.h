@@ -157,6 +157,8 @@ static void cnote(const char *fmt, ...) {
     if (a_ != b_) g_cpass++; else cfail(__FILE__, __LINE__, #a " != " #b, "got 0x%llx", a_); } while (0)
 /* GetLastError right after the failing call */
 #define CERR(e)      do { DWORD e_ = GetLastError(); if (e_ == (DWORD)(e)) g_cpass++; else cfail(__FILE__, __LINE__, "GetLastError == " #e, "got %lu want %lu", e_, (DWORD)(e)); } while (0)
+/* GetLastError value captured by the caller right after the call (cnote/cfail print and clobber it) */
+#define CERRV(ev, e) do { DWORD ev_ = (ev); if (ev_ == (DWORD)(e)) g_cpass++; else cfail(__FILE__, __LINE__, "GetLastError == " #e, "got %lu want %lu", ev_, (DWORD)(e)); } while (0)
 #define CREQ(p)      do { if (!(p)) { cline("SKIP missing export: " #p); g_cskip = 1; return; } } while (0)
 #define CREQG(p)     do { if (!(p)) { cline("SKIP missing export: " #p); return 0; } } while (0)
 #define CWINESKIP(why) do { if (t_is_wine()) { cline("SKIP " why); g_cskip = 1; return; } } while (0)

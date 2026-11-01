@@ -203,10 +203,19 @@ TEST(gap5_sd_dacl_bad_revision) {
     EXPECT_EQ(SDDACL(&sd, &present, &acl, &def), 0);
     EXPECT_ERR(ERROR_UNKNOWN_REVISION);
 }
+/* An UNNAMED event carries no security descriptor on Windows 10 (ObInsertObjectEx assigns one only when the
+ * object type requires security, the object has a name, or the caller supplied an SD), so owner/group/DACL
+ * queries return an empty descriptor. Use a uniquely named event; it is closed by the test. */
+static HANDLE g5_named_event(void) {
+    static int seq;
+    char nm[64];
+    snprintf(nm, sizeof nm, "Local\\k32t_g5sec_%lu_%d", GetCurrentProcessId(), seq++);
+    return CreateEventA(NULL, TRUE, FALSE, nm);
+}
 TEST(gap5_sd_dacl_from_kernel_object) {
     WINDOWS_ONLY();
     REQUIRE(SDDACL); REQUIRE(KOS);
-    HANDLE e = CreateEventA(NULL, TRUE, FALSE, NULL);
+    HANDLE e = g5_named_event();
     DWORD need = 0;
     BYTE buf[2048];
     SET_ERR(0);
@@ -222,7 +231,7 @@ TEST(gap5_sd_dacl_from_kernel_object) {
 TEST(gap5_kos_size_query_and_fetch) {
     WINDOWS_ONLY();
     REQUIRE(KOS);
-    HANDLE e = CreateEventA(NULL, TRUE, FALSE, NULL);
+    HANDLE e = g5_named_event();
     DWORD need = 0xCCCCCCCC; BYTE buf[4096];
     SET_ERR(0);
     CHECK(!KOS(e, DACL_SECURITY_INFORMATION | OWNER_SECURITY_INFORMATION, NULL, 0, &need));
@@ -250,7 +259,7 @@ TEST(gap5_kos_size_query_and_fetch) {
 TEST(gap5_kos_only_requested_parts) {
     WINDOWS_ONLY();
     REQUIRE(KOS);
-    HANDLE e = CreateEventA(NULL, TRUE, FALSE, NULL);
+    HANDLE e = g5_named_event();
     BYTE buf[4096]; DWORD need = 0;
     CHECK(KOS(e, OWNER_SECURITY_INFORMATION, buf, sizeof buf, &need));
     PSID owner = NULL, grp = NULL; BOOL def; BOOL present = 1; PACL acl;

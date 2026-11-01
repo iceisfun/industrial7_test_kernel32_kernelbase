@@ -269,18 +269,17 @@ TEST(eed_exc_noncontinuable_continue_raises_c0000025) {
     if (!setjmp(g_nc_jb)) {
         g_nc_armed = 1;
         RAISE(0xE0A00020, EXCEPTION_NONCONTINUABLE, 0, NULL);
-        reached = 1;     /* must not be reached */
+        reached = 1;
     }
     g_nc_armed = 0;
     U(RemoveVectoredExceptionHandler)(h);
-    EXPECT_EQ(reached, 0);
-    EXPECT_EQ(g_ncap, 2);
+    /* Windows 10: a vectored handler returning EXCEPTION_CONTINUE_EXECUTION ends RtlDispatchException immediately and the
+       thread resumes after RaiseException. STATUS_NONCONTINUABLE_EXCEPTION is only raised when a frame-based (SEH) handler
+       returns ExceptionContinueExecution for a noncontinuable record. */
+    EXPECT_EQ(reached, 1);
+    EXPECT_EQ(g_ncap, 1);
     EXPECT_EQ(g_cap[0].code, 0xE0A00020);
     EXPECT_EQ(g_cap[0].flags & EXCEPTION_NONCONTINUABLE, EXCEPTION_NONCONTINUABLE);
-    EXPECT_EQ(g_cap[1].code, STATUS_NONCONTINUABLE_EXCEPTION);
-    EXPECT_EQ(g_cap[1].flags & EXCEPTION_NONCONTINUABLE, EXCEPTION_NONCONTINUABLE);
-    EXPECT_EQ(g_cap[1].nparams, 0);
-    CHECKF(g_cap[1].chain != NULL, "chained record expected");
 }
 TEST(eed_exc_noncontinuable_flag_visible_to_handler) {
     NEEDVEH();

@@ -741,13 +741,34 @@ TEST(initonce_execute_failure_allows_retry) {
     EXPECT_EQ(io_calls, 3);
     EXPECT_EQ((ULONG_PTR)ctx, 0x40);
 }
+static volatile DWORD io_rb_tid, io_rb_exc; static volatile LONG io_rb_ret;
+static LONG CALLBACK io_rb_veh(PEXCEPTION_POINTERS p) {
+    if (GetCurrentThreadId() == io_rb_tid && p->ExceptionRecord->ExceptionCode == 0xc00000f1) {
+        io_rb_exc = p->ExceptionRecord->ExceptionCode; ExitThread(0);
+    }
+    return EXCEPTION_CONTINUE_SEARCH;
+}
+static DWORD WINAPI io_rb_thread(LPVOID p) {
+    INIT_ONCE o = INIT_ONCE_STATIC_INIT; PVOID ctx = NULL; (void)p;
+    io_rb_tid = GetCurrentThreadId();
+    io_rb_ret = U(InitOnceExecuteOnce)(&o, io_fn_ok, (PVOID)0x3, &ctx);
+    return 0;
+}
 TEST(initonce_execute_context_reserved_bits) {
     NEED_IO();
     INIT_ONCE o = INIT_ONCE_STATIC_INIT; io_calls = 0; PVOID ctx = NULL;
-    SET_ERR(0);
-    BOOL r = U(InitOnceExecuteOnce)(&o, io_fn_ok, (PVOID)0x3, &ctx);   /* context with low bits set cannot be stored */
-    t_note("InitOnceExecuteOnce with context 0x3 -> %d err %lu", r, GetLastError());
-    CHECK(!r);
+    (void)o; (void)ctx;
+    /* Win10 RtlRunOnceExecuteOnce raises STATUS_INVALID_PARAMETER_5 (0xc00000f1) when the stored context
+     * has reserved low bits, so run it on a helper thread with a vectored handler that ends the thread. */
+    io_rb_tid = 0; io_rb_exc = 0; io_rb_ret = 0;
+    PVOID veh = AddVectoredExceptionHandler(1, io_rb_veh);
+    so_thr t = so_start(io_rb_thread, NULL);
+    so_join(t, 10000);
+    if (veh) RemoveVectoredExceptionHandler(veh);
+    t_note("InitOnceExecuteOnce with context 0x3 -> ret %ld exception 0x%lx", io_rb_ret, (unsigned long)io_rb_exc);
+    CHECK(!io_rb_ret);                                   /* never reports success */
+    /* RtlRunOnceComplete fails and RtlRunOnceExecuteOnce raises it (ntdll FUN_1800b7470 -> raise path) */
+    CHECKF(io_rb_exc == 0xc00000f1, "exception 0x%lx want STATUS_INVALID_PARAMETER_5", (unsigned long)io_rb_exc);
 }
 TEST(initonce_execute_concurrent_single_run) {
     NEED_IO();

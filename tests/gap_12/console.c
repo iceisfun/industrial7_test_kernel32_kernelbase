@@ -176,7 +176,9 @@ GTC(con_textattr_high_bits) {
         BOOL r = F(SetConsoleTextAttribute)(b, v[k]);
         BOOL g = info(b, &i);
         gnote("attr 0x%04x: ret=%d stored=0x%04x", v[k], r, g ? i.wAttributes : 0xDEAD);
-        GC(r == TRUE);
+        /* P1 (gap_12): conhost SetConsoleTextAttributeImpl rejects any attribute with bit 0x2000 (undefined) set
+         * with an invalid-parameter result and accepts all others (0x7FFF and 0xFFFF contain 0x2000). */
+        GCF(r == ((v[k] & 0x2000) ? FALSE : TRUE), "attr 0x%04x ret=%d", v[k], r);
     }
     CloseHandle(b);
 }
@@ -345,7 +347,10 @@ GTC(con_bufsize_preserves_attributes_and_cursor) {
     COORD big = { i0.dwSize.X, (SHORT)(i0.dwSize.Y + 5) };
     GC(F(SetConsoleScreenBufferSize)(b, big));
     GC(info(b, &i1));
-    GEQ(i1.wAttributes & 0xFF, 0x2E); GEQ(i1.dwCursorPosition.X, 3); GEQ(i1.dwCursorPosition.Y, 2);
+    /* P1 (gap_12): with resize-with-reflow (the default wrap-on-resize console setting) conhost re-derives the cursor from
+     * the last non-space cell and moves a cursor sitting past it on a blank row left by one column (X 3 -> 2); with the
+     * traditional resize it stays at 3. Either is accepted. */
+    GEQ(i1.wAttributes & 0xFF, 0x2E); GCF(i1.dwCursorPosition.X == 3 || i1.dwCursorPosition.X == 2, "cursor X %d", i1.dwCursorPosition.X); GEQ(i1.dwCursorPosition.Y, 2);
     CloseHandle(b);
 }
 GTC(con_bufsize_keeps_text) {
@@ -407,8 +412,17 @@ GTC(con_window_absolute_out_of_buffer) {
         SMALL_RECT rc = r[k];
         SetLastError(0xBAD);
         BOOL ok = F(SetConsoleWindowInfo)(b, TRUE, &rc);
-        GCF(ok == FALSE, "rect %u (%d,%d,%d,%d) accepted", k, rc.Left, rc.Top, rc.Right, rc.Bottom);
-        if (!ok) GERR(ERROR_INVALID_PARAMETER);
+        /* P1 (gap_12) UNRESOLVED: the documentation says a window beyond the buffer (negative Left/Top, Right/Bottom past
+         * the buffer) fails, but Win10 conhost SetConsoleWindowInfoImpl only rejects an inverted rectangle or a size above
+         * the maximum window size (a short-width overflow lets 0..32767 through) and accepts negative origins. The
+         * rectangles Win10 rejects (0..2) stay asserted; for 3..6 the outcome is recorded, not asserted, and the window is restored. */
+        if (k < 3) {
+            GCF(ok == FALSE, "rect %u (%d,%d,%d,%d) accepted", k, rc.Left, rc.Top, rc.Right, rc.Bottom);
+            if (!ok) GERR(ERROR_INVALID_PARAMETER);
+        } else {
+            gnote("UNRESOLVED rect %u (%d,%d,%d,%d): ret=%d err=%lu", k, rc.Left, rc.Top, rc.Right, rc.Bottom, ok, ok ? 0 : GetLastError());
+            if (ok) { SMALL_RECT rs = i0.srWindow; F(SetConsoleWindowInfo)(b, TRUE, &rs); }
+        }
     }
     GC(info(b, &i1));
     GEQ(i1.srWindow.Right, i0.srWindow.Right); GEQ(i1.srWindow.Bottom, i0.srWindow.Bottom);
@@ -461,8 +475,16 @@ GTC(con_window_relative_out_of_range) {
         if (i0.srWindow.Left > 0 || i0.srWindow.Top > 0) continue;
         SetLastError(0xBAD);
         BOOL ok = F(SetConsoleWindowInfo)(b, FALSE, &rc);
-        GCF(ok == FALSE, "relative rect %u accepted", k);
-        if (!ok) GERR(ERROR_INVALID_PARAMETER);
+        /* P1 (gap_12) UNRESOLVED: documented to fail when the moved window leaves the buffer; Win10 conhost does not check
+         * the buffer bounds (only inverted rectangle / maximum window size). Rectangles 0..2 move the window to negative
+         * coordinates and are accepted there; 3 and 4 exceed the maximum window size and are rejected (asserted). */
+        if (k < 3) {
+            gnote("UNRESOLVED relative rect %u: ret=%d err=%lu", k, ok, ok ? 0 : GetLastError());
+            if (ok) { SMALL_RECT rs = i0.srWindow; F(SetConsoleWindowInfo)(b, TRUE, &rs); }
+        } else {
+            GCF(ok == FALSE, "relative rect %u accepted", k);
+            if (!ok) GERR(ERROR_INVALID_PARAMETER);
+        }
     }
     GC(info(b, &i1));
     GEQ(i1.srWindow.Right, i0.srWindow.Right); GEQ(i1.srWindow.Bottom, i0.srWindow.Bottom);
@@ -622,13 +644,16 @@ GTC(con_infoex_cursor_and_size) {
     HANDLE b = newbuf(); GC(b != NULL); if (!b) return;
     CONSOLE_SCREEN_BUFFER_INFOEX e, g; infoex_init(&e); infoex_init(&g);
     GC(GetConsoleScreenBufferInfoEx(b, &e));
+    CONSOLE_SCREEN_BUFFER_INFO ib; GC(info(b, &ib));
     e.dwCursorPosition.X = 4; e.dwCursorPosition.Y = 3;
     e.dwSize.Y = (SHORT)(e.dwSize.Y + 4);
     BOOL r = F(SetConsoleScreenBufferInfoEx)(b, &e);
     GCF(r, "err=%lu", GetLastError());
     CONSOLE_SCREEN_BUFFER_INFO i; GC(info(b, &i));
     gnote("cursor %d,%d size %dx%d (requested cursor 4,3 height %d)", i.dwCursorPosition.X, i.dwCursorPosition.Y, i.dwSize.X, i.dwSize.Y, e.dwSize.Y);
-    if (r) { GEQ(i.dwCursorPosition.X, 4); GEQ(i.dwCursorPosition.Y, 3); GEQ(i.dwSize.Y, e.dwSize.Y); }
+    /* P1 (gap_12): conhost ApiRoutines::SetConsoleScreenBufferInfoExImpl applies size, attributes, colour table, window
+     * size and popup attributes but never reads dwCursorPosition: the cursor stays where it was. */
+    if (r) { GEQ(i.dwSize.Y, e.dwSize.Y); GEQ(i.dwCursorPosition.X, ib.dwCursorPosition.X); GEQ(i.dwCursorPosition.Y, ib.dwCursorPosition.Y); }
     CloseHandle(b);
 }
 GTC(con_infoex_zero_size_rejected) {

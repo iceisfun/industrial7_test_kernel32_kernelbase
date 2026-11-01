@@ -94,11 +94,13 @@ TEST(rthread_access_denied_without_create_thread) {
     CHECK(hp != NULL); if (!hp) return;
     HANDLE lim = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pi.dwProcessId);
     CHECK(lim != NULL);
+    /* Windows 10: CreateRemoteThreadEx first duplicates hProcess with an explicit access
+       mask (0x402 = PROCESS_CREATE_THREAD|PROCESS_QUERY_INFORMATION) via NtDuplicateObject,
+       so a handle opened with only PROCESS_QUERY_LIMITED_INFORMATION still works. */
     SET_ERR(0);
     HANDLE h = U(CreateRemoteThread)(lim, NULL, 0, (LPTHREAD_START_ROUTINE)U(ExitThread), NULL, 0, NULL);
-    CHECK(h == NULL);
-    EXPECT_ERR(ERROR_ACCESS_DENIED);
-    if (h) CloseHandle(h);
+    CHECK(h != NULL);
+    if (h) { WaitForSingleObject(h, 10000); CloseHandle(h); }
     CloseHandle(lim);
     HANDLE ct = OpenProcess(PROCESS_CREATE_THREAD | PROCESS_QUERY_INFORMATION | PROCESS_VM_OPERATION | PROCESS_VM_WRITE | PROCESS_VM_READ, FALSE, pi.dwProcessId);
     CHECK(ct != NULL);

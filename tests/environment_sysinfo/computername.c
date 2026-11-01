@@ -160,18 +160,21 @@ TEST(cnameex_sizes_format_##idx) { \
     REQUIRE(U(GetComputerNameExW)); \
     WCHAR full[512], tmp[512]; DWORD len = 0, n; \
     if (!cn_get_w(idx, full, 512, &len)) { CHECK(0); return; } \
+    /* Win10 sizes the FQDN as (host+1)+(domain+1): one extra WCHAR when the DNS domain is empty */ \
+    DWORD extra = 0; \
+    if (idx == 3 || idx == 7) { WCHAR dd[512]; DWORD dl = 0; if (cn_get_w(idx - 1, dd, 512, &dl) && dl == 0) extra = 1; } \
     /* NULL buffer, size 0: ERROR_MORE_DATA and required size incl. NUL (only when a name exists) */ \
     n = 0; SET_ERR(0); \
     BOOL r = U(GetComputerNameExW)(idx, NULL, &n); \
     if (len == 0 && r) { EXPECT_EQ(n, 0); } \
-    else { EXPECT_EQ(r, 0); EXPECT_ERR(ERROR_MORE_DATA); EXPECT_EQ(n, len + 1); } \
+    else { EXPECT_EQ(r, 0); EXPECT_ERR(ERROR_MORE_DATA); EXPECT_EQ(n, len + 1 + extra); } \
     if (len > 0) { \
-        n = len; SET_ERR(0); \
-        EXPECT_EQ(U(GetComputerNameExW)(idx, tmp, &n), 0); EXPECT_ERR(ERROR_MORE_DATA); EXPECT_EQ(n, len + 1); \
-        n = len + 1; \
+        n = len + extra; SET_ERR(0); \
+        EXPECT_EQ(U(GetComputerNameExW)(idx, tmp, &n), 0); EXPECT_ERR(ERROR_MORE_DATA); EXPECT_EQ(n, len + 1 + extra); \
+        n = len + 1 + extra; \
         CHECK(U(GetComputerNameExW)(idx, tmp, &n)); EXPECT_EQ(n, len); CHECK(!wcscmp(tmp, full)); \
         n = 0; SET_ERR(0); \
-        EXPECT_EQ(U(GetComputerNameExW)(idx, tmp, &n), 0); EXPECT_ERR(ERROR_MORE_DATA); EXPECT_EQ(n, len + 1); \
+        EXPECT_EQ(U(GetComputerNameExW)(idx, tmp, &n), 0); EXPECT_ERR(ERROR_MORE_DATA); EXPECT_EQ(n, len + 1 + extra); \
     } \
 }
 CN_SIZE_TEST(0) CN_SIZE_TEST(1) CN_SIZE_TEST(2) CN_SIZE_TEST(3)
@@ -252,7 +255,9 @@ TEST(cnameex_fqdn_required_size_with_null_buffer) {
     SET_ERR(0);
     EXPECT_EQ(U(GetComputerNameExW)(ComputerNameDnsFullyQualified, NULL, &n), 0);
     EXPECT_ERR(ERROR_MORE_DATA);
-    EXPECT_EQ(n, nf + 1);
+    { WCHAR d[300]; DWORD nd = 300; CHECK(U(GetComputerNameExW)(ComputerNameDnsDomain, d, &nd));
+      /* Win10 sizes the FQDN as (host+1)+(domain+1): one extra WCHAR when the DNS domain is empty */
+      EXPECT_EQ(n, nf + 1 + (nd == 0 ? 1 : 0)); }
 }
 TEST(cnameex_dns_hostname_matches_env_when_set_by_os) {
     REQUIRE(U(GetComputerNameExW)); REQUIRE(U(GetEnvironmentVariableW));
@@ -355,12 +360,12 @@ CHILD(cname_cluster) {
     if (!GetComputerNameA(a, &n) || n != 11 || strcmp(a, "K32TCLUSTER")) return 1;
     n = 64;
     if (!GetComputerNameW(w, &n) || n != 11) return 2;
-    /* GetComputerNameW (cluster path) reports ERROR_BUFFER_OVERFLOW; the A wrapper's
-     * BasepUnicodeToAnsi reports ERROR_MORE_DATA */
+    /* GetComputerNameW (cluster path) reports ERROR_BUFFER_OVERFLOW; the Win10 kernel32
+     * BasepUnicodeToAnsi used by the A wrapper reports ERROR_BUFFER_OVERFLOW as well */
     n = 11; SetLastError(0);
     if (GetComputerNameW(w, &n) || GetLastError() != ERROR_BUFFER_OVERFLOW || n != 12) return 5;
     n = 11; SetLastError(0);
-    if (GetComputerNameA(a, &n) || GetLastError() != ERROR_MORE_DATA || n != 12) return 3;
+    if (GetComputerNameA(a, &n) || GetLastError() != ERROR_BUFFER_OVERFLOW || n != 12) return 3;
     n = 12;
     if (!GetComputerNameA(a, &n) || n != 11) return 4;
     return 0;

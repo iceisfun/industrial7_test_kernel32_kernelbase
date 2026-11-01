@@ -35,8 +35,13 @@ static int mb_table(UINT cp, const mbv_t *v, int nv, const char *tag) {
         if (v[i].n >= 2) {
             SET_ERR(0);
             r = U(MultiByteToWideChar)(cp, v[i].fl, v[i].src, sl, out, v[i].n - 1);
-            SCHK(r == 0, "%s vec %d short buffer returned %d", tag, i, r);
-            SERR(E_INSUFFICIENT_BUFFER);
+            if ((v[i].fl & MB_COMPOSITE) && r != 0) {
+                /* Win10: with MB_COMPOSITE a lone character that does not fit decomposed is stored precomposed (InsertLegacyDecomposedCharacter) */
+                SCHK(r == v[i].n - 1, "%s vec %d composite short buffer returned %d", tag, i, r);
+            } else {
+                SCHK(r == 0, "%s vec %d short buffer returned %d", tag, i, r);
+                SERR(E_INSUFFICIENT_BUFFER);
+            }
         }
         /* -1 with buffer lacking room for the NUL */
         if (v[i].n >= 1) {

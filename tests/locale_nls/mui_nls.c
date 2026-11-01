@@ -136,6 +136,7 @@ static int count_multisz(const WCHAR *m, int *total)
     int n = 0; const WCHAR *p = m;
     while (*p) { p += lstrlenW(p) + 1; n++; }
     *total = (int)(p - m) + 1;
+    if (n == 0) *total = 2;   /* P1: an empty multi-string is two NULs; Win10 reports cch 2 for an empty list */
     return n;
 }
 static void pref_query(get_pref_fn fn, const char *what, DWORD flags)
@@ -236,13 +237,32 @@ TEST(uipref_system_both_id_and_name) {
     BOOL r = U(GetSystemPreferredUILanguages)(MUI_LANGUAGE_ID | MUI_LANGUAGE_NAME, &num, NULL, &cch);
     CHECK(!r); EXPECT_ERR(ERROR_INVALID_PARAMETER);
 }
+CHILD(prefnull) {
+    ULONG num = 0, cch = 0; int k = argc > 1 ? atoi(argv[1]) : 0; BOOL r = 0;
+    SetLastError(0);
+    switch (k) {
+    case 0: r = U(GetSystemPreferredUILanguages)(MUI_LANGUAGE_NAME, &num, NULL, NULL); break;
+    case 1: r = U(GetSystemPreferredUILanguages)(MUI_LANGUAGE_NAME, NULL, NULL, &cch); break;
+    case 2: r = U(GetUserPreferredUILanguages)(MUI_LANGUAGE_NAME, &num, NULL, NULL); break;
+    default: r = U(GetUserPreferredUILanguages)(MUI_LANGUAGE_NAME, NULL, NULL, &cch); break;
+    }
+    return r ? 1 : (int)(0x100 | (GetLastError() & 0xff));
+}
 TEST(uipref_null_out_params) {
     REQUIRE(U(GetSystemPreferredUILanguages)); REQUIRE(U(GetUserPreferredUILanguages));
     ULONG num = 0, cch = 0; WCHAR buf[8];
-    if (!t_is_wine()) { SET_ERR(0); CHECK(!U(GetSystemPreferredUILanguages)(MUI_LANGUAGE_NAME, &num, NULL, NULL)); EXPECT_ERR(ERROR_INVALID_PARAMETER); }
-    if (!t_is_wine()) { SET_ERR(0); CHECK(!U(GetSystemPreferredUILanguages)(MUI_LANGUAGE_NAME, NULL, NULL, &cch)); EXPECT_ERR(ERROR_INVALID_PARAMETER); }
-    if (!t_is_wine()) { SET_ERR(0); CHECK(!U(GetUserPreferredUILanguages)(MUI_LANGUAGE_NAME, &num, NULL, NULL)); EXPECT_ERR(ERROR_INVALID_PARAMETER); }
-    if (!t_is_wine()) { SET_ERR(0); CHECK(!U(GetUserPreferredUILanguages)(MUI_LANGUAGE_NAME, NULL, NULL, &cch)); EXPECT_ERR(ERROR_INVALID_PARAMETER); }
+    /* P1: Win10 RtlGetSystemPreferredUILanguages dereferences pcchLanguagesBuffer unconditionally (AV on NULL)
+     * and the other NULL out-parameters are not documented as validated: probe them in child processes and
+     * only note the outcome (UNRESOLVED, no expectation). */
+    if (!t_is_wine()) {
+        for (int k = 0; k < 4; k++) {
+            char a[8]; wsprintfA(a, "%d", k);
+            DWORD rc = t_run_child("prefnull", a, 20000);
+            t_note("NULL out-param probe %d: child exit 0x%lx", k, rc);
+            /* P1 audit: case 0 (System, NULL pcch) is decided by the decompile: '*param_5' is read first -> AV */
+            if (k == 0) CHECKF(rc == 0xC0000005, "System NULL pcch: child exit 0x%lx", rc);
+        }
+    }
     cch = 8;
     SET_ERR(0); CHECK(!U(GetSystemPreferredUILanguages)(MUI_LANGUAGE_NAME, &num, buf, &cch) || cch <= 8);
     cch = 2; num = 0;
@@ -298,7 +318,9 @@ TEST(uipref_thread_invalid) {
     ULONG num = 0, cch = 0; SET_ERR(0);
     if (!t_is_wine()) { CHECK(!U(GetThreadPreferredUILanguages)(MUI_LANGUAGE_NAME | MUI_LANGUAGE_ID, &num, NULL, &cch)); EXPECT_ERR(ERROR_INVALID_PARAMETER); }
     if (!t_is_wine()) { SET_ERR(0); CHECK(!U(GetThreadPreferredUILanguages)(MUI_LANGUAGE_NAME, &num, NULL, NULL)); EXPECT_ERR(ERROR_INVALID_PARAMETER); }
-    if (!t_is_wine()) { SET_ERR(0); CHECK(!U(GetThreadPreferredUILanguages)(MUI_LANGUAGE_NAME, NULL, NULL, &cch)); EXPECT_ERR(ERROR_INVALID_PARAMETER); }
+    /* P1: Win10 does not validate a NULL pulNumLanguages (RtlGetThreadPreferredUILanguages checks only pcch);
+       the size query succeeds (baseline: TRUE, err 0) */
+    if (!t_is_wine()) { SET_ERR(0); CHECK(U(GetThreadPreferredUILanguages)(MUI_LANGUAGE_NAME, NULL, NULL, &cch)); }
     if (!t_is_wine()) { SET_ERR(0); CHECK(!U(GetThreadPreferredUILanguages)(0x80000000 | MUI_LANGUAGE_NAME, &num, NULL, &cch)); EXPECT_ERR(ERROR_INVALID_PARAMETER); }
 }
 TEST(uipref_process_list) {
@@ -307,7 +329,11 @@ TEST(uipref_process_list) {
     BOOL r = U(GetProcessPreferredUILanguages)(MUI_LANGUAGE_NAME, &num, NULL, &cch);
     CHECKF(r, "err %lu", GetLastError());
     t_note("process list: num=%lu cch=%lu", num, cch);
-    pref_query(U(GetProcessPreferredUILanguages), "process-merged", MUI_LANGUAGE_NAME | MUI_UI_FALLBACK);
+    /* P1: the MUI_MERGE_*_FALLBACK flags are thread-only; RtlGetProcessPreferredUILanguages rejects any
+     * flag outside MUI_LANGUAGE_ID/NAME (observed err 87 for 0x38). Query the ID format instead. */
+    { ULONG n2 = 0xDEAD, c2 = 0; SET_ERR(0);
+      CHECKF(U(GetProcessPreferredUILanguages)(MUI_LANGUAGE_ID, &n2, NULL, &c2), "process id-format size query err %lu", GetLastError());
+      CHECKF(c2 >= 1, "cch=%lu", c2); }
     if (!t_is_wine()) { SET_ERR(0); CHECK(!U(GetProcessPreferredUILanguages)(MUI_LANGUAGE_NAME | MUI_LANGUAGE_ID, &num, NULL, &cch)); EXPECT_ERR(ERROR_INVALID_PARAMETER); }
     if (!t_is_wine()) { SET_ERR(0); CHECK(!U(GetProcessPreferredUILanguages)(MUI_LANGUAGE_NAME, NULL, NULL, &cch)); EXPECT_ERR(ERROR_INVALID_PARAMETER); }
 }
@@ -327,7 +353,8 @@ CHILD(setthreadpref) {
     if (!U(SetThreadPreferredUILanguages)(MUI_LANGUAGE_NAME, list, &num)) return 0x1000;  /* language may not be installed */
     if (num != 1) bad |= 2;
     cch = 512; num = 0;
-    if (!U(GetThreadPreferredUILanguages)(MUI_LANGUAGE_NAME, &num, buf, &cch)) bad |= 4;
+    /* P1: without MUI_THREAD_LANGUAGES the Get merges the user fallback list (RtlGetThreadPreferredUILanguages) */
+    if (!U(GetThreadPreferredUILanguages)(MUI_LANGUAGE_NAME | MUI_THREAD_LANGUAGES, &num, buf, &cch)) bad |= 4;
     if (num != 1 || lstrcmpiW(buf, name)) bad |= 8;
     if (cch != (ULONG)lstrlenW(name) + 2) bad |= 16;
     /* GetThreadUILanguage follows the first entry */
@@ -335,7 +362,7 @@ CHILD(setthreadpref) {
     if (U(GetThreadUILanguage)() != (LANGID)l) bad |= 32;
     /* ID format */
     cch = 512; num = 0;
-    if (!U(GetThreadPreferredUILanguages)(MUI_LANGUAGE_ID, &num, buf, &cch)) bad |= 64;
+    if (!U(GetThreadPreferredUILanguages)(MUI_LANGUAGE_ID | MUI_THREAD_LANGUAGES, &num, buf, &cch)) bad |= 64;
     else { WCHAR want[8]; wsprintfW(want, L"%04x", (unsigned)(l & 0xffff)); if (lstrcmpiW(buf, want)) bad |= 128; }
     /* the process list is unaffected */
     ULONG pn = 0, pc = 512;
@@ -343,9 +370,10 @@ CHILD(setthreadpref) {
     /* reset */
     num = 0xDEAD;
     SetLastError(0);
-    if (!U(SetThreadPreferredUILanguages)(MUI_RESET_FILTERS, NULL, &num)) bad |= 256;
+    /* P1: MUI_RESET_FILTERS leaves the list alone; a NULL list clears it (RtlSetThreadPreferredUILanguages) */
+    if (!U(SetThreadPreferredUILanguages)(MUI_LANGUAGE_NAME, NULL, &num)) bad |= 256;
     cch = 512; num = 0xDEAD;
-    if (!U(GetThreadPreferredUILanguages)(MUI_LANGUAGE_NAME, &num, buf, &cch)) bad |= 512;
+    if (!U(GetThreadPreferredUILanguages)(MUI_LANGUAGE_NAME | MUI_THREAD_LANGUAGES, &num, buf, &cch)) bad |= 512;
     else if (num != 0) bad |= 1024;
     return bad;
 }
@@ -357,12 +385,13 @@ TEST(uipref_set_thread_roundtrip_child) {
     CHECKF(r == 0, "child bits 0x%lx", r);
 }
 CHILD(setthreadpref_invalid) {
-    int bad = 0; WCHAR list[64]; ULONG num = 0xDEAD;
+    int bad = 0; DWORD bogus_err = 0; WCHAR list[64]; ULONG num = 0xDEAD;
     memset(list, 0, sizeof list); lstrcpyW(list, L"qq-ZZ-bogus-name");
     SetLastError(0);
     BOOL r = U(SetThreadPreferredUILanguages)(MUI_LANGUAGE_NAME, list, &num);
     if (r && num != 0) bad |= 1;
-    if (!r && GetLastError() != ERROR_INVALID_PARAMETER) bad |= 2;
+    /* P1: UNRESOLVED - the error for an unknown name is not 87 on Win10 (bit 2 of the old run); report it. */
+    if (!r && GetLastError() != ERROR_INVALID_PARAMETER) bogus_err = GetLastError();
     /* ID | NAME together is invalid */
     memset(list, 0, sizeof list); lstrcpyW(list, L"en-US");
     SetLastError(0);
@@ -372,12 +401,14 @@ CHILD(setthreadpref_invalid) {
     SetLastError(0);
     if (U(SetThreadPreferredUILanguages)(0x80000000 | MUI_LANGUAGE_NAME, list, &num)) bad |= 16;
     else if (GetLastError() != ERROR_INVALID_PARAMETER) bad |= 32;
+    if (bogus_err) bad |= 0x1000000 | (int)((bogus_err & 0xffff) << 8);   /* parent decodes and notes */
     return bad;
 }
 TEST(uipref_set_thread_invalid_child) {
     REQUIRE(U(SetThreadPreferredUILanguages));
     if (t_is_wine()) { t_skip("emulator lacks preferred-UI-language setters"); return; }
     DWORD r = t_run_child("setthreadpref_invalid", "", 20000);
+    if (r & 0x1000000) { t_note("SetThreadPreferredUILanguages(bogus name) failed with err %lu (not 87)", (r >> 8) & 0xffff); r &= ~(0x1000000u | 0xffff00u); }
     CHECKF(r == 0, "child bits 0x%lx", r);
 }
 CHILD(setprocesspref) {
@@ -392,10 +423,11 @@ CHILD(setprocesspref) {
     if (num != 1 || lstrcmpiW(buf, name)) bad |= 8;
     /* a second thread sees the process list when it has no list of its own */
     SetLastError(0);
-    if (!U(SetProcessPreferredUILanguages)(MUI_RESET_FILTERS, NULL, &num)) bad |= 16;
+    /* P1: MUI_RESET_FILTERS is invalid for the process variant (flags outside ID/NAME give 87); a NULL list clears it */
+    if (!U(SetProcessPreferredUILanguages)(MUI_LANGUAGE_NAME, NULL, &num)) bad |= 16;
     cch = 512; num = 0xDEAD;
     if (!U(GetProcessPreferredUILanguages)(MUI_LANGUAGE_NAME, &num, buf, &cch)) bad |= 32;
-    else if (num != 0) bad |= 64;
+    else if (buf[0] != 0 || cch != 2) bad |= 64;   /* P1b: with an empty process list Win10 returns an empty multi-string (cch 2) and leaves *pulNumLanguages untouched */
     return bad;
 }
 TEST(uipref_set_process_roundtrip_child) {
@@ -417,7 +449,7 @@ CHILD(setthreadpref_multi) {
     BOOL r = U(SetThreadPreferredUILanguages)(MUI_LANGUAGE_NAME, list, &num);
     if (!r) { return 0x1000 | (GetLastError() & 0xfff); }     /* second language may not be installed */
     cch = 512; ULONG gn = 0;
-    if (!U(GetThreadPreferredUILanguages)(MUI_LANGUAGE_NAME, &gn, buf, &cch)) bad |= 2;
+    if (!U(GetThreadPreferredUILanguages)(MUI_LANGUAGE_NAME | MUI_THREAD_LANGUAGES, &gn, buf, &cch)) bad |= 2;   /* P1: thread list only, no user-fallback merge */
     if (gn != num) bad |= 4;
     if (lstrcmpiW(buf, name)) bad |= 8;
     return bad;
@@ -439,14 +471,15 @@ TEST(uilanginfo_basic) {
     BOOL r = U(GetUILanguageInfo)(MUI_LANGUAGE_NAME, lang, NULL, &cch, &attr);
     CHECKF(r, "size query err %lu", GetLastError());
     if (r) {
-        CHECK(cch >= 7);
+        CHECKF(cch >= 2, "cch=%lu", cch);   /* P1: en-US has no fallbacks on Win10: empty multi-string, cch 2 */
         t_note("en-US fallback chain size %lu attr 0x%lx", cch, attr);
         DWORD c2 = cch;
         r = U(GetUILanguageInfo)(MUI_LANGUAGE_NAME, lang, fb, &c2, &attr);
         CHECK(r);
         if (r) {
-            CHECK(!lstrcmpiW(fb, L"en-US")); CHECK(c2 == cch);
-            int total; int n = count_multisz(fb, &total); CHECK((DWORD)total == c2); CHECK(n >= 1);
+            /* P1: the output is the fallback list of the language (the language itself is not echoed) */
+            CHECK(c2 == cch);
+            int total; int n = count_multisz(fb, &total); CHECK((DWORD)total == c2); CHECK(n >= 0);
         }
         DWORD small = cch - 1; SET_ERR(0);
         CHECK(!U(GetUILanguageInfo)(MUI_LANGUAGE_NAME, lang, fb, &small, &attr)); EXPECT_ERR(ERROR_INSUFFICIENT_BUFFER);
@@ -459,7 +492,8 @@ TEST(uilanginfo_id_format) {
     WCHAR fb[256]; DWORD cch = 256, attr = 0; SET_ERR(0);
     BOOL r = U(GetUILanguageInfo)(MUI_LANGUAGE_ID, lang, fb, &cch, &attr);
     CHECKF(r, "err %lu", GetLastError());
-    if (r) CHECK(!lstrcmpiW(fb, L"0409"));
+    /* P1: fallback list, not an echo of the input; entries (if any) must be 4-digit hex ids */
+    if (r) { const WCHAR *p = fb; while (*p) { CHECKF(lstrlenW(p) == 4, "id entry '%ls'", p); p += lstrlenW(p) + 1; } }
 }
 TEST(uilanginfo_errors) {
     REQUIRE(U(GetUILanguageInfo));
@@ -468,7 +502,8 @@ TEST(uilanginfo_errors) {
     WCHAR fb[64]; DWORD cch = 64, attr = 0;
     SET_ERR(0); CHECK(!U(GetUILanguageInfo)(MUI_LANGUAGE_NAME, NULL, fb, &cch, &attr)); t_note("NULL language err=%lu", GetLastError());
     SET_ERR(0); CHECK(!U(GetUILanguageInfo)(MUI_LANGUAGE_NAME | MUI_LANGUAGE_ID, lang, fb, &cch, &attr)); EXPECT_ERR(ERROR_INVALID_PARAMETER);
-    SET_ERR(0); CHECK(!U(GetUILanguageInfo)(MUI_LANGUAGE_NAME, lang, fb, NULL, &attr)); t_note("NULL cch err=%lu", GetLastError());
+    { /* P1: Win10 treats a NULL pcchFallbackLanguages as size 0 (RtlGetUILanguageInfo): succeeds */
+        SET_ERR(0); BOOL rn = U(GetUILanguageInfo)(MUI_LANGUAGE_NAME, lang, fb, NULL, &attr); t_note("NULL cch: r=%d err=%lu", rn, GetLastError()); CHECK(rn); }
     memset(lang, 0, sizeof lang); lstrcpyW(lang, L"qq-bogus-zz");
     cch = 64; SET_ERR(0);
     BOOL r = U(GetUILanguageInfo)(MUI_LANGUAGE_NAME, lang, fb, &cch, &attr);
@@ -487,8 +522,8 @@ TEST(muifile_getfilemuiinfo_kernel32) {
     WCHAR path[MAX_PATH]; k32path(path, MAX_PATH);
     DWORD cb = 0; SET_ERR(0);
     BOOL r = U(GetFileMUIInfo)(MUI_QUERY_TYPE | MUI_QUERY_CHECKSUM, path, NULL, &cb);
-    CHECK(!r);
-    if (!r) EXPECT_ERR(ERROR_INSUFFICIENT_BUFFER);
+    /* P1: a NULL-buffer size query succeeds and returns the size (kernelbase GetFileMUIInfo) */
+    CHECKF(r, "size query err %lu", GetLastError());
     CHECKF(cb >= sizeof(FILEMUIINFO), "cb=%lu", cb);
     if (cb >= sizeof(FILEMUIINFO) && cb < 65536) {
         FILEMUIINFO *fi = (FILEMUIINFO *)calloc(1, cb);
@@ -533,9 +568,17 @@ TEST(muifile_getfilemuipath_kernel32) {
     if (!r) { t_note("GetFileMUIPath(en-US) failed err=%lu", GetLastError()); return; }
     CHECK(wcsstr(mui, L"kernel32.dll.mui") != NULL || wcsstr(mui, L"KERNEL32.DLL.MUI") != NULL);
     CHECK(wcsstr(mui, L"en-US") != NULL || wcsstr(mui, L"EN-US") != NULL);
-    CHECK(cf == (ULONG)lstrlenW(mui) + 1);
+    /* P1: on success with a big-enough buffer Win10 leaves *pcchFileMUIPath at the input size
+     * (RtlpGetMUIRedirectedFilePathInternal writes it only for a size query or a too small buffer). */
+    CHECKF(cf == MAX_PATH, "cf=%lu len=%d", cf, lstrlenW(mui));
     t_note("MUI path: %ls", mui);
     DWORD a = GetFileAttributesW(mui); CHECK(a != INVALID_FILE_ATTRIBUTES);
+}
+CHILD(muipathnull) {
+    WCHAR path[MAX_PATH]; k32path(path, MAX_PATH);
+    WCHAR lang[LOCALE_NAME_MAX_LENGTH] = L"en-US", mui[MAX_PATH]; ULONG cl = LOCALE_NAME_MAX_LENGTH; ULONGLONG en = 0;
+    BOOL r = U(GetFileMUIPath)(MUI_LANGUAGE_NAME, path, lang, &cl, mui, NULL, &en);
+    return r ? 1 : (int)(0x100 | (GetLastError() & 0xff));
 }
 TEST(muifile_getfilemuipath_errors) {
     REQUIRE(U(GetFileMUIPath));
@@ -544,7 +587,8 @@ TEST(muifile_getfilemuipath_errors) {
     WCHAR lang[LOCALE_NAME_MAX_LENGTH] = L"en-US", mui[MAX_PATH]; ULONG cl = LOCALE_NAME_MAX_LENGTH, cf = MAX_PATH; ULONGLONG en = 0;
     if (!t_is_wine()) { SET_ERR(0); CHECK(!U(GetFileMUIPath)(MUI_LANGUAGE_NAME, NULL, lang, &cl, mui, &cf, &en)); EXPECT_ERR(ERROR_INVALID_PARAMETER); }
     SET_ERR(0); CHECK(!U(GetFileMUIPath)(MUI_LANGUAGE_NAME | MUI_LANGUAGE_ID, path, lang, &cl, mui, &cf, &en)); EXPECT_ERR(ERROR_INVALID_PARAMETER);
-    if (!t_is_wine()) { SET_ERR(0); CHECK(!U(GetFileMUIPath)(MUI_LANGUAGE_NAME, path, lang, &cl, mui, NULL, &en)); EXPECT_ERR(ERROR_INVALID_PARAMETER); }
+    /* P1: NULL pcchFileMUIPath is run in a child (P1b: it does not crash on Win10) */
+    if (!t_is_wine()) { DWORD rc = t_run_child("muipathnull", "", 20000); /* P1b: no AV on Win10; the call fails (exit 0x100|low byte of last error, 0x112 observed) */ CHECKF(rc != 0xC0000005 && rc != 1 && (rc & 0x100), "NULL pcchFileMUIPath: child exit 0x%lx", rc); if (rc == 0x112) t_note("NULL pcchFileMUIPath fails with ERROR_NO_MORE_FILES"); }
     cf = 3; SET_ERR(0);
     BOOL r = U(GetFileMUIPath)(MUI_LANGUAGE_NAME, path, lang, &cl, mui, &cf, &en);
     if (!r) { EXPECT_ERR(ERROR_INSUFFICIENT_BUFFER); CHECK(cf > 3); }

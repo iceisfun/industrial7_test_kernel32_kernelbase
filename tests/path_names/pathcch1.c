@@ -132,7 +132,7 @@ TEST(path_names_pathcch_canonicalize_cch260_vs_insufficient) {
        with any other size as ERROR_INSUFFICIENT_BUFFER (segments kept short of the 256 limit) */
     static WCHAR in[400], out[400];
     wcscpy(in, L"C:");
-    for (int i = 0; i < 6; i++) wcscat(in, L"\01234567890123456789012345678901234567890123456789"); /* 2 + 6*51 = 308 */
+    for (int i = 0; i < 6; i++) wcscat(in, L"\\01234567890123456789012345678901234567890123456789"); /* 2 + 6*51 = 308 */
     HRESULT hr = U(PathCchCanonicalize)(out, 260, in);
     CHECKF(hr == HR_EXCED, "cch 260 hr 0x%lx", hr);
     hr = U(PathCchCanonicalize)(out, 100, in);

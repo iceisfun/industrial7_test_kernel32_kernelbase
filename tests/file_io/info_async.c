@@ -308,7 +308,12 @@ TEST(fio_filetime_write_updates_last_write) {
     HANDLE h = cfa(p, GENERIC_READ | GENERIC_WRITE | FILE_WRITE_ATTRIBUTES, FI_SHARE, OPEN_EXISTING, 0); OK_H(h);
     FILETIME old; ULARGE_INTEGER v; v.QuadPart = 132223104000000000ULL; old.dwLowDateTime = v.LowPart; old.dwHighDateTime = v.HighPart;
     CHECK(SetFileTime(h, NULL, NULL, &old));
-    DWORD n; CHECK(U(WriteFile)(h, "x", 1, &n, NULL));
+    /* a timestamp set explicitly through a handle is not updated by writes through that same handle, so
+       write through a second handle and close it before reading the time back */
+    DWORD n;
+    HANDLE h2 = cfa(p, GENERIC_WRITE, FI_SHARE, OPEN_EXISTING, 0); OK_H(h2);
+    CHECK(U(WriteFile)(h2, "x", 1, &n, NULL));
+    CLOSE(h2);
     FILETIME w; CHECK(U(GetFileTime)(h, NULL, NULL, &w));
     CHECK(CompareFileTime(&w, &old) > 0);              /* write moved it (unless the time was frozen) */
     CLOSE(h); rmfile(p);
@@ -376,11 +381,8 @@ TEST(fio_readfileex_argument_errors) {
     EXPECT_FAIL_B(U(WriteFileEx)(INVALID_HANDLE_VALUE, b, 4, &ov, cr_routine), ERROR_INVALID_HANDLE);
     HANDLE h = cfa(p, GENERIC_READ | GENERIC_WRITE, FI_SHARE, OPEN_EXISTING, FILE_FLAG_OVERLAPPED); OK_H(h);
     SET_ERR(0);
-    CHECK(!U(ReadFileEx)(h, b, 4, NULL, cr_routine));        /* OVERLAPPED is mandatory */
-    CHECKF(GetLastError() == ERROR_INVALID_PARAMETER || GetLastError() == ERROR_INVALID_USER_BUFFER, "gle=%lu", GetLastError());
-    SET_ERR(0);
-    CHECK(!U(WriteFileEx)(h, b, 4, NULL, cr_routine));
-    CHECKF(GetLastError() == ERROR_INVALID_PARAMETER || GetLastError() == ERROR_INVALID_USER_BUFFER, "gle=%lu", GetLastError());
+    /* OVERLAPPED is mandatory, but kernelbase ReadFileEx/WriteFileEx dereference it unconditionally
+       (access violation on NULL), so passing NULL is not a testable error path */
     EXPECT_EQ(fsize_of(p), 16);
     CLOSE(h); rmfile(p);
 }

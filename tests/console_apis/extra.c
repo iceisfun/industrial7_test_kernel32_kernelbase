@@ -1,7 +1,7 @@
 /* console_apis: legacy / undocumented exports, device names, handle lifetime, mode bit tables, threads */
 #include "ch.h"
 
-#define FAILS(call, err)  do { SetLastError(0xBAD); BOOL r_ = (call); CEQ(r_, 0); CERR(err); } while (0)
+#define FAILS(call, err)  do { SetLastError(0xBAD); BOOL r_ = (call); DWORD le_ = GetLastError(); CEQ(r_, 0); CERRV(le_, err); } while (0)
 
 /* ---------------- OpenConsoleW (CreateFileW with OPEN_EXISTING) ---------------- */
 
@@ -132,7 +132,10 @@ CT(con_handle_duplicate_reduced_access) {
         SetLastError(0xBAD);
         BOOL w = WriteConsoleW(d, L"x", 1, &n, NULL);
         cnote("write through read-only duplicate -> %d err=%lu", w, GetLastError());
-        CEQ(w, 0);
+        /* P1 EXPECT-FIX: console rights are recorded by conhost when the handle is opened (AllocateIoHandle);
+           DuplicateHandle only changes the kernel handle access and the ConDrv ioctl is FILE_ANY_ACCESS, so a
+           reduced-access duplicate still writes (baseline w=1). UNVERIFIED-until-rerun */
+        CEQ(w, 1);
         WCHAR c; CC(ReadConsoleOutputCharacterW(d, &c, 1, co(0, 0), &n));
         CloseHandle(d);
     }
@@ -229,7 +232,9 @@ CT(con_mode_input_all_combinations_of_basic_bits) {
         if (r) { okc++; CC(GetConsoleMode(hi, &m)); CCF((m & 0x1F) == mode, "mode 0x%lx read back 0x%lx", mode, m); }
         else { badc++; CERR(ERROR_INVALID_PARAMETER); }
     }
-    CEQ(okc, 28); CEQ(badc, 4);
+    /* P1 EXPECT-FIX: ENABLE_ECHO_INPUT without ENABLE_LINE_INPUT is rejected (documented). Of the 32 combinations
+       of 5 bits, bit2 set and bit1 clear occurs in 8 (not 4), so 24 succeed and 8 fail (baseline: 0x18 / 0x8). */
+    CEQ(okc, 24); CEQ(badc, 8);
     SetConsoleMode(hi, orig);
 }
 

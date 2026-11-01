@@ -1,7 +1,7 @@
 /* console_apis: WriteConsole A/W, processed output, wrapping, VT sequences, wide characters */
 #include "ch.h"
 
-#define FAILS(call, err)  do { SetLastError(0xBAD); BOOL r_ = (call); CEQ(r_, 0); CERR(err); } while (0)
+#define FAILS(call, err)  do { SetLastError(0xBAD); BOOL r_ = (call); DWORD le_ = GetLastError(); CEQ(r_, 0); CERRV(le_, err); } while (0)
 
 static BOOL wrote_n(HANDLE h, const WCHAR *s, DWORD want_n) {
     DWORD n = 0xFFFF;
@@ -257,9 +257,13 @@ CT(con_write_wrap_off) {
     s[85] = 0;
     CC(wrote_n(b, s, 85));
     CEQ(cellch(b, 78, 0), s[78]);
-    CEQ(cellch(b, 79, 0), s[84]);   /* last cell overwritten by the final character */
+    /* P1: Win10 conhost drops the characters past the last column when ENABLE_WRAP_AT_EOL_OUTPUT is off;
+       the last cell keeps the 80th character (s[79]), it is not overwritten by the final one. UNVERIFIED-until-rerun */
+    CEQ(cellch(b, 79, 0), s[79]);
     CEQ(cellch(b, 0, 1), ' ');
-    CC(coeq(curpos(b), 79, 0));
+    { COORD c_ = curpos(b); cnote("no-wrap cursor after 85 chars: %d,%d", c_.X, c_.Y);
+      cnote("no-wrap row0 cols 0..4: %c%c%c%c%c", cellch(b, 0, 0), cellch(b, 1, 0), cellch(b, 2, 0), cellch(b, 3, 0), cellch(b, 4, 0)); }
+    CC(coeq(curpos(b), 79, 0));   /* P1b UNRESOLVED: baseline cursor is (5,0) = 85 mod 80, not (79,0); documentation says the last cell is overwritten, observed s[79] kept */
     CloseHandle(b);
 }
 
@@ -492,6 +496,16 @@ static HANDLE vtbuf(void) {
     }
     return b;
 }
+
+/* P1: Win10 conhost routes IL/DL/tab VT operations through the *active* output buffer
+   (DoSrvPrivateModifyLinesImpl uses the active buffer), so the buffer under test must be active. */
+static HANDLE vt_activate(HANDLE b) {
+    HANDLE orig = hout_();
+    SetConsoleActiveScreenBuffer(b);
+    return orig;
+}
+static void vt_deactivate(HANDLE orig) { SetConsoleActiveScreenBuffer(orig); }
+
 /* attributes in effect after SGR 0 (the console's default colours, which a user may have customised) */
 static WORD vt_dflt(HANDLE b) {
     DWORD n_ = 0; WriteConsoleW(b, L"\x1b[0m\x1b[1;1H ", 11, &n_, NULL);
@@ -677,6 +691,9 @@ CT(con_vt_sgr_reverse_underline) {
 CT(con_vt_sgr_256_and_rgb) {
     CREQ(WriteConsoleW);
     HANDLE b = vtbuf(); if (!b) return;
+    HANDLE orig_ = vt_activate(b);   /* P1: UNRESOLVED, hypothesis: palette-index SGR uses the active buffer */
+    { CONSOLE_SCREEN_BUFFER_INFOEX ix_; memset(&ix_, 0, sizeof ix_); ix_.cbSize = sizeof ix_;
+      if (GetConsoleScreenBufferInfoEx(b, &ix_)) cnote("P1c palette: [1]=0x%06lx [4]=0x%06lx [9]=0x%06lx [12]=0x%06lx", (unsigned long)ix_.ColorTable[1], (unsigned long)ix_.ColorTable[4], (unsigned long)ix_.ColorTable[9], (unsigned long)ix_.ColorTable[12]); }
     VTW(b, L"\x1b[38;5;1mA");
     CEQ(cellattr(b, 0, 0) & 0xF, FOREGROUND_RED);
     VTW(b, L"\x1b[48;5;4mB");
@@ -684,6 +701,7 @@ CT(con_vt_sgr_256_and_rgb) {
     VTW(b, L"\x1b[38;2;255;0;0mC");
     cnote("38;2 red -> attr 0x%x", cellattr(b, 2, 0));
     CC((cellattr(b, 2, 0) & 0xF) != 0);
+    vt_deactivate(orig_);
     CloseHandle(b);
 }
 
@@ -730,6 +748,7 @@ CT(con_vt_erase_chars_insert_delete) {
 CT(con_vt_insert_delete_lines) {
     CREQ(WriteConsoleW);
     HANDLE b = vtbuf(); if (!b) return;
+    HANDLE orig_ = vt_activate(b);
     for (int y = 0; y < 4; y++) {
         CC(SetConsoleCursorPosition(b, co(0, y)));
         WCHAR t[8]; wsprintfW(t, L"line%d", y); VTW(b, t);
@@ -742,6 +761,7 @@ CT(con_vt_insert_delete_lines) {
     VTW(b, L"\x1b[2;1H\x1b[M");
     CC(rowis(b, 1, 0, L"line1"));
     CC(rowis(b, 2, 0, L"line2"));
+    vt_deactivate(orig_);
     CloseHandle(b);
 }
 
@@ -871,11 +891,18 @@ CT(con_vt_scroll_region) {
 CT(con_vt_repeat_and_tab_controls) {
     CREQ(WriteConsoleW);
     HANDLE b = vtbuf(); if (!b) return;
+    HANDLE orig_ = vt_activate(b);
     VTW(b, L"a\x1b[3b");
     cnote("REP result: %c%c%c%c", cellch(b, 0, 0), cellch(b, 1, 0), cellch(b, 2, 0), cellch(b, 3, 0));
+    /* P1: Win10 conhost has no default VT tab stops (GetForwardTab with an empty list jumps to the
+       end of the row), so define stops at columns 8 and 16 explicitly with HTS. UNVERIFIED-until-rerun */
+    VTW(b, L"\x1b[3g\x1b[1;9H\x1bH\x1b[1;17H\x1bH");
     VTW(b, L"\x1b[1;1H\x1b[2I");
+    COORD c_ = curpos(b); cnote("after CHT x2 cursor %d,%d", c_.X, c_.Y);
     CC(coeq(curpos(b), 16, 0));
     VTW(b, L"\x1b[Z");
+    c_ = curpos(b); cnote("after CBT cursor %d,%d", c_.X, c_.Y);
     CC(coeq(curpos(b), 8, 0));
+    vt_deactivate(orig_);
     CloseHandle(b);
 }

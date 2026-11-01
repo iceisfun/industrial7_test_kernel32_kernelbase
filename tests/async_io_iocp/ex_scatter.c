@@ -84,9 +84,17 @@ TEST(aio_ex_readfileex_eof_fails_immediately) {
     HANDLE h = open_ov(p, GENERIC_READ, 0); rec_reset();
     OVERLAPPED ov; ovinit(&ov, 1000, NULL); BYTE b[16];
     SET_ERR(0); BOOL r = U(ReadFileEx)(h, b, 16, &ov, ex_cb);
-    CHECK(!r); EXPECT_ERR(ERROR_HANDLE_EOF);
-    /* kernelbase!ReadFileEx: NtReadFile failure status -> BaseSetLastNTError, return 0. Whether the APC still fires is unverified. */
-    DWORD sx = SleepEx(50, TRUE); t_note("SleepEx after EOF ReadFileEx: %lu hits %d", sx, (int)g_rec.hits);
+    /* kernelbase!ReadFileEx returns FALSE (BaseSetLastNTError) only when NtReadFile returns an error-severity status synchronously.
+       Win10 22H2 baseline: returns TRUE and the APC delivers the EOF once (SleepEx 192, hits 1). Accept both. */
+    if (!r) {
+        EXPECT_ERR(ERROR_HANDLE_EOF);
+        DWORD sx = SleepEx(50, TRUE); t_note("SleepEx after EOF ReadFileEx: %lu hits %d", sx, (int)g_rec.hits);
+    } else {
+        DWORD sx = SleepEx(5000, TRUE);
+        CHECKF(sx == WAIT_IO_COMPLETION, "SleepEx %lu", sx);
+        EXPECT_EQ(g_rec.hits, 1); EXPECT_EQ(g_rec.bytes[0], 0);
+        CHECKF(g_rec.err[0] == ERROR_HANDLE_EOF, "apc err %lu", g_rec.err[0]);
+    }
     CloseHandle(h);
 }
 
@@ -343,7 +351,8 @@ TEST(aio_ioctl_get_compression_sync_handle_no_overlapped) {
     CHECK(okc); EXPECT_EQ(br, 2); CHECK(fmt <= 4);
     br = 0xFFFF; fmt = 0xFFFF; SET_ERR(0);
     CHECK(!U(DeviceIoControl)(h, FSCTL_GET_COMPRESSION, NULL, 0, &fmt, 0, &br, NULL));
-    DWORD e = GetLastError(); CHECKF(e == ERROR_INSUFFICIENT_BUFFER || e == ERROR_INVALID_PARAMETER || e == ERROR_MORE_DATA, "err %lu", e);
+    /* Win10 22H2 baseline (NTFS): zero-length output buffer gives ERROR_INVALID_USER_BUFFER (1784). */
+    DWORD e = GetLastError(); CHECKF(e == ERROR_INSUFFICIENT_BUFFER || e == ERROR_INVALID_PARAMETER || e == ERROR_MORE_DATA || e == ERROR_INVALID_USER_BUFFER, "err %lu", e);
     CloseHandle(h);
 }
 

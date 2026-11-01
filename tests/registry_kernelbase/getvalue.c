@@ -231,7 +231,9 @@ TEST(regkb_getvalue_expand_sz_is_expanded) {
     swprintf(expect, MAX_PATH + 32, L"%ls\\k32t", root);
     EQ(gv(h, NULL, L"exp", RRF_RT_REG_SZ, &t, out, &cb), 0);
     EQ(t, REG_SZ);                    /* reported as plain REG_SZ after expansion */
-    CHECK(!lstrcmpiW(out, expect)); EQ(cb, (lstrlenW(out) + 1) * 2);
+    /* p1: NullTerminateRegExpandSzString reports max(expanded size, stored size) in *pcbData */
+    DWORD stored = sizeof L"%SystemRoot%\\k32t", expd = (lstrlenW(out) + 1) * 2;
+    CHECK(!lstrcmpiW(out, expect)); EQ(cb, expd > stored ? expd : stored);
     t = 0; cb = sizeof out;
     EQ(gv(rk_root(), L"test_regkb_getvalue_expand_sz_is_expanded", L"exp", RRF_RT_REG_SZ, &t, out, &cb), 0);
     EQ(t, REG_SZ); CHECK(!lstrcmpiW(out, expect));

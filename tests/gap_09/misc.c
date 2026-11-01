@@ -568,10 +568,22 @@ TEST(gap9_privcheck_primary_token_rejected) {
     LookupPrivilegeValueA(NULL, SE_CHANGE_NOTIFY_NAME, &ps.s.Privilege[0].Luid);
     ps.s.PrivilegeCount = 1; ps.s.Control = PRIVILEGE_SET_ALL_NECESSARY;
     BOOL res = 0x77; SET_ERR(0);
-    G9EQ(U(PrivilegeCheck)(p, &ps.s, &res), FALSE);
-    EXPECT_ERR(ERROR_BAD_IMPERSONATION_LEVEL);
-    G9EQ(res, 0);
+    /* Win10 NtPrivilegeCheck only rejects an impersonation token of SecurityAnonymous level; a primary token is accepted. */
+    LUID cn = ps.s.Privilege[0].Luid; int st = g9_priv_state(p, &cn);
+    G9EQ(U(PrivilegeCheck)(p, &ps.s, &res), TRUE);
+    CHECKF(res == (st == 1), "primary token result %d, token state %d", res, st);
     CloseHandle(p);
+    HANDLE pd = NULL, anon = NULL;
+    if (OpenProcessToken(GetCurrentProcess(), TOKEN_DUPLICATE | TOKEN_QUERY, &pd)) {
+        if (DuplicateTokenEx(pd, TOKEN_QUERY, NULL, SecurityAnonymous, TokenImpersonation, &anon)) {
+            res = 0x77; SET_ERR(0);
+            G9EQ(U(PrivilegeCheck)(anon, &ps.s, &res), FALSE);
+            EXPECT_ERR(ERROR_BAD_IMPERSONATION_LEVEL);
+            G9EQ(res, 0);
+            CloseHandle(anon);
+        } else t_note("anonymous-level duplicate failed: %lu", GetLastError());
+        CloseHandle(pd);
+    }
 }
 
 TEST(gap9_privcheck_access_rights) {
@@ -728,20 +740,29 @@ TEST(gap9_preparetape_physicaldrive_zero_access) {
 UDECL(DWORD, QueryIoRateControlInformationJobObject, (HANDLE, PCWSTR, void **, ULONG *));
 UDECL(void, FreeMemoryJobObject, (void *));
 
+/* Win10 1607+ (documented as unsupported): kernel32 queries job class 0x1f with a 0x30-byte buffer, the kernel expects 0x90 and
+ * fails with STATUS_INFO_LENGTH_MISMATCH before the handle is looked at, so every handle yields ERROR_BAD_LENGTH. */
+static DWORD IORATE_BAD_HANDLE_ERR(void) {
+    OSVERSIONINFOEXW v; memset(&v, 0, sizeof v); v.dwOSVersionInfoSize = sizeof v;
+    LONG (WINAPI *rgv)(OSVERSIONINFOEXW *) = (LONG (WINAPI *)(OSVERSIONINFOEXW *))GetProcAddress(GetModuleHandleA("ntdll.dll"), "RtlGetVersion");
+    if (rgv && rgv(&v) == 0 && v.dwBuildNumber >= 14393) return ERROR_BAD_LENGTH;
+    return ERROR_INVALID_HANDLE;
+}
+
 TEST(gap9_ioratequery_invalid_job_handles) {
     REQUIRE(UN(QueryIoRateControlInformationJobObject));
     void *info = (void *)(ULONG_PTR)0x1234; ULONG cnt = 0xFF;
     SET_ERR(0);
     CHECK(UN(QueryIoRateControlInformationJobObject)(NULL, L"\\Device\\HarddiskVolume1", &info, &cnt) == 0);
-    EXPECT_ERR(ERROR_INVALID_HANDLE);
+    EXPECT_ERR(IORATE_BAD_HANDLE_ERR());
     HANDLE ev = CreateEventA(NULL, TRUE, FALSE, NULL);
     SET_ERR(0);
     CHECK(UN(QueryIoRateControlInformationJobObject)(ev, L"\\Device\\HarddiskVolume1", &info, &cnt) == 0);
-    EXPECT_ERR(ERROR_INVALID_HANDLE);
+    EXPECT_ERR(IORATE_BAD_HANDLE_ERR());
     CloseHandle(ev);
     SET_ERR(0);
     CHECK(UN(QueryIoRateControlInformationJobObject)(ev, L"\\Device\\HarddiskVolume1", &info, &cnt) == 0);
-    EXPECT_ERR(ERROR_INVALID_HANDLE);
+    EXPECT_ERR(IORATE_BAD_HANDLE_ERR());
     CHECK(info == (void *)(ULONG_PTR)0x1234);      /* untouched on failure */
 }
 

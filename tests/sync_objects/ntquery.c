@@ -64,7 +64,8 @@ TEST(nq_type_names) {
         CHECKF(r > 0 && wcscmp(n, tab[i].want) == 0, "type of object %d is '%ls'", i, n);
     }
     HANDLE hr = U(CreateWaitableTimerExW)(NULL, NULL, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS);
-    if (hr) { int r = nq_type(hr, n, 64); CHECKF(r > 0 && wcscmp(n, L"Timer") == 0, "'%ls'", n); CloseHandle(hr); }
+    if (hr) { int r = nq_type(hr, n, 64);   /* Win10: high-resolution timers are a distinct kernel type "IRTimer" */
+        CHECKF(r > 0 && (wcscmp(n, L"Timer") == 0 || wcscmp(n, L"IRTimer") == 0), "'%ls'", n); CloseHandle(hr); }
     CloseHandle(e); CloseHandle(m); CloseHandle(s); CloseHandle(t);
 }
 TEST(nq_granted_access_default_all_access) {
@@ -317,7 +318,10 @@ TEST(nq_timer_signaled_state_after_fire) {
     U(SetWaitableTimer)(t, &d, 0, NULL, NULL, FALSE);
     EXPECT_EQ(WaitForSingleObject(t, 5000), WAIT_OBJECT_0);
     UN(NtQueryTimer)(t, 0, &i, sizeof i, &ret);
-    EXPECT_EQ(i.State, 1); EXPECT_EQ(i.Remaining, 0);
+    EXPECT_EQ(i.State, 1);
+    /* Win10 NtQueryTimer returns DueTime - InterruptTime; once fired DueTime is cleared so the value is
+     * negative (-uptime), not 0. Only require "no time remaining". */
+    CHECKF(i.Remaining <= 0, "remaining %lld", (long long)i.Remaining);
     CloseHandle(t);
 }
 TEST(nq_timer_query_errors) {

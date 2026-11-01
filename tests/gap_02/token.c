@@ -602,8 +602,11 @@ TEST(gap2_rtok_sandbox_inert) {
     src = rt_src(); if (!src) { CHECK(0); return; }
     CHECK(f(src, SANDBOX_INERT, 0, NULL, 0, NULL, 0, NULL, &n));
     if (n) {
+        /* the kernel (SepFilterToken) only sets the flag when the caller runs as LocalSystem */
+        TOKEN_USER *tu = tok_info(src, TokenUser); BYTE sysb[16]; int is_sys = 0;
+        if (tu) { is_sys = EqualSid(tu->User.Sid, g2_mksid(sysb, 5, 1, 18u)); free(tu); }
         CHECK(GetTokenInformation(n, (TOKEN_INFORMATION_CLASS)15 /* TokenSandBoxInert */, &v, sizeof v, &r));
-        CHECK(v != 0);
+        CHECK(is_sys ? v != 0 : v == 0);
         CloseHandle(n);
     }
     n = NULL; v = 0;
@@ -755,7 +758,8 @@ TEST(gap2_rtok_combined) {
     CHECK(f(src, DISABLE_MAX_PRIVILEGE | SANDBOX_INERT | WRITE_RESTRICTED, 1, &d, 1, &la, 1, &r, &n));
     if (n) {
         CHECK(IsTokenRestricted(n));
-        CHECK(!has_priv(n, 23, NULL));
+        /* DISABLE_MAX_PRIVILEGE ignores the delete list, so SeChangeNotifyPrivilege (23) stays */
+        CHECK(has_priv(n, 23, NULL));
         CloseHandle(n);
     }
     CloseHandle(src);
@@ -782,7 +786,17 @@ TEST(gap2_rtok_chain) {
     sa.Sid = g2_mksid(sidb, 1, 1, 0u); sa.Attributes = 0;
     CHECK(f(src, 0, 0, NULL, 0, NULL, 1, &sa, &a));
     if (a) {
-        CHECK(f(a, DISABLE_MAX_PRIVILEGE, 0, NULL, 0, NULL, 0, NULL, &b));
+        /* A restricted source filtered without any restricting SID yields a token with no
+           restricting SIDs; SepFilterToken rejects that (STATUS_INVALID_PARAMETER). */
+        SET_ERR(0);
+        CHECK(!f(a, DISABLE_MAX_PRIVILEGE, 0, NULL, 0, NULL, 0, NULL, &b));
+        EXPECT_ERR(ERROR_INVALID_PARAMETER);
+        if (b) { CloseHandle(b); b = NULL; }
+        /* Re-supplying a restricting SID that is already in the source's restricting set works */
+        SET_ERR(0);
+        BOOL okb = f(a, DISABLE_MAX_PRIVILEGE, 0, NULL, 0, NULL, 1, &sa, &b);
+        if (!okb) t_note("restricted-of-restricted failed: err=%lu, source handle access 0x%lx", GetLastError(), g2_granted(a));
+        CHECK(okb);
         if (b) { CHECK(IsTokenRestricted(b)); CloseHandle(b); }
         CloseHandle(a);
     }

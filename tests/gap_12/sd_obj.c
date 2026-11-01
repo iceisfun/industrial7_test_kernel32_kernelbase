@@ -23,11 +23,20 @@ static void check_world_dacl(HANDLE h, DWORD mask, const char *what) {
 
 /* ---------------- SetKernelObjectSecurity ---------------- */
 typedef HANDLE (*mk_fn)(DWORD *full);
-static HANDLE mk_event(DWORD *f)   { *f = EVENT_ALL_ACCESS;     return CreateEventW(NULL, TRUE, FALSE, NULL); }
-static HANDLE mk_mutex(DWORD *f)   { *f = MUTEX_ALL_ACCESS;     return CreateMutexW(NULL, FALSE, NULL); }
-static HANDLE mk_sem(DWORD *f)     { *f = SEMAPHORE_ALL_ACCESS; return CreateSemaphoreW(NULL, 0, 1, NULL); }
-static HANDLE mk_timer(DWORD *f)   { *f = TIMER_ALL_ACCESS;     return CreateWaitableTimerW(NULL, TRUE, NULL); }
-static HANDLE mk_map(DWORD *f)     { *f = SECTION_ALL_ACCESS;   return CreateFileMappingW(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, 4096, NULL); }
+/* P1 (gap_12): the kernel keeps a security descriptor only for objects that have a name (or whose type requires
+ * one); an unnamed event/mutex/semaphore/timer/section has none and NtSetSecurityObject fails with
+ * STATUS_NO_SECURITY_ON_OBJECT (ERROR_NO_SECURITY_ON_OBJECT, 1350). These tests therefore use uniquely named objects. */
+static const WCHAR *uname(const char *tag) {
+    static WCHAR nm[96]; static unsigned seq;
+    swprintf(nm, 96, L"k32t_g12_%hs_%lu_%u", tag, GetCurrentProcessId(), ++seq);
+    return nm;
+}
+static HANDLE nev(void) { return CreateEventW(NULL, TRUE, FALSE, uname("ev")); }
+static HANDLE mk_event(DWORD *f)   { *f = EVENT_ALL_ACCESS;     return CreateEventW(NULL, TRUE, FALSE, uname("ev")); }
+static HANDLE mk_mutex(DWORD *f)   { *f = MUTEX_ALL_ACCESS;     return CreateMutexW(NULL, FALSE, uname("mx")); }
+static HANDLE mk_sem(DWORD *f)     { *f = SEMAPHORE_ALL_ACCESS; return CreateSemaphoreW(NULL, 0, 1, uname("sem")); }
+static HANDLE mk_timer(DWORD *f)   { *f = TIMER_ALL_ACCESS;     return CreateWaitableTimerW(NULL, TRUE, uname("tm")); }
+static HANDLE mk_map(DWORD *f)     { *f = SECTION_ALL_ACCESS;   return CreateFileMappingW(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, 4096, uname("map")); }
 static HANDLE mk_job(DWORD *f)     { *f = JOB_OBJECT_ALL_ACCESS; return CreateJobObjectW(NULL, NULL); }
 static HANDLE mk_pipe(DWORD *f)    { HANDLE r = NULL, w = NULL; *f = FILE_ALL_ACCESS; if (!CreatePipe(&r, &w, NULL, 0)) return NULL; CloseHandle(w); return r; }
 static HANDLE mk_file(DWORD *f)    { char p[MAX_PATH]; t_tmpfile(p, sizeof p, "kobj_file.bin"); *f = FILE_ALL_ACCESS;
@@ -107,7 +116,7 @@ TEST(gap12_kobj_missing_write_owner) {
 }
 TEST(gap12_kobj_dacl_needs_only_write_dac) {
     REQUIRE(U(SetKernelObjectSecurity));
-    HANDLE e = CreateEventW(NULL, TRUE, FALSE, NULL), h = NULL;
+    HANDLE e = nev(), h = NULL;
     CHECK(DuplicateHandle(GetCurrentProcess(), e, GetCurrentProcess(), &h, WRITE_DAC, FALSE, 0));
     DSD d; dsd_init(&d, EVENT_ALL_ACCESS);
     SET_ERR(0xBAD);
@@ -130,7 +139,7 @@ TEST(gap12_kobj_missing_sacl_privilege) {
 }
 TEST(gap12_kobj_self_relative_sd_accepted) {
     REQUIRE(U(SetKernelObjectSecurity));
-    HANDLE e = CreateEventW(NULL, TRUE, FALSE, NULL);
+    HANDLE e = nev();
     DSD d; dsd_init(&d, EVENT_ALL_ACCESS);
     BYTE rel[512]; DWORD n = sizeof rel;
     CHECK(MakeSelfRelativeSD(&d.sd, rel, &n));
@@ -141,7 +150,7 @@ TEST(gap12_kobj_self_relative_sd_accepted) {
 }
 TEST(gap12_kobj_owner_to_current_user) {
     REQUIRE(U(SetKernelObjectSecurity));
-    HANDLE e = CreateEventW(NULL, TRUE, FALSE, NULL);
+    HANDLE e = nev();
     SECURITY_DESCRIPTOR sd; sd_init(&sd); SetSecurityDescriptorOwner(&sd, sid_user(), FALSE);
     SET_ERR(0xBAD);
     BOOL r = U(SetKernelObjectSecurity)(e, OWNER_SECURITY_INFORMATION, &sd);
@@ -178,7 +187,7 @@ TEST(gap12_kobj_dacl_not_present_in_sd) {
 }
 TEST(gap12_kobj_null_dacl_grants_all) {
     REQUIRE(U(SetKernelObjectSecurity));
-    HANDLE e = CreateEventW(NULL, TRUE, FALSE, NULL);
+    HANDLE e = nev();
     SECURITY_DESCRIPTOR sd; sd_init(&sd); SetSecurityDescriptorDacl(&sd, TRUE, NULL, FALSE);
     SET_ERR(0xBAD);
     EXPECT_EQ(U(SetKernelObjectSecurity)(e, DACL_SECURITY_INFORMATION, &sd), TRUE);
@@ -251,17 +260,17 @@ TEST(gap12_kobj_bad_sd_revision) {
 }
 TEST(gap12_kobj_dacl_roundtrip_two_aces) {
     REQUIRE(U(SetKernelObjectSecurity));
-    HANDLE e = CreateEventW(NULL, TRUE, FALSE, NULL);
+    HANDLE e = nev();
     SECURITY_DESCRIPTOR sd; BYTE ab[256]; PACL a = (PACL)ab; sd_init(&sd);
     InitializeAcl(a, sizeof ab, ACL_REVISION);
     AddAccessAllowedAce(a, ACL_REVISION, EVENT_ALL_ACCESS, sid_user());
     AddAccessDeniedAce(a, ACL_REVISION, EVENT_MODIFY_STATE, sid_world());
     SetSecurityDescriptorDacl(&sd, TRUE, a, FALSE);
-    CHECK(U(SetKernelObjectSecurity)(e, DACL_SECURITY_INFORMATION, &sd));
+    if (!U(SetKernelObjectSecurity)(e, DACL_SECURITY_INFORMATION, &sd)) { CHECKF(0, "SetKernelObjectSecurity err=%lu", GetLastError()); CloseHandle(e); return; }
     BYTE buf[1024]; PACL got = NULL; BOOL p = 0, d = 0; ACL_SIZE_INFORMATION si;
     CHECK(get_kobj_sd(e, DACL_SECURITY_INFORMATION, buf, sizeof buf));
     CHECK(GetSecurityDescriptorDacl(buf, &p, &got, &d));
-    CHECK(p && got && GetAclInformation(got, &si, sizeof si, AclSizeInformation));
+    if (!(p && got && GetAclInformation(got, &si, sizeof si, AclSizeInformation))) { CHECK(0); CloseHandle(e); return; }
     EXPECT_EQ(si.AceCount, 2);
     ACCESS_ALLOWED_ACE *a0 = NULL, *a1 = NULL;
     GetAce(got, 0, (LPVOID *)&a0); GetAce(got, 1, (LPVOID *)&a1);
@@ -270,7 +279,7 @@ TEST(gap12_kobj_dacl_roundtrip_two_aces) {
 }
 TEST(gap12_kobj_repeated_sets) {
     REQUIRE(U(SetKernelObjectSecurity));
-    HANDLE e = CreateEventW(NULL, TRUE, FALSE, NULL);
+    HANDLE e = nev();
     DSD d; dsd_init(&d, EVENT_ALL_ACCESS);
     int bad = 0;
     for (int i = 0; i < 2000; i++) if (!U(SetKernelObjectSecurity)(e, DACL_SECURITY_INFORMATION, &d.sd)) bad++;
@@ -280,7 +289,7 @@ TEST(gap12_kobj_repeated_sets) {
 TEST(gap12_kobj_cross_thread_visibility) {
     REQUIRE(U(SetKernelObjectSecurity));
     /* the handle's SD is shared: a second handle sees the change made through the first */
-    HANDLE e = CreateEventW(NULL, TRUE, FALSE, NULL), d2 = NULL;
+    HANDLE e = nev(), d2 = NULL;
     CHECK(DuplicateHandle(GetCurrentProcess(), e, GetCurrentProcess(), &d2, READ_CONTROL, FALSE, 0));
     DSD d; dsd_init(&d, EVENT_ALL_ACCESS);
     CHECK(U(SetKernelObjectSecurity)(e, DACL_SECURITY_INFORMATION, &d.sd));
@@ -732,7 +741,9 @@ TEST(gap12_private_repeat) {
     EXPECT_EQ(bad, 0);
     PSID s; DWORD mask = 0;
     EXPECT_EQ(obj_dacl(obj, &s, &mask), 1);
-    EXPECT_EQ(mask, 1u << (299 % 8));
+    /* SetPrivateObjectSecurity masks every ACE with GenericMapping->GenericAll (ntdll!RtlpApplyAclToObject), so bits
+     * outside s_gm.GenericAll (0x1F0007) do not survive: bit 3 (0x8) of iteration 299 is stripped to 0 (P1 gap_12). */
+    EXPECT_EQ(mask, (1u << (299 % 8)) & s_gm.GenericAll);
     DestroyPrivateObjectSecurity(&obj);
 }
 TEST(gap12_private_ex_dacl) {

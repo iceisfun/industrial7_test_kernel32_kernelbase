@@ -455,6 +455,15 @@ TEST(cp2_missing_source_and_dir) {
     EXPECT_EQ((ULONG)U(CopyFile2)(s, d, NULL), K_HR(ERROR_PATH_NOT_FOUND));
     kf_cleanup("cp2_ok_src.bin");
 }
+CHILD(kbx_cp2_nulldst) {
+    (void)argc; (void)argv;
+    if (!U(CopyFile2)) return 0;
+    WCHAR s[MAX_PATH]; kf_wpath(s, MAX_PATH, "cp2_null_src.bin");
+    char sa[MAX_PATH]; t_tmpfile(sa, sizeof sa, "cp2_null_src.bin"); kf_write(sa, "x", 1);
+    HRESULT hr = U(CopyFile2)(s, NULL, NULL);
+    kf_cleanup("cp2_null_src.bin");
+    return FAILED(hr) ? 0 : 1;
+}
 TEST(cp2_null_names) {
     REQUIRE(U(CopyFile2));
     WCHAR d[MAX_PATH]; kf_wpath(d, MAX_PATH, "cp2_null_dst.bin");
@@ -464,8 +473,11 @@ TEST(cp2_null_names) {
     CHECK(FAILED(hr));
     WCHAR s[MAX_PATH]; kf_wpath(s, MAX_PATH, "cp2_null_src.bin");
     char sa[MAX_PATH]; t_tmpfile(sa, sizeof sa, "cp2_null_src.bin"); kf_write(sa, "x", 1);
-    hr = U(CopyFile2)(s, NULL, NULL);
-    CHECK(FAILED(hr)); t_note("CopyFile2(NULL dst) -> 0x%lx", (ULONG)hr);
+    /* Win10 kernelbase!BasepCopyFileExW reads the last character of the destination name without a NULL check
+       (observed AV 0xc0000005 on 19045): the NULL destination call is isolated in a child process. */
+    DWORD cc = t_run_child("kbx_cp2_nulldst", "", 25000);
+    if (cc == 0xC0000005) t_note("CopyFile2(s, NULL dst) access violation in child");
+    else CHECKF(cc == 0, "CopyFile2(s, NULL dst) child result 0x%lx (0 = failed cleanly, 0xC0000005 = the known NULL read)", cc);
     hr = U(CopyFile2)(s, L"", NULL);
     CHECK(FAILED(hr));
     kf_cleanup("cp2_null_src.bin");

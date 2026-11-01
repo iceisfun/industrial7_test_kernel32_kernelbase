@@ -20,6 +20,15 @@ static void g4_cooked(void) {
     SetConsoleMode(hin_(), ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT | ENABLE_PROCESSED_INPUT);
     inp_reset();
 }
+/* The console command history is keyed by the exe name the process connected
+ * with (its own image base name), not by SetConsoleInputExeNameW. */
+static char *g4_hexea(void) {
+    static char a[MAX_PATH];
+    if (!a[0]) WideCharToMultiByte(CP_ACP, 0, exe_basename_w(), -1, a, sizeof a, NULL, NULL);
+    return a;
+}
+#define G4HEXE  ((WCHAR *)exe_basename_w())
+#define G4HEXEA g4_hexea()
 static BOOL g4_line(const WCHAR *typed) {
     WCHAR b[128]; DWORD n = 0;
     typestr(hin_(), typed);
@@ -73,8 +82,9 @@ CT(gap4_alias_null_buffer_zero_size) {
     CC(AddConsoleAliasW(L"nb", L"zz", G4EXE));
     SetLastError(0xBAD);
     DWORD r = GetConsoleAliasW(L"nb", NULL, 0, G4EXE);
-    cnote("GetConsoleAliasW(NULL buffer, 0) -> %lu err=%lu", r, GetLastError());
-    CERR(ERROR_INSUFFICIENT_BUFFER);
+    DWORD e = GetLastError();
+    cnote("GetConsoleAliasW(NULL buffer, 0) -> %lu err=%lu", r, e);
+    CEQ(e, ERROR_INSUFFICIENT_BUFFER);
     SetLastError(0xBAD);
     r = GetConsoleAliasA("nb", NULL, 0, "gap4_alias.exe");
     cnote("GetConsoleAliasA(NULL buffer, 0) -> %lu err=%lu", r, GetLastError());
@@ -412,7 +422,7 @@ CT(gap4_hist_a_w_lengths) {
     g4_setexe(); g4_cooked();
     CC(g4_line(L"ab\r"));
     CC(g4_line(L"cde\r"));
-    DWORD a = GetConsoleCommandHistoryLengthA(G4EXEA), w = GetConsoleCommandHistoryLengthW(G4EXE);
+    DWORD a = GetConsoleCommandHistoryLengthA(G4HEXEA), w = GetConsoleCommandHistoryLengthW(G4HEXE);
     CEQ(a, (2 + 1) + (3 + 1));
     CEQ(w, a * 2);
 }
@@ -423,16 +433,16 @@ CT(gap4_hist_a_contents_and_boundaries) {
     g4_setexe(); g4_cooked();
     CC(g4_line(L"first\r"));
     CC(g4_line(L"second\r"));
-    DWORD need = GetConsoleCommandHistoryLengthA(G4EXEA);
+    DWORD need = GetConsoleCommandHistoryLengthA(G4HEXEA);
     CEQ(need, 6 + 7);
     char b[64]; memset(b, 0x55, sizeof b);
-    DWORD n = GetConsoleCommandHistoryA(b, need, G4EXEA);
+    DWORD n = GetConsoleCommandHistoryA(b, need, G4HEXEA);
     CEQ(n, need);
     CC(!strcmp(b, "first")); CC(!strcmp(b + 6, "second"));
     CEQ((unsigned char)b[need], 0x55);
     for (DWORD sz = 0; sz < need; sz++) {
         memset(b, 0x55, sizeof b);
-        GetConsoleCommandHistoryA(b, sz, G4EXEA);
+        GetConsoleCommandHistoryA(b, sz, G4HEXEA);
         CCF((unsigned char)b[sz] == 0x55, "size %lu overran", sz);
     }
 }
@@ -443,16 +453,16 @@ CT(gap4_hist_w_contents_and_boundaries) {
     g4_setexe(); g4_cooked();
     CC(g4_line(L"alpha\r"));
     CC(g4_line(L"be\r"));
-    DWORD need = GetConsoleCommandHistoryLengthW(G4EXE);
+    DWORD need = GetConsoleCommandHistoryLengthW(G4HEXE);
     CEQ(need, (6 + 3) * 2);
     WCHAR b[64];
     for (int i = 0; i < 64; i++) b[i] = 0x7777;
-    CEQ(GetConsoleCommandHistoryW(b, need, G4EXE), need);
+    CEQ(GetConsoleCommandHistoryW(b, need, G4HEXE), need);
     CWSTR(b, L"alpha"); CWSTR(b + 6, L"be");
     CEQ(b[need / 2], 0x7777);
     for (DWORD sz = 0; sz < need; sz += 2) {
         for (int i = 0; i < 64; i++) b[i] = 0x7777;
-        GetConsoleCommandHistoryW(b, sz, G4EXE);
+        GetConsoleCommandHistoryW(b, sz, G4HEXE);
         CCF(b[sz / 2] == 0x7777, "size %lu overran", sz);
     }
 }
@@ -463,7 +473,7 @@ CT(gap4_hist_order_oldest_first) {
     g4_setexe(); g4_cooked();
     CC(g4_line(L"c1\r")); CC(g4_line(L"c2\r")); CC(g4_line(L"c3\r"));
     WCHAR b[64]; for (int i = 0; i < 64; i++) b[i] = 0x7777;
-    DWORD n = GetConsoleCommandHistoryW(b, sizeof b, G4EXE);
+    DWORD n = GetConsoleCommandHistoryW(b, sizeof b, G4HEXE);
     CEQ(n, (3 * 3) * 2);
     CWSTR(b, L"c1"); CWSTR(b + 3, L"c2"); CWSTR(b + 6, L"c3");
 }
@@ -498,11 +508,18 @@ CT(gap4_hist_expunge_resets_length) {
     CREQ(ReadConsoleW); CREQ(GetConsoleCommandHistoryLengthW); CREQ(ExpungeConsoleCommandHistoryW);
     g4_setexe(); g4_cooked();
     CC(g4_line(L"gone\r"));
-    CEQ(GetConsoleCommandHistoryLengthW(G4EXE), 5 * 2);
-    ExpungeConsoleCommandHistoryW(G4EXE);
-    CEQ(GetConsoleCommandHistoryLengthW(G4EXE), 0);
-    CC(g4_line(L"back\r"));
-    CEQ(GetConsoleCommandHistoryLengthW(G4EXE), 5 * 2);
+    CEQ(GetConsoleCommandHistoryLengthW(G4HEXE), 5 * 2);
+    ExpungeConsoleCommandHistoryW(G4HEXE);
+    CEQ(GetConsoleCommandHistoryLengthW(G4HEXE), 0);
+    /* Win10 22H2 conhost: ExpungeConsoleCommandHistoryWImpl sets the history's Flags to 2, clearing CLE_ALLOCATED (bit 0);
+     * the next cooked read builds COOKED_READ_DATA, whose ctor calls CommandHistory::s_Find(process handle); s_Find finds
+     * the entry for this process with bit 0 clear and calls wil FailFast (history.cpp), so conhost exits and the read
+     * fails with ERROR_PIPE_NOT_CONNECTED; with the server gone the length query returns 0. */
+    SetLastError(0);
+    BOOL back_ok = g4_line(L"back\r");
+    DWORD back_err = GetLastError();
+    CCF(!back_ok && back_err == ERROR_PIPE_NOT_CONNECTED, "ReadConsoleW after expunge: ok=%d err=%lu (want FALSE/233)", back_ok, back_err);
+    CEQ(GetConsoleCommandHistoryLengthW(G4HEXE), 0);
 }
 
 CT(gap4_hist_empty_lines_not_recorded) {
@@ -510,9 +527,9 @@ CT(gap4_hist_empty_lines_not_recorded) {
     CREQ(ReadConsoleW); CREQ(GetConsoleCommandHistoryLengthA);
     g4_setexe(); g4_cooked();
     CC(g4_line(L"\r")); CC(g4_line(L"\r"));
-    CEQ(GetConsoleCommandHistoryLengthA(G4EXEA), 0);
+    CEQ(GetConsoleCommandHistoryLengthA(G4HEXEA), 0);
     CC(g4_line(L"x\r"));
-    CEQ(GetConsoleCommandHistoryLengthA(G4EXEA), 2);
+    CEQ(GetConsoleCommandHistoryLengthA(G4HEXEA), 2);
 }
 
 CT(gap4_hist_zero_size_buffer) {

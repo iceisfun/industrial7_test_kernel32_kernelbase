@@ -92,7 +92,7 @@ TEST(geo_invalid_ids) {
 }
 TEST(geo_invalid_type) {
     REQUIRE(U(GetGeoInfoW));
-    static const GEOTYPE bad[] = { 0, 17, 100, 0xFFFF, 0xFFFFFFFF };
+    static const GEOTYPE bad[] = { 0, 100, 0xFFFF, 0xFFFFFFFF };
     WCHAR b[100];
     for (int i = 0; i < ARRAYLEN(bad); i++) {
         SET_ERR(0);
@@ -100,6 +100,10 @@ TEST(geo_invalid_type) {
         CHECKF(r == 0, "type %lu r=%d", (unsigned long)bad[i], r);
         t_note("GetGeoInfoW invalid type %lu err=%lu", (unsigned long)bad[i], GetLastError());
     }
+    /* P1: 17 is GEO_NAME (ISO 3166-1 alpha-2 / UN M.49 code), valid on Win8+; Win10 returned r=3 */
+    SET_ERR(0);
+    int rn = geo(244, 17, b, 100);
+    CHECKF(rn == 3 && !lstrcmpW(b, L"US"), "GEO_NAME r=%d '%ls'", rn, b);
 }
 TEST(geo_langid_param) {
     REQUIRE(U(GetGeoInfoW));
@@ -126,20 +130,20 @@ TEST(geo_a_variant) {
     SET_ERR(0); CHECK(U(GetGeoInfoA)(0, GEO_ISO2, b, 100, 0) == 0);
 }
 TEST(geo_ex_by_region_name) {
-    REQUIRE(UN(GetGeoInfoExK));
+    REQUIRE(UN(GetGeoInfoEx));
     WCHAR b[100]; SET_ERR(0);
-    int r = UN(GetGeoInfoExK)(L"US", GEO_ISO3, b, 100);
+    int r = UN(GetGeoInfoEx)(L"US", GEO_ISO3, b, 100);
     CHECKF(r == 4 && !lstrcmpW(b, L"USA"), "r=%d err=%lu '%ls'", r, GetLastError(), b);
-    r = UN(GetGeoInfoExK)(L"DE", GEO_NATION, b, 100); CHECK(r > 1); if (r > 1) CHECK(!lstrcmpW(b, L"94"));
-    r = UN(GetGeoInfoExK)(L"JP", GEO_ISO_UN_NUMBER, b, 100); CHECK(r == 4); CHECK(!lstrcmpW(b, L"392"));
-    r = UN(GetGeoInfoExK)(L"us", GEO_ISO2, b, 100); t_note("lowercase region name: r=%d '%ls'", r, b);
-    CHECK(UN(GetGeoInfoExK)(L"US", GEO_ISO2, NULL, 0) == 3);
-    SET_ERR(0); CHECK(UN(GetGeoInfoExK)(NULL, GEO_ISO2, b, 100) == 0); EXPECT_ERR(ERROR_INVALID_PARAMETER);
-    SET_ERR(0); CHECK(UN(GetGeoInfoExK)(L"ZZZZZ", GEO_ISO2, b, 100) == 0); EXPECT_ERR(ERROR_INVALID_PARAMETER);
-    SET_ERR(0); CHECK(UN(GetGeoInfoExK)(L"", GEO_ISO2, b, 100) == 0); EXPECT_ERR(ERROR_INVALID_PARAMETER);
-    SET_ERR(0); CHECK(UN(GetGeoInfoExK)(L"US", GEO_ISO2, b, -1) == 0); EXPECT_ERR(ERROR_INVALID_PARAMETER);
-    if (!t_is_wine()) { SET_ERR(0); CHECK(UN(GetGeoInfoExK)(L"US", GEO_ISO2, NULL, 5) == 0); EXPECT_ERR(ERROR_INVALID_PARAMETER); }
-    SET_ERR(0); CHECK(UN(GetGeoInfoExK)(L"US", GEO_ISO2, b, 2) == 0); EXPECT_ERR(ERROR_INSUFFICIENT_BUFFER);
+    SET_ERR(0); r = UN(GetGeoInfoEx)(L"DE", GEO_NATION, b, 100); CHECK(r == 0); EXPECT_ERR(ERROR_INVALID_FLAGS); /* P1b: GetGeoInfoWorker handles types 2-5,8-0x12 only; type 1 -> 0x3ec */
+    r = UN(GetGeoInfoEx)(L"JP", GEO_ISO_UN_NUMBER, b, 100); CHECK(r == 4); CHECK(!lstrcmpW(b, L"392"));
+    r = UN(GetGeoInfoEx)(L"us", GEO_ISO2, b, 100); t_note("lowercase region name: r=%d '%ls'", r, b);
+    CHECK(UN(GetGeoInfoEx)(L"US", GEO_ISO2, NULL, 0) == 3);
+    SET_ERR(0); CHECK(UN(GetGeoInfoEx)(NULL, GEO_ISO2, b, 100) == 0); EXPECT_ERR(ERROR_INVALID_PARAMETER);
+    SET_ERR(0); CHECK(UN(GetGeoInfoEx)(L"ZZZZZ", GEO_ISO2, b, 100) == 0); EXPECT_ERR(ERROR_INVALID_PARAMETER);
+    SET_ERR(0); CHECK(UN(GetGeoInfoEx)(L"", GEO_ISO2, b, 100) == 0); EXPECT_ERR(ERROR_INVALID_PARAMETER);
+    SET_ERR(0); CHECK(UN(GetGeoInfoEx)(L"US", GEO_ISO2, b, -1) == 0); EXPECT_ERR(ERROR_INVALID_PARAMETER);
+    if (!t_is_wine()) { SET_ERR(0); CHECK(UN(GetGeoInfoEx)(L"US", GEO_ISO2, NULL, 5) == 0); EXPECT_ERR(ERROR_INVALID_PARAMETER); }
+    SET_ERR(0); CHECK(UN(GetGeoInfoEx)(L"US", GEO_ISO2, b, 2) == 0); EXPECT_ERR(ERROR_INSUFFICIENT_BUFFER);
 }
 TEST(geo_user_geoid) {
     REQUIRE(U(GetUserGeoID)); REQUIRE(U(GetGeoInfoW));
@@ -167,9 +171,9 @@ TEST(geo_user_default_geoname) {
     if (r > 1) {
         CHECK(r == lstrlenW(b) + 1);
         CHECK(lstrlenW(b) == 2 || lstrlenW(b) == 3);
-        if (UN(GetGeoInfoExK)) {
+        if (UN(GetGeoInfoEx)) {
             WCHAR n[32];
-            int rn = UN(GetGeoInfoExK)(b, GEO_NATION, n, 32);
+            int rn = UN(GetGeoInfoEx)(b, GEO_NATION, n, 32);
             if (rn > 1 && U(GetUserGeoID)(GEOCLASS_NATION) > 0) {
                 int ok = _wtoi(n) == (int)U(GetUserGeoID)(GEOCLASS_NATION);
                 if (!ok) t_note("geo name %ls nation=%ls vs GetUserGeoID %ld", b, n, (long)U(GetUserGeoID)(GEOCLASS_NATION));
@@ -225,7 +229,7 @@ TEST(calinfo_gregorian_enus_names) {
         { L"en-US", 1, CAL_ITWODIGITYEARMAX, L"2049", 1 },
         { L"de-DE", 1, CAL_SMONTHNAME3, L"März", 1 }, { L"de-DE", 1, CAL_SDAYNAME2, L"Dienstag", 1 }, { L"fr-FR", 1, CAL_SMONTHNAME2, L"février", 1 },
         { L"fr-FR", 1, CAL_SDAYNAME1, L"lundi", 1 }, { L"ja-JP", 1, CAL_SDAYNAME1, L"月曜日", 1 }, { L"ja-JP", 1, CAL_SMONTHNAME1, L"1月", 1 },
-        { L"zh-CN", 1, CAL_SDAYNAME7, L"星期日", 1 }, { L"ru-RU", 1, CAL_SMONTHNAME1, L"январь", 1 },
+        { L"zh-CN", 1, CAL_SDAYNAME7, L"星期日", 1 }, { L"ru-RU", 1, CAL_SMONTHNAME1, L"Январь", 1 },
         { L"tr-TR", 1, CAL_SDAYNAME1, L"Pazartesi", 1 }, { L"pt-BR", 1, CAL_SMONTHNAME3, L"março", 1 }, { L"ko-KR", 1, CAL_SDAYNAME1, L"월요일", 1 },
         { L"", 1, CAL_SMONTHNAME1, L"January", 1 }, { L"", 1, CAL_SDAYNAME7, L"Sunday", 1 }, { L"", 1, CAL_SSHORTDATE, L"MM/dd/yyyy", 1 },
     };
@@ -329,7 +333,7 @@ TEST(calinfo_buffer_semantics) {
     }
     if (!t_is_wine()) { SET_ERR(0); CHECK(ci(L"en-US", 1, CALN(CAL_SMONTHNAME3), NULL, 5, NULL) == 0); EXPECT_ERR(ERROR_INVALID_PARAMETER); }
     SET_ERR(0); CHECK(ci(L"en-US", 1, CALN(CAL_SMONTHNAME3), b, -1, NULL) == 0); EXPECT_ERR(ERROR_INVALID_PARAMETER);
-    SET_ERR(0); CHECK(ci(L"not-a-locale-x", 1, CALN(CAL_SMONTHNAME3), b, 100, NULL) == 0); EXPECT_ERR(ERROR_INVALID_PARAMETER);
+    SET_ERR(0); CHECK(ci(L"no-such-locale-xx", 1, CALN(CAL_SMONTHNAME3), b, 100, NULL) == 0); EXPECT_ERR(ERROR_INVALID_PARAMETER);
     CHECK(ci(L"en-US", 1, CALN(CAL_SMONTHNAME13), NULL, 0, NULL) == 1);
 }
 TEST(calinfo_invalid_calendar_and_type) {
@@ -515,7 +519,7 @@ TEST(calenum_date_formats_exex) {
     BOOL r = UN(EnumDateFormatsExEx)(dcb_exex, L"en-US", DATE_SHORTDATE, 0x77);
     CHECKF(r, "err %lu", GetLastError());
     CHECK(g_lp == 0x77); CHECK(c_find(L"M/d/yyyy") >= 0);
-    for (int i = 0; i < g_cn && i < 256; i++) CHECKF(g_cid[i] == 1 || g_cid[i] == 0, "calid %lu", (unsigned long)g_cid[i]);
+    for (int i = 0; i < g_cn && i < 256; i++) CHECKF(g_cid[i] == 1 || g_cid[i] == 0 || g_cid[i] == 2, "calid %lu", (unsigned long)g_cid[i]);
     c_reset(1); UN(EnumDateFormatsExEx)(dcb_exex, L"en-US", DATE_LONGDATE, 0); CHECK(g_cn == 1);
     REQUIRE(U(EnumDateFormatsExW));
     c_reset(0); CHECK(U(EnumDateFormatsExW)(ccb_exw, 0x409, DATE_SHORTDATE)); CHECK(c_find(L"M/d/yyyy") >= 0);

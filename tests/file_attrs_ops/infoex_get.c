@@ -514,7 +514,7 @@ TEST(finfo_get_normalized_name_short_form_open) {
     SetLastError(0);
     if (gi(h, C_NORMNAME, buf, sizeof buf)) {
         CHECK(ni->FileNameLength >= 2 * strlen("gi_normalize_me_longname.txt"));
-        CHECK(!_wcsnicmp(ni->FileName + ni->FileNameLength / 2 - 27, L"gi_normalize_me_longname.txt", 27));
+        CHECK(!_wcsnicmp(ni->FileName + ni->FileNameLength / 2 - 28, L"gi_normalize_me_longname.txt", 28)); /* P1: name is 28 chars, was 27 */
     } else t_note("normalized name err=%lu", GetLastError());
     CloseHandle(h); fa_rm(p);
 }

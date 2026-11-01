@@ -7,7 +7,8 @@
 TEST(gap13_strcatbuffa_basic) {
     REQUIRE(U(StrCatBuffA));
     char b[16] = "ab";
-    EXPECT_EQ(U(StrCatBuffA)(b, "cd", 16), b);
+    char *r1 = U(StrCatBuffA)(b, "cd", 16);   /* EXPECT_EQ evaluates its args twice: capture the result */
+    EXPECT_EQ(r1, b);
     EXPECT_STR(b, "abcd");
     U(StrCatBuffA)(b, "", 16);
     EXPECT_STR(b, "abcd");
@@ -52,7 +53,8 @@ TEST(gap13_strcatbuffa_zero_size) {
 TEST(gap13_strcatbuffw_basic) {
     REQUIRE(U(StrCatBuffW));
     WCHAR b[16] = L"ab";
-    EXPECT_EQ(U(StrCatBuffW)(b, L"cd", 16), b);
+    WCHAR *r1 = U(StrCatBuffW)(b, L"cd", 16);   /* EXPECT_EQ evaluates its args twice: capture the result */
+    EXPECT_EQ(r1, b);
     EXPECT_WSTR(b, L"abcd");
     WCHAR c[16] = L"";
     U(StrCatBuffW)(c, L"xyz", 16);

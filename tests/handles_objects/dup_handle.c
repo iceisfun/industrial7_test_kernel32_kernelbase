@@ -250,7 +250,8 @@ TEST(ho_dup_invalid_process_handles) {
         EXPECT_ERR(ERROR_INVALID_HANDLE);
         SET_ERR(0);
         EXPECT_EQ(DUP(SELF, h, badp[i], &d, 0, FALSE, DUPLICATE_SAME_ACCESS), FALSE);
-        EXPECT_ERR(ERROR_INVALID_HANDLE);
+        /* a NULL target process without DUPLICATE_CLOSE_SOURCE is STATUS_INVALID_PARAMETER in ObDuplicateObject */
+        EXPECT_ERR(badp[i] == NULL ? ERROR_INVALID_PARAMETER : ERROR_INVALID_HANDLE);
     }
     CloseHandle(h);
 }

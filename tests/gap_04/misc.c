@@ -839,21 +839,20 @@ TEST(gap4_acnp_fetch_with_sid) {
     CHECKF(r, "err=%lu", GetLastError());
     if (r) {
         EXPECT_EQ(got, need);
-        EXPECT_EQ(lstrlenW(b), need);
+        EXPECT_EQ(lstrlenW(b), need - 1); /* *needed counts the terminating NUL */
         CHECK(wcsstr(b, APPC_STR) != NULL);
         CHECK(wcsstr(b, L"AppContainerNamedObjects") != NULL);
         EXPECT_EQ(b[need + 1], 0x7777);
         t_note("path: %ls", b);
     }
-    /* exact character count leaves no room for the NUL */
+    /* buffer of exactly *needed characters */
     for (ULONG i = 0; i < need + 8; i++) b[i] = 0x7777;
     got = 0;
     SET_ERR(0xBAD);
     r = f(NULL, (PSID)SID_APPC, need, b, &got);
-    EXPECT_EQ(r, 0);
-    t_note("buffer == path length: err=%lu (overflow maps to %lu)", GetLastError(), n2d((LONG)0x80000005));
+    EXPECT_EQ(r, 1); /* need already includes the NUL, so this buffer fits */
     EXPECT_EQ(got, need);
-    /* one char fewer than the path: reported as too small */
+    /* one char fewer than *needed: too small */
     SET_ERR(0xBAD);
     r = f(NULL, (PSID)SID_APPC, need - 1, b, &got);
     EXPECT_EQ(r, 0);

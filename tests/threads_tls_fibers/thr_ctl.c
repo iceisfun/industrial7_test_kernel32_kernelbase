@@ -502,7 +502,8 @@ static DWORD WINAPI th_bgmode(LPVOID p) {
     int (WINAPI *gp)(HANDLE) = (int (WINAPI *)(HANDLE))t_proc("GetThreadPriority");
     DWORD bits = 0;
     SetLastError(0);
-    if (!sp(GetCurrentThread(), THREAD_MODE_BACKGROUND_END)) { bits |= 1; if (GetLastError() != 401) bits |= 0x100; } /* ERROR_THREAD_MODE_NOT_BACKGROUND */
+    if (sp(GetCurrentThread(), THREAD_MODE_BACKGROUND_END)) bits |= 1;   /* END while not in background must fail */
+    else if (GetLastError() != 401) bits |= 0x100;                        /* ERROR_THREAD_MODE_NOT_BACKGROUND */
     if (!sp(GetCurrentThread(), THREAD_MODE_BACKGROUND_BEGIN)) bits |= 2;
     SetLastError(0);
     if (sp(GetCurrentThread(), THREAD_MODE_BACKGROUND_BEGIN)) bits |= 4;
@@ -709,9 +710,11 @@ TEST(thraff_group_affinity_set_invalid) {
     CHECK(U(GetThreadGroupAffinity)(w.h, &cur));
     GROUP_AFFINITY ga = cur;
     ga.Mask = 0;
+    /* Windows 10: the kernel group-affinity verify for this class is invoked in a mode that
+       accepts an empty mask, so a zero mask succeeds (only an out-of-range group or
+       non-zero reserved fields are rejected). */
     SET_ERR(0);
-    CHECK(!U(SetThreadGroupAffinity)(w.h, &ga, NULL));
-    EXPECT_ERR(ERROR_INVALID_PARAMETER);
+    CHECK(U(SetThreadGroupAffinity)(w.h, &ga, NULL));
     ga = cur; ga.Group = 0x7FFF;
     SET_ERR(0);
     CHECK(!U(SetThreadGroupAffinity)(w.h, &ga, NULL));
@@ -1243,8 +1246,16 @@ TEST(thrcpuset_invalid) {
     CHECK(!UN(GetThreadSelectedCpuSets)(NULL, &id, 1, &req));
     EXPECT_ERR(ERROR_INVALID_HANDLE);
     SET_ERR(0);
-    CHECK(!UN(SetThreadSelectedCpuSets)(NULL, &id, 1));
-    EXPECT_ERR(ERROR_INVALID_HANDLE);
+    /* the id list is validated before the handle: id 0 is not a valid cpu set id (err 813),
+       so use a real id to reach the handle check */
+    ULONG vid;
+    if (first_cpuset_id(&vid)) {
+        CHECK(!UN(SetThreadSelectedCpuSets)(NULL, &vid, 1));
+        EXPECT_ERR(ERROR_INVALID_HANDLE);
+    } else t_note("no cpu set info: NULL-handle SetThreadSelectedCpuSets check not run");
+    SET_ERR(0);   /* id 0 fails the id-list validation (BasepCpuSetIdListToMasks) before the handle is used */
+    { ULONG id0 = 0; CHECK(!UN(SetThreadSelectedCpuSets)(NULL, &id0, 1)); }
+    EXPECT_ERR(813);
     worker w; w_start(&w);
     ULONG bogus = 0x7FFFFFF1;
     SET_ERR(0);

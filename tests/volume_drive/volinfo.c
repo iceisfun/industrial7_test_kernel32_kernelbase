@@ -144,8 +144,13 @@ TEST(vd_gvi_label_buffer_zero_size_fails_even_when_empty) {
     REQUIRE(U(GetVolumeInformationW));
     char r[4]; vd_sysroot(r); WCHAR w[4]; vd_widen(r, w, 4); WCHAR buf[4] = { 0x7777 };
     SET_ERR(0);
+    vd_vi lv; memset(&lv, 0, sizeof lv); CHECK(vd_gvi_w(r, &lv));
+    DWORD Ll = lstrlenW(lv.label);
+    SET_ERR(0);
     CHECK(!U(GetVolumeInformationW)(w, buf, 0, NULL, NULL, NULL, NULL, 0));
-    EXPECT_ERR(ERROR_BAD_LENGTH);
+    /* Win10 kernelbase queries FileFsVolumeInformation into a 0x18-byte buffer (0x12 header + 6 label bytes): a
+       label longer than 3 chars overflows -> STATUS_BUFFER_OVERFLOW -> ERROR_MORE_DATA; otherwise the size check gives ERROR_BAD_LENGTH. */
+    EXPECT_ERR(Ll > 3 ? ERROR_MORE_DATA : ERROR_BAD_LENGTH);
     CHECK(buf[0] == 0x7777);
 }
 TEST(vd_gvi_fsname_buffer_size_boundary) {
@@ -161,10 +166,11 @@ TEST(vd_gvi_fsname_buffer_size_boundary) {
     EXPECT_ERR(ERROR_BAD_LENGTH);
     SET_ERR(0);
     CHECK(!U(GetVolumeInformationW)(w, NULL, 0, NULL, NULL, NULL, buf, 1));
-    EXPECT_ERR(ERROR_BAD_LENGTH);
+    /* Win10: the query buffer is 2*size+0x10 bytes for a 12-byte header + 2*L name bytes; overflow (ERROR_MORE_DATA) when size < L-2 */
+    EXPECT_ERR(1 < (long)L - 2 ? ERROR_MORE_DATA : ERROR_BAD_LENGTH);
     SET_ERR(0);
     CHECK(!U(GetVolumeInformationW)(w, NULL, 0, NULL, NULL, NULL, buf, 0));
-    EXPECT_ERR(ERROR_BAD_LENGTH);
+    EXPECT_ERR(0 < (long)L - 2 ? ERROR_MORE_DATA : ERROR_BAD_LENGTH);
 }
 TEST(vd_gvi_a_fsname_boundary) {
     REQUIRE(U(GetVolumeInformationA));
@@ -312,10 +318,14 @@ TEST(vd_gvibh_zero_access_volume_handle) {
     char p[8]; sprintf(p, "\\\\.\\%c:", vd_sysletter());
     HANDLE h = CreateFileA(p, SYNCHRONIZE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
     if (h == INVALID_HANDLE_VALUE) { t_skip("cannot open %s: %lu", p, GetLastError()); return; }
-    vd_vi v; memset(&v, 0, sizeof v);
-    CHECK(U(GetVolumeInformationByHandleW)(h, v.label, MAX_PATH + 1, &v.serial, &v.maxcomp, &v.flags, v.fs, MAX_PATH + 1));
-    vd_vi r; memset(&r, 0, sizeof r); char root[4]; vd_sysroot(root); CHECK(vd_gvi_w(root, &r));
-    EXPECT_EQ(v.serial, r.serial); EXPECT_WSTR(v.fs, r.fs);
+    /* A zero-data-access open of "\\.\C:" is a direct device open (IopParseDevice, access mask & 0xfee1ff7f == 0):
+       the handle targets the volume device, not the mounted file system, so the FS volume query is rejected
+       (observed on Windows 10: FALSE, ERROR_INVALID_FUNCTION). */
+    vd_vi v; memset(&v, 0, sizeof v); SET_ERR(0);
+    BOOL okz = U(GetVolumeInformationByHandleW)(h, v.label, MAX_PATH + 1, &v.serial, &v.maxcomp, &v.flags, v.fs, MAX_PATH + 1);
+    DWORD ez = GetLastError();
+    t_note("ByHandle(zero-access volume handle) ok=%d GetLastError=%lu", okz, ez);
+    CHECK(!okz);
     CloseHandle(h);
 }
 TEST(vd_gvibh_pipe_handle_rejected) {

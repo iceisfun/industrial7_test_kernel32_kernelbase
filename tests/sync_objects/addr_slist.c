@@ -106,17 +106,22 @@ TEST(woa_wake_single_with_many_waiters_wakes_exactly_one) {
     v = 0; ready = 0; returned = 0;
     DWORD WINAPI w(LPVOID p) {
         LONG undesired = 0; InterlockedIncrement(&ready);
-        BOOL r = U(WaitOnAddress)(&v, &undesired, sizeof v, 1500);
+        /* long timeout: a waiter must not time out (and so not count) before the checks below */
+        BOOL r = U(WaitOnAddress)(&v, &undesired, sizeof v, 20000);
         if (r) InterlockedIncrement(&returned);
         return 0;
     }
     so_thr t[4]; for (int i = 0; i < 4; i++) t[i] = so_start(w, NULL);
-    so_spin_ge(&ready, 4, 3000); Sleep(200);
-    U(WakeByAddressSingle)((PVOID)&v);       /* value unchanged: waiter may return from the kernel, but only one */
-    Sleep(300);
+    so_spin_ge(&ready, 4, 5000);
+    Sleep(600);                              /* settle: every waiter has announced itself and had time to park */
+    U(WakeByAddressSingle)((PVOID)&v);       /* value unchanged: the woken waiter may return from the kernel, but only one */
+    so_spin_ge(&returned, 1, 5000);          /* bounded wait for the woken waiter to report (no fixed-sleep race) */
+    Sleep(500);                              /* grace period in which a second waiter would wrongly return */
     EXPECT_EQ(returned, 1);
-    for (int i = 0; i < 4; i++) so_join(t[i], 6000);
-    EXPECT_EQ(returned, 1);
+    v = 1;                                   /* release the remaining waiters deterministically */
+    U(WakeByAddressAll)((PVOID)&v);
+    for (int i = 0; i < 4; i++) so_join(t[i], 8000);
+    EXPECT_EQ(returned, 4);
 }
 TEST(woa_wake_different_address_does_not_wake) {
     NEED_WOA();

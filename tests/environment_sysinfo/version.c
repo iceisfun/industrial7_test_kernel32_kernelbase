@@ -293,7 +293,8 @@ TEST(vermask_zero_typemask_is_identity) {
     REQUIRE(U(VerSetConditionMask));
     EXPECT_EQ(U(VerSetConditionMask)(0, 0, VER_EQUAL), 0);
     ULONGLONG m = U(VerSetConditionMask)(0, VER_MAJORVERSION, VER_GREATER_EQUAL);
-    EXPECT_EQ(U(VerSetConditionMask)(m, 0, VER_LESS), m);
+    /* Win10 kernelbase returns 0 (not the input mask) when the type mask is 0 */
+    EXPECT_EQ(U(VerSetConditionMask)(m, 0, VER_LESS), 0);
 }
 TEST(vermask_nonzero_after_set) {
     REQUIRE(U(VerSetConditionMask));
@@ -356,9 +357,9 @@ TEST(verify_major_all_conditions) {
     DWORD M = t.dwMajorVersion;
     struct { BYTE cond; DWORD v; int want; } c[] = {
         { VER_EQUAL, M, 1 }, { VER_EQUAL, M + 1, 0 }, { VER_EQUAL, M - 1, 0 },
-        { VER_GREATER, M, 0 }, { VER_GREATER, M - 1, 1 }, { VER_GREATER, M + 1, 0 },
+        { VER_GREATER, M, 1 /* equal major falls through to the (untested) lower fields: TRUE, see docs/p1 */ }, { VER_GREATER, M - 1, 1 }, { VER_GREATER, M + 1, 0 },
         { VER_GREATER_EQUAL, M, 1 }, { VER_GREATER_EQUAL, M - 1, 1 }, { VER_GREATER_EQUAL, M + 1, 0 },
-        { VER_LESS, M, 0 }, { VER_LESS, M + 1, 1 }, { VER_LESS, M - 1, 0 },
+        { VER_LESS, M, 1 /* equal major falls through to the (untested) lower fields: TRUE */ }, { VER_LESS, M + 1, 1 }, { VER_LESS, M - 1, 0 },
         { VER_LESS_EQUAL, M, 1 }, { VER_LESS_EQUAL, M + 1, 1 }, { VER_LESS_EQUAL, M - 1, 0 },
     };
     for (unsigned i = 0; i < sizeof c / sizeof c[0]; i++) {
@@ -648,7 +649,11 @@ TEST(wow64_insufficient_access) {
 TEST(wow64_invalid_handles) {
     REQUIRE(U(IsWow64Process));
     BOOL w;
-    SET_ERR(0); EXPECT_EQ(U(IsWow64Process)(NULL, &w), 0); EXPECT_ERR(ERROR_INVALID_HANDLE);
+    /* Win10: a NULL handle is not an error. RtlWow64GetProcessMachines passes it to NtQuerySystemInformationEx(0xb5);
+       ntoskrnl ExpQuerySystemInformation case 0xb5 references the process only when the handle is nonzero, and
+       PsWow64GetSupportedArchitectures with no process marks no machine as the process machine, so the call
+       succeeds, leaves the last error alone and reports FALSE. */
+    w = 0x77; SET_ERR(0); EXPECT_EQ(U(IsWow64Process)(NULL, &w), TRUE); EXPECT_ERR(0); EXPECT_EQ(w, FALSE);
     SET_ERR(0); EXPECT_EQ(U(IsWow64Process)((HANDLE)(ULONG_PTR)0x7FFFFFF0, &w), 0);
     EXPECT_ERR(ERROR_INVALID_HANDLE);
     /* (HANDLE)-1 is the current-process pseudo handle, not an invalid one */

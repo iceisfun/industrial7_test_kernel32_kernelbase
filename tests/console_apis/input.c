@@ -1,7 +1,7 @@
 /* console_apis: console input buffer, INPUT_RECORD, ReadConsole A/W (cooked and raw) */
 #include "ch.h"
 
-#define FAILS(call, err)  do { SetLastError(0xBAD); BOOL r_ = (call); CEQ(r_, 0); CERR(err); } while (0)
+#define FAILS(call, err)  do { SetLastError(0xBAD); BOOL r_ = (call); DWORD le_ = GetLastError(); CEQ(r_, 0); CERRV(le_, err); } while (0)
 
 UDECL(BOOL, ReadConsoleInputExW, (HANDLE, PINPUT_RECORD, DWORD, LPDWORD, USHORT));
 UDECL(BOOL, ReadConsoleInputExA, (HANDLE, PINPUT_RECORD, DWORD, LPDWORD, USHORT));
@@ -839,6 +839,7 @@ CT(con_reada_utf8_cp) {
     unsigned char b[16] = { 0 }; DWORD n = 0;
     CC(ReadConsoleA(hin_(), b, 16, &n, NULL));
     cnote("UTF-8 ReadConsoleA n=%lu bytes %02x %02x %02x", n, b[0], b[1], b[2]);
+    /* P1 UNRESOLVED: baseline returned 00 0d 0a (the e-acute became NUL) with code page 65001; cause not explained. */
     CEQ(b[0], 0xC3); CEQ(b[1], 0xA9);
     SetConsoleCP(old);
 }
@@ -866,7 +867,7 @@ CT(con_read_echo_off_hides_text) {
     SetConsoleMode(hin_(), ENABLE_LINE_INPUT | ENABLE_PROCESSED_INPUT);
     inp_reset();
     typestr(hin_(), L"secret\r");
-    WCHAR b[32]; DWORD n = 0;
+    WCHAR b[32] = { 0 }; DWORD n = 0;   /* P1 GUARD: ReadConsoleW does not NUL-terminate; CWSTR needs a zeroed buffer */
     CC(ReadConsoleW(hin_(), b, 32, &n, NULL));
     CEQ(n, 8);
     CWSTR(b, L"secret\r\n");
@@ -993,6 +994,14 @@ CT(con_read_invalid_handles) {
     HANDLE f = CreateFileA(p, GENERIC_READ | GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
     HANDLE bad[] = { NULL, INVALID_HANDLE_VALUE, (HANDLE)(ULONG_PTR)0x1234, ev, hout_(), f };
     for (size_t i = 0; i < sizeof bad / sizeof bad[0]; i++) {
+        if (bad[i] == f) {
+            /* P1 EXPECT-FIX (audit: was a tolerance 6/1/87): kernelbase issues the ConDrv ioctl on the handle, a plain
+               disk file answers with its own status: ERROR_INVALID_PARAMETER (87) for both W and A in the baseline. */
+            SetLastError(0xBAD); BOOL r1 = ReadConsoleW(bad[i], b, 8, &n, NULL); DWORD e1 = GetLastError();
+            SetLastError(0xBAD); BOOL r2 = ReadConsoleA(bad[i], a, 8, &n, NULL); DWORD e2 = GetLastError();
+            CEQ(r1, 0); CERRV(e1, ERROR_INVALID_PARAMETER); CEQ(r2, 0); CERRV(e2, ERROR_INVALID_PARAMETER);
+            continue;
+        }
         FAILS(ReadConsoleW(bad[i], b, 8, &n, NULL), ERROR_INVALID_HANDLE);
         FAILS(ReadConsoleA(bad[i], a, 8, &n, NULL), ERROR_INVALID_HANDLE);
     }

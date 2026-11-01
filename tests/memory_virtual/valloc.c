@@ -230,7 +230,12 @@ TEST(mv_va_huge_sizes) {
         void *p = VALLOC(NULL, sizes[i], MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
         CHECKF(p == NULL, "size 0x%Ix", sizes[i]);
         if (p) { mv_free(p); continue; }
-        ERR3(ERROR_NOT_ENOUGH_MEMORY, ERROR_INVALID_PARAMETER, ERROR_COMMITMENT_LIMIT);
+        t_note("huge size 0x%Ix: err=%lu", sizes[i], GetLastError());
+        /* P1c audit EXPECT-FIX: with a NULL base the search range is [0, 0x7FFFFFFEFFFF] (ntoskrnl MiAllocateVirtualMemoryPrepare);
+           a size of exactly 0x7FFFFFFF0000 equals that whole range, so MiReserveUserMemory takes the fixed-range path and
+           MiIsVaRangeAvailable fails -> STATUS_CONFLICTING_ADDRESSES -> ERROR_INVALID_ADDRESS. */
+        if (sizes[i] == (SIZE_T)0x7FFFFFFF0000ull) ERR1(ERROR_INVALID_ADDRESS);
+        else ERR3(ERROR_NOT_ENOUGH_MEMORY, ERROR_INVALID_PARAMETER, ERROR_COMMITMENT_LIMIT);
     }
 }
 TEST(mv_va_huge_commit_limit) {
@@ -310,7 +315,10 @@ TEST(mv_va_physical_flag_rules) {
     SET_ERR(0);
     p = VALLOC(NULL, PG, MEM_PHYSICAL | MEM_RESERVE, PAGE_READONLY);
     CHECK(p == NULL);
-    if (p) mv_free(p); else ERR2(ERROR_INVALID_PARAMETER, ERROR_PRIVILEGE_NOT_HELD);
+    /* P1c audit EXPECT-FIX: ntoskrnl MiReserveUserMemory admits READONLY/READWRITE masks for MEM_PHYSICAL, then
+       MiCreateUserPhysicalView rejects any protection other than READWRITE (0xC0000045) and the caller replaces that
+       failure with STATUS_INSUFFICIENT_RESOURCES -> ERROR_NO_SYSTEM_RESOURCES; no privilege check precedes it. */
+    if (p) mv_free(p); else ERR1(ERROR_NO_SYSTEM_RESOURCES);
     SET_ERR(0);
     p = VALLOC(NULL, PG, MEM_PHYSICAL | MEM_RESERVE, PAGE_READWRITE);
     if (p) { t_note("MEM_PHYSICAL reserve succeeded (AWE privilege held)"); mv_free(p); }
@@ -359,10 +367,20 @@ TEST(mv_va_reset_undo_roundtrip) {
     unsigned char *p = mv_alloc(2 * PG);
     CHECK(p != NULL);
     if (!p) return;
+    memset(p, 0x5A, 2 * PG);
     CHECK(VALLOC(p, 2 * PG, MEM_RESET, PAGE_READWRITE) == p);
     SET_ERR(0);
     void *u = VALLOC(p, 2 * PG, MEM_RESET_UNDO, PAGE_READWRITE);
-    EXPECT_EQ(u, p);
+    if (u) {
+        EXPECT_EQ(u, p);
+        /* success: all data in the range is intact */
+        CHECK(p[0] == 0x5A && p[PG] == 0x5A);
+    } else {
+        /* documented: on failure at least some of the data was replaced with zeroes
+           (pages may be discarded under memory pressure between RESET and UNDO) */
+        t_note("MEM_RESET_UNDO failed err=%lu (pages discarded)", GetLastError());
+        CHECK(p[0] == 0 || p[PG] == 0);
+    }
     mv_free(p);
 }
 TEST(mv_va_reset_on_reserved_only) {

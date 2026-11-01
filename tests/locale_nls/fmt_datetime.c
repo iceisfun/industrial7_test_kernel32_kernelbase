@@ -115,7 +115,7 @@ TEST(datefmt_other_locale_pictures) {
         { L"zh-CN", 0, 2024, 3, 5, L"dddd", L"星期二", 1 }, { L"zh-CN", 0, 2024, 3, 5, L"MMMM", L"三月", 1 },
         { L"ko-KR", 0, 2024, 3, 5, L"dddd", L"화요일", 1 }, { L"ko-KR", 0, 2024, 3, 5, L"MMMM", L"3월", 1 },
         { L"ru-RU", 0, 2024, 3, 5, L"dddd", L"вторник", 1 },
-        { L"ru-RU", 0, 2024, 3, 5, L"MMMM", L"март", 1 },
+        { L"ru-RU", 0, 2024, 3, 5, L"MMMM", L"Март", 1 },
         { L"tr-TR", 0, 2024, 3, 5, L"dddd", L"Salı", 1 }, { L"tr-TR", 0, 2024, 2, 5, L"MMMM", L"Şubat", 1 },
         { L"pt-BR", 0, 2024, 3, 5, L"dddd", L"terça-feira", 1 }, { L"pt-BR", 0, 2024, 3, 5, L"MMMM", L"março", 1 },
         { L"th-TH", 0, 2024, 3, 5, L"yyyy", L"2567", 0 }, { L"th-TH", 0, 2024, 3, 5, L"yy", L"67", 0 },
@@ -439,7 +439,7 @@ TEST(timefmt_date_fields_ignored) {
 TEST(timefmt_invalid_systemtime) {
     REQUIRE(U(GetTimeFormatEx));
     static const struct { int h, m, s, ms; const char *why; } t[] = {
-        { 24, 0, 0, 0, "hour 24" }, { 25, 0, 0, 0, "hour 25" }, { 0, 60, 0, 0, "minute 60" }, { 0, 0, 60, 0, "second 60" },
+        { 24, 0, 0, 0, "hour 24" }, { 25, 0, 0, 0, "hour 25" }, { 0, 60, 0, 0, "minute 60" },
         { 0, 0, 0, 1000, "ms 1000" }, { 65535, 0, 0, 0, "hour 65535" }, { 0, 65535, 0, 0, "minute 65535" },
         { 0, 0, 65535, 0, "second 65535" }, { 0, 0, 0, 65535, "ms 65535" }, { 99, 99, 99, 9999, "all high" },
     };
@@ -449,6 +449,13 @@ TEST(timefmt_invalid_systemtime) {
         int r = tf(L"en-US", 0, &st, L"HH:mm", b, 100);
         CHECKF(r == 0, "%s r=%d", t[i].why, r);
         EXPECT_ERR(ERROR_INVALID_PARAMETER);
+    }
+    /* P1: Win10 accepts wSecond == 60 (leap second) in GetTimeFormatEx; observed r=6 for "HH:mm" */
+    {
+        SYSTEMTIME st = nls_st(2024, 3, 5, 0, 0, 60, 0);
+        WCHAR b[100]; SET_ERR(0);
+        int r = tf(L"en-US", 0, &st, L"HH:mm", b, 100);
+        CHECKF(r == 6 && !lstrcmpW(b, L"00:00"), "second 60 r=%d '%ls'", r, b);
     }
 }
 TEST(timefmt_valid_boundaries) {
@@ -591,7 +598,7 @@ TEST(durfmt_pictures) {
         { L"s.ff", SEC(1) + 5000000, L"1.50", 1 }, { L"s.ff", SEC(1) + 1234567, L"1.12", 1 },
         { L"s.fffffff", SEC(1) + 1234567, L"1.1234567", 1 }, { L"s.fffffffff", SEC(1) + 1234567, L"1.123456700", 0 },
         { L"s.fff", SEC(2) + 9999999, L"2.999", 1 }, { L"ss.ff", SEC(61), L"61.00", 1 },
-        { L"'x'", 0, L"x", 1 }, { L"h'h'm'm'", SEC(3660), L"1h1m", 1 }, { L"h''m", SEC(3660), L"1'1", 1 },
+        { L"'x'", 0, L"x", 1 }, { L"h'h'm'm'", SEC(3660), L"1h1m", 1 }, { L"h''m", SEC(3660), L"11", 1 },
         { L"hh:mm", SEC(3600 * 5 + 60 * 7), L"05:07", 1 }, { L"mm", SEC(3600), L"60", 1 }, { L"hh", SEC(36000), L"10", 1 },
         { L"-hh-", SEC(3600), L"-01-", 1 }, { L"abc", SEC(1), L"abc", 0 },
     };

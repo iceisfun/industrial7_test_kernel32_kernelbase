@@ -72,7 +72,8 @@ TEST(eed_le_thread_isolation) {
     CHECK(h != NULL);
     if (h) {
         WaitForSingleObject(g_ev_set, 5000);
-        EXPECT_EQ(g_thr_initial, 0);
+        /* the initial last-error of a new thread is not specified (Windows 10 shows leftovers of thread start-up, 0x57); it must not be the creator's value */
+        CHECKF(g_thr_initial != 0x2222, "worker started with creator's last error 0x%lx", (unsigned long)g_thr_initial);
         EXPECT_EQ(U(GetLastError)(), 0x2222);   /* main thread unaffected */
         U(SetLastError)(0x3333);
         SetEvent(g_ev_go);
@@ -192,8 +193,11 @@ TEST(eed_le_flag_getlasterror_after_heapalloc_success) {
 /* ---- failures set documented codes ---- */
 TEST(eed_le_closehandle_invalid_sets_6) {
     REQUIRE(U(CloseHandle));
+    /* INVALID_HANDLE_VALUE is the current-process pseudo handle (-1): Windows 10 NtClose treats -1..-6 as a no-op success
+       (CloseHandle returns TRUE, last error untouched); older builds may fail with ERROR_INVALID_HANDLE. Accept either coherent outcome. */
     SetLastError(0);
-    CHECK(!U(CloseHandle)(INVALID_HANDLE_VALUE)); EXPECT_ERR(ERROR_INVALID_HANDLE);
+    BOOL okp = U(CloseHandle)(INVALID_HANDLE_VALUE);
+    if (okp) EXPECT_ERR(0); else EXPECT_ERR(ERROR_INVALID_HANDLE);
     SetLastError(0);
     CHECK(!U(CloseHandle)(NULL)); EXPECT_ERR(ERROR_INVALID_HANDLE);
 }
@@ -270,7 +274,7 @@ TEST(eed_le_invalid_param_virtualalloc_zero_size) {
 TEST(eed_le_error_not_cleared_by_later_success) {
     REQUIRE(U(CloseHandle)); REQUIRE(U(GetCurrentProcessId));
     SetLastError(0);
-    U(CloseHandle)(INVALID_HANDLE_VALUE);
+    U(CloseHandle)(NULL);       /* NULL always fails with ERROR_INVALID_HANDLE (INVALID_HANDLE_VALUE is a pseudo handle on Windows 10) */
     DWORD e = GetLastError();
     U(GetCurrentProcessId)();
     EXPECT_EQ(GetLastError(), e);

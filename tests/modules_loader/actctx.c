@@ -47,12 +47,9 @@ static const char *mk_path(const char *sub, const char *body) {
 /* ---- CreateActCtx argument validation ---- */
 TEST(ac_create_null) {
     REQUIRE(U(CreateActCtxW)); REQUIRE(U(CreateActCtxA));
-    SET_ERR(0);
-    CHECK(U(CreateActCtxW)(NULL) == INVALID_HANDLE_VALUE);
-    EXPECT_ERR(ERROR_INVALID_PARAMETER);
-    SET_ERR(0);
-    CHECK(U(CreateActCtxA)(NULL) == INVALID_HANDLE_VALUE);
-    EXPECT_ERR(ERROR_INVALID_PARAMETER);
+    /* On Windows 10 both CreateActCtxWWorker and CreateActCtxA read pActCtx->cbSize on their NULL-argument error path
+     * (to print a debug message), so a NULL ACTCTX faults; the documentation does not define it. */
+    t_skip("CreateActCtx(NULL) is undefined (access violation on Windows 10)");
 }
 TEST(ac_create_bad_cbsize) {
     REQUIRE(U(CreateActCtxW));
@@ -366,17 +363,22 @@ TEST(ac_activate_nested_lifo) {
     ReleaseActCtx(a); ReleaseActCtx(b);
 }
 TEST(ac_activate_keeps_context_alive_after_release) {
-    REQUIRE(U(ActivateActCtx)); REQUIRE(U(DeactivateActCtx)); REQUIRE(U(GetCurrentActCtx));
+    REQUIRE(U(ActivateActCtx)); REQUIRE(U(DeactivateActCtx)); REQUIRE(U(GetCurrentActCtx)); REQUIRE(U(AddRefActCtx)); REQUIRE(U(ReleaseActCtx));
     HANDLE ctx = mk_ctx("ac_keep", k_full_manifest);
     CHECK(ctx != INVALID_HANDLE_VALUE); if (ctx == INVALID_HANDLE_VALUE) return;
     ULONG_PTR cookie = 0;
+    /* ActivateActCtx does not take a reference of its own on Windows 10 (RtlActivateActivationContext passes flags 0),
+     * so the context must be kept alive by an explicit reference while it is active. */
+    U(AddRefActCtx)(ctx);
     CHECK(U(ActivateActCtx)(ctx, &cookie));
-    U(ReleaseActCtx)(ctx);                       /* the activation still holds a reference */
+    U(ReleaseActCtx)(ctx);                       /* drops the creation reference; the extra reference keeps it alive */
     HANDLE cur = NULL;
-    CHECK(U(GetCurrentActCtx)(&cur) && cur == ctx);
+    CHECK(U(GetCurrentActCtx)(&cur) && cur == ctx);   /* GetCurrentActCtx adds a reference the caller must release */
     ACTCTX_SECTION_KEYED_DATA d; memset(&d, 0, sizeof d); d.cbSize = sizeof d;
     CHECK(FindActCtxSectionStringW(0, NULL, ACTIVATION_CONTEXT_SECTION_DLL_REDIRECTION, L"k32t_redir.dll", &d));
     CHECK(U(DeactivateActCtx)(0, cookie));
+    if (cur) U(ReleaseActCtx)(cur);
+    U(ReleaseActCtx)(ctx);
 }
 TEST(ac_addref_release_balance) {
     REQUIRE(U(AddRefActCtx)); REQUIRE(U(ReleaseActCtx)); REQUIRE(U(ActivateActCtx)); REQUIRE(U(DeactivateActCtx));
@@ -429,7 +431,10 @@ static HANDLE child_ctx(const char *path) {
 CHILD(ac_double_deactivate) {
     SetUnhandledExceptionFilter(ac_unhandled);
     HANDLE ctx = child_ctx(argv[1]); if (ctx == INVALID_HANDLE_VALUE) return 90;
-    ULONG_PTR c = 0;
+    ULONG_PTR outer = 0, c = 0;
+    /* With an empty activation stack RtlDeactivateActivationContext returns without raising, so keep an outer frame
+     * active: the stale cookie is then searched for in the stack, not found, and STATUS_SXS_INVALID_DEACTIVATION raised. */
+    if (!U(ActivateActCtx)(ctx, &outer)) return 91;
     if (!U(ActivateActCtx)(ctx, &c)) return 91;
     if (!U(DeactivateActCtx)(0, c)) return 92;
     U(DeactivateActCtx)(0, c);              /* second deactivation of the same cookie raises */
@@ -443,8 +448,14 @@ CHILD(ac_out_of_order_deactivate) {
     U(DeactivateActCtx)(0, c1);             /* c2 is on top: early deactivation */
     return 93;
 }
+static LONG CALLBACK ac_continue_early(EXCEPTION_POINTERS *ep) {
+    if (ep->ExceptionRecord->ExceptionCode == 0xC015000F && !(ep->ExceptionRecord->ExceptionFlags & EXCEPTION_NONCONTINUABLE))
+        return EXCEPTION_CONTINUE_EXECUTION;   /* ntdll raises STATUS_SXS_EARLY_DEACTIVATION as a continuable exception, then pops */
+    return EXCEPTION_CONTINUE_SEARCH;
+}
 CHILD(ac_force_early_deactivate) {
     SetUnhandledExceptionFilter(ac_unhandled);
+    AddVectoredExceptionHandler(1, ac_continue_early);
     HANDLE ctx = child_ctx(argv[1]); if (ctx == INVALID_HANDLE_VALUE) return 90;
     ULONG_PTR c1 = 0, c2 = 0, c3 = 0; HANDLE cur;
     HANDLE base = NULL; U(GetCurrentActCtx)(&base);
@@ -455,7 +466,15 @@ CHILD(ac_force_early_deactivate) {
 }
 CHILD(ac_bogus_cookie) {
     SetUnhandledExceptionFilter(ac_unhandled);
-    U(DeactivateActCtx)(0, 0x12345678);
+    U(DeactivateActCtx)(0, 0x12345678);     /* not a cookie at all: wrong cookie type nibble */
+    return 93;
+}
+CHILD(ac_bogus_cookie_wellformed) {
+    SetUnhandledExceptionFilter(ac_unhandled);
+    HANDLE ctx = child_ctx(argv[1]); if (ctx == INVALID_HANDLE_VALUE) return 90;
+    ULONG_PTR c = 0;
+    if (!U(ActivateActCtx)(ctx, &c)) return 91;
+    U(DeactivateActCtx)(0, c + 0x1000);     /* right type and stack id, but a sequence number that is not on the stack */
     return 93;
 }
 CHILD(ac_deactivate_cookie_zero) {
@@ -496,8 +515,12 @@ TEST(ac_force_early_deactivation_pops_stack) {
 }
 TEST(ac_bogus_cookie_raises) {
     REQUIRE(U(DeactivateActCtx));
+    /* A value that is not a cookie is rejected by RtlDeactivateActivationContext's cookie-type check with
+     * STATUS_INVALID_PARAMETER (0xC000000D); a well-formed cookie that is not on the stack raises STATUS_SXS_INVALID_DEACTIVATION. */
     DWORD rc = ml_run_exe(t_self_path(), "ac_bogus_cookie", "", NULL, 25000, 0);
-    CHECKF(rc == 0xC0150010 || rc == 0xC015000F, "rc=%08lx", rc);
+    CHECKF(rc == 0xC000000D, "malformed cookie rc=%08lx", rc);
+    rc = run_actctx_child("ac_bogus_cookie_wellformed", "ac_bcw");
+    CHECKF(rc == 0xC0150010, "well-formed cookie rc=%08lx", rc);
 }
 TEST(ac_deactivate_cookie_zero_noted) {
     REQUIRE(U(DeactivateActCtx));
@@ -614,13 +637,14 @@ TEST(ac_query_assembly_detailed_information) {
             CHECK(ai->ulEncodedAssemblyIdentityLength == wcslen(ai->lpAssemblyEncodedAssemblyIdentity) * 2);
             t_note("encoded identity: %ls", ai->lpAssemblyEncodedAssemblyIdentity);
         }
-        CHECK(ai->ulFileCount == 3);
+        /* ulFileCount is an undocumented field (the Learn page has an empty description); no value is asserted. */
+        t_note("ulFileCount %lu (manifest has 3 <file> elements)", ai->ulFileCount);
     }
-    /* index 0 and out-of-range */
+    /* index 0 is a valid roster entry on Windows 10 (RtlpQueryAssemblyInformation... only rejects index >= roster count) */
     index = 0; SET_ERR(0);
-    CHECK(!U(QueryActCtxW)(0, ctx, &index, AssemblyDetailedInformationInActivationContext, buf, sizeof buf, &need));
-    CHECK(GetLastError() != 0);
-    t_note("assembly index 0 -> error %lu", GetLastError());
+    BOOL ok0 = U(QueryActCtxW)(0, ctx, &index, AssemblyDetailedInformationInActivationContext, buf, sizeof buf, &need);
+    CHECKF(ok0, "assembly index 0 -> %d error %lu", ok0, ok0 ? 0 : GetLastError());   /* index 0 < roster count: valid on Windows 10 */
+    /* out-of-range */
     index = 77; SET_ERR(0);
     CHECK(!U(QueryActCtxW)(0, ctx, &index, AssemblyDetailedInformationInActivationContext, buf, sizeof buf, &need));
     CHECK(GetLastError() != 0);
@@ -674,6 +698,15 @@ TEST(ac_query_runlevel_absent) {
     if (ok) CHECK(rl.RunLevel == ACTCTX_RUN_LEVEL_UNSPECIFIED);
     ReleaseActCtx(ctx);
 }
+/* The system's COMPATIBILITY_CONTEXT_ELEMENT is larger than the build headers' (Windows 10 appends MaxVersionTested, so
+ * the elements start at offset 8 with a 32-byte stride, against offset 4 / 24 bytes here).  Locate an element by its GUID
+ * at any 4-byte aligned offset after the count and return the following ACTCTX_COMPATIBILITY_ELEMENT_TYPE, or -1. */
+static long compat_type_of(const void *buf, SIZE_T len, const GUID *id) {
+    const unsigned char *b = buf;
+    for (SIZE_T off = 4; off + sizeof(GUID) + 4 <= len; off += 4)
+        if (!memcmp(b + off, id, sizeof(GUID))) return (long)*(const DWORD *)(b + off + sizeof(GUID));
+    return -1;
+}
 TEST(ac_query_compatibility_information) {
     REQUIRE(U(QueryActCtxW));
     HANDLE ctx = query_ctx(); CHECK(ctx != INVALID_HANDLE_VALUE); if (ctx == INVALID_HANDLE_VALUE) return;
@@ -685,8 +718,8 @@ TEST(ac_query_compatibility_information) {
         CHECK(ci->ElementCount == 1);
         if (ci->ElementCount >= 1) {
             static const GUID win10 = { 0x8e0f7a12, 0xbfb3, 0x4fe8, { 0xb9, 0xa5, 0x48, 0xfd, 0x50, 0xa1, 0x5a, 0x9a } };
-            CHECK(ci->Elements[0].Type == ACTCTX_COMPATIBILITY_ELEMENT_TYPE_OS);
-            CHECK(!memcmp(&ci->Elements[0].Id, &win10, sizeof(GUID)));
+            long t = compat_type_of(buf, need < sizeof buf ? need : sizeof buf, &win10);
+            CHECKF(t == ACTCTX_COMPATIBILITY_ELEMENT_TYPE_OS, "type %ld", t);
         }
         CHECK(need == sizeof(DWORD) + sizeof(COMPATIBILITY_CONTEXT_ELEMENT) * 1 || need >= 4 + 20);
     }
@@ -717,9 +750,8 @@ TEST(ac_query_compat_multiple_os) {
             { 0x1f676c76, 0x80e1, 0x4239, { 0x95, 0xbb, 0x83, 0xd0, 0xf6, 0xd0, 0xda, 0x78 } },
             { 0x8e0f7a12, 0xbfb3, 0x4fe8, { 0xb9, 0xa5, 0x48, 0xfd, 0x50, 0xa1, 0x5a, 0x9a } } };
         for (int i = 0; i < 4 && i < (int)ci->ElementCount; i++) {
-            int found = 0;
-            for (int j = 0; j < 4; j++) if (!memcmp(&ci->Elements[j].Id, &ids[i], sizeof(GUID))) found = 1;
-            CHECKF(found, "os guid %d", i);
+            long t = compat_type_of(buf, need < sizeof buf ? need : sizeof buf, &ids[i]);
+            CHECKF(t == ACTCTX_COMPATIBILITY_ELEMENT_TYPE_OS, "os guid %d type %ld", i, t);
         }
     }
     ReleaseActCtx(ctx);
@@ -775,9 +807,13 @@ TEST(ac_settings_missing_and_wrong_namespace) {
     CHECK(!U(QueryActCtxSettingsW)(0, ctx, L"urn:k32t:wrong-namespace", L"dpiAware", buf, 64, &need));
     t_note("QueryActCtxSettings(unknown namespace) error %lu", GetLastError());
     CHECK(GetLastError() != 0);
+    /* The settings are looked up in a string section whose hash/compare is case-insensitive on Windows 10
+     * (RtlpFindUnicodeStringInSection uses the section's case flag); only the namespace is compared case-sensitively. */
     SET_ERR(0);
-    CHECK(!U(QueryActCtxSettingsW)(0, ctx, WS_NS, L"DPIAWARE", buf, 64, &need));        /* names are case sensitive */
-    EXPECT_ERR(ERROR_SXS_KEY_NOT_FOUND);
+    memset(buf, 0, sizeof buf);
+    BOOL ci = U(QueryActCtxSettingsW)(0, ctx, WS_NS, L"DPIAWARE", buf, 64, &need);
+    CHECKF(ci, "err %lu", GetLastError());
+    if (ci) CHECK(!wcscmp(buf, L"true"));
     ReleaseActCtx(ctx);
 }
 TEST(ac_settings_null_namespace) {

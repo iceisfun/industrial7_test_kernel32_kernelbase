@@ -252,13 +252,9 @@ TEST(ho_acc_mapping_open_with_minimal_rights) {
         CloseHandle(rd);
     }
     HANDLE sy = U(OpenFileMappingA)(SYNCHRONIZE, FALSE, n);
-    CHECK(sy != NULL);
-    if (sy) {
-        SET_ERR(0);
-        void *v = U(MapViewOfFile)(sy, FILE_MAP_READ, 0, 0, 0);
-        CHECK(v == NULL); EXPECT_ERR(ERROR_ACCESS_DENIED); if (v) UnmapViewOfFile(v);
-        CloseHandle(sy);
-    }
+    /* file-mapping objects do not support SYNCHRONIZE (docs: File Mapping Security and Access Rights) */
+    CHECK(sy == NULL);
+    if (sy) CloseHandle(sy);
     HANDLE wr = U(OpenFileMappingA)(FILE_MAP_WRITE, FALSE, n);
     CHECK(wr != NULL);
     if (wr) {

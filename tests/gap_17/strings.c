@@ -400,11 +400,16 @@ TEST(gap17_lstrcpynW_src_not_read_past_limit) {
 TEST(gap17_lstrcpynW_lasterror_kernelbase) {
     REQUIRE(UK(lstrcpynW)); REQUIRE(UB(lstrcpynW));
     WCHAR d[8];
+    DWORD e1, e2;
+    /* capture the error before any other API (lstrcmpW goes through NLS and may reset it) */
     SET_ERR(0x777);
-    UK(lstrcpynW)(d, L"abc", 8); EXPECT_WSTR(d, L"abc");
-    EXPECT_ERR(0x777);
-    UB(lstrcpynW)(d, L"xyz", 8); EXPECT_WSTR(d, L"xyz");
-    EXPECT_ERR(0x777);
+    UK(lstrcpynW)(d, L"abc", 8); e1 = GetLastError();
+    EXPECT_WSTR(d, L"abc");
+    CHECKF(e1 == 0x777, "GetLastError got %lu want 1911", e1);
+    SET_ERR(0x777);
+    UB(lstrcpynW)(d, L"xyz", 8); e2 = GetLastError();
+    EXPECT_WSTR(d, L"xyz");
+    CHECKF(e2 == 0x777, "GetLastError got %lu want 1911", e2);
 }
 TEST(gap17_lstrcpynW_long) {
     REQUIRE(U(lstrcpynW)); REQUIRE(U(lstrlenW));

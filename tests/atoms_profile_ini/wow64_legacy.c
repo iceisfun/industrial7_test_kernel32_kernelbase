@@ -186,11 +186,13 @@ TEST(wow64_selector_entry_invalid_handle) {
     REQUIRE(U(Wow64GetThreadSelectorEntry));
     WOW64_LDT_ENTRY e; memset(&e, 0x55, sizeof e);
     SET_ERR(0);
-    EXPECT_EQ(U(Wow64GetThreadSelectorEntry)(NULL, 0x23, &e), FALSE);
+    /* selector 0x23 (index 0x20) is synthesised by ntdll without touching the handle and succeeds even for NULL;
+       only the TEB selector (0x53, index 0x50) queries the thread, so it is the one that validates the handle */
+    EXPECT_EQ(U(Wow64GetThreadSelectorEntry)(NULL, 0x53, &e), FALSE);
     CHECK(GetLastError() != 0);
     t_note("Wow64GetThreadSelectorEntry(NULL) err=%lu", GetLastError());
     SET_ERR(0);
-    EXPECT_EQ(U(Wow64GetThreadSelectorEntry)(INVALID_HANDLE_VALUE, 0x23, &e), FALSE);
+    EXPECT_EQ(U(Wow64GetThreadSelectorEntry)(INVALID_HANDLE_VALUE, 0x53, &e), FALSE);
     t_note("Wow64GetThreadSelectorEntry(-1) err=%lu", GetLastError());
 }
 

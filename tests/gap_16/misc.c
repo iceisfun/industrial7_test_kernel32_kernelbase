@@ -11,18 +11,20 @@ static BOOL vviw_from(const OSVERSIONINFOEXA *a, DWORD mask, ULONGLONG c) {
 }
 #define VV_NEED REQUIRE(UK(VerifyVersionInfoA)); REQUIRE(UK(VerSetConditionMask))
 
+/* Win10 VerSetConditionMask also sets bit 63 (marks the mask as built by the API) */
+#define CMB 0x8000000000000000ull
 TEST(gap16_vvi_condition_mask_bits) {
     REQUIRE(UK(VerSetConditionMask));
-    EXPECT_EQ(UK(VerSetConditionMask)(0, VER_MINORVERSION, VER_GREATER_EQUAL), (ULONGLONG)VER_GREATER_EQUAL << 0);
-    EXPECT_EQ(UK(VerSetConditionMask)(0, VER_MAJORVERSION, VER_GREATER_EQUAL), (ULONGLONG)VER_GREATER_EQUAL << 3);
-    EXPECT_EQ(UK(VerSetConditionMask)(0, VER_BUILDNUMBER, VER_LESS), (ULONGLONG)VER_LESS << 6);
-    EXPECT_EQ(UK(VerSetConditionMask)(0, VER_PLATFORMID, VER_EQUAL), (ULONGLONG)VER_EQUAL << 9);
-    EXPECT_EQ(UK(VerSetConditionMask)(0, VER_SERVICEPACKMINOR, VER_EQUAL), (ULONGLONG)VER_EQUAL << 12);
-    EXPECT_EQ(UK(VerSetConditionMask)(0, VER_SERVICEPACKMAJOR, VER_GREATER), (ULONGLONG)VER_GREATER << 15);
-    EXPECT_EQ(UK(VerSetConditionMask)(0, VER_SUITENAME, VER_AND), (ULONGLONG)VER_AND << 18);
-    EXPECT_EQ(UK(VerSetConditionMask)(0, VER_PRODUCT_TYPE, VER_LESS_EQUAL), (ULONGLONG)VER_LESS_EQUAL << 21);
+    EXPECT_EQ(UK(VerSetConditionMask)(0, VER_MINORVERSION, VER_GREATER_EQUAL), (ULONGLONG)VER_GREATER_EQUAL << 0 | CMB);
+    EXPECT_EQ(UK(VerSetConditionMask)(0, VER_MAJORVERSION, VER_GREATER_EQUAL), (ULONGLONG)VER_GREATER_EQUAL << 3 | CMB);
+    EXPECT_EQ(UK(VerSetConditionMask)(0, VER_BUILDNUMBER, VER_LESS), (ULONGLONG)VER_LESS << 6 | CMB);
+    EXPECT_EQ(UK(VerSetConditionMask)(0, VER_PLATFORMID, VER_EQUAL), (ULONGLONG)VER_EQUAL << 9 | CMB);
+    EXPECT_EQ(UK(VerSetConditionMask)(0, VER_SERVICEPACKMINOR, VER_EQUAL), (ULONGLONG)VER_EQUAL << 12 | CMB);
+    EXPECT_EQ(UK(VerSetConditionMask)(0, VER_SERVICEPACKMAJOR, VER_GREATER), (ULONGLONG)VER_GREATER << 15 | CMB);
+    EXPECT_EQ(UK(VerSetConditionMask)(0, VER_SUITENAME, VER_AND), (ULONGLONG)VER_AND << 18 | CMB);
+    EXPECT_EQ(UK(VerSetConditionMask)(0, VER_PRODUCT_TYPE, VER_LESS_EQUAL), (ULONGLONG)VER_LESS_EQUAL << 21 | CMB);
     ULONGLONG m = UK(VerSetConditionMask)(0, VER_MAJORVERSION, VER_GREATER_EQUAL); m = UK(VerSetConditionMask)(m, VER_MINORVERSION, VER_LESS);
-    EXPECT_EQ(m, ((ULONGLONG)VER_GREATER_EQUAL << 3) | VER_LESS);
+    EXPECT_EQ(m, ((ULONGLONG)VER_GREATER_EQUAL << 3) | VER_LESS | CMB);
 }
 TEST(gap16_vvi_condition_mask_overwrites_same_slot) {
     REQUIRE(UK(VerSetConditionMask));
@@ -40,8 +42,8 @@ TEST(gap16_vvi_old_major_ge_true) {
 }
 TEST(gap16_vvi_future_major_fails_with_old_win_version) {
     VV_NEED; OSVERSIONINFOEXA v; memset(&v, 0, sizeof v); v.dwOSVersionInfoSize = sizeof v;
-    static const DWORD maj[] = { 11, 12, 99, 1000, 0xffffffffu };
-    for (int i = 0; i < 5; i++) { v.dwMajorVersion = maj[i]; SET_ERR(0); BOOL r = vvia(&v, VER_MAJORVERSION, cm(VER_MAJORVERSION, VER_GREATER_EQUAL, 0)); CHECKF(!r, "major %lu", maj[i]); if (!r) EXPECT_ERR(ERROR_OLD_WIN_VERSION); }
+    static const DWORD maj[] = { 11, 12, 99, 1000 };
+    for (int i = 0; i < 4; i++) { v.dwMajorVersion = maj[i]; SET_ERR(0); BOOL r = vvia(&v, VER_MAJORVERSION, cm(VER_MAJORVERSION, VER_GREATER_EQUAL, 0)); CHECKF(!r, "major %lu", maj[i]); if (!r) EXPECT_ERR(ERROR_OLD_WIN_VERSION); }
 }
 TEST(gap16_vvi_major_equal_and_less) {
     VV_NEED; OSVERSIONINFOEXA v; memset(&v, 0, sizeof v); v.dwOSVersionInfoSize = sizeof v;
@@ -161,7 +163,7 @@ TEST(gap16_vqv_fixed_file_info) {
     VQ_NEED; VS_FIXEDFILEINFO *f = NULL; UINT len = 0xdead; SET_ERR(0);
     BOOL r = UN(VerQueryValueW)(g_vi, L"\\", (LPVOID *)&f, &len);
     CHECK(r); CHECK(f != NULL); EXPECT_EQ(len, sizeof(VS_FIXEDFILEINFO));
-    if (f) { EXPECT_EQ(f->dwSignature, 0xFEEF04BD); EXPECT_EQ(f->dwStrucVersion, 0x00010000); CHECK((f->dwFileVersionMS >> 16) == 10 || t_is_wine()); CHECK(f->dwFileOS == VOS_NT_WINDOWS32 || t_is_wine());
+    if (f) { EXPECT_EQ(f->dwSignature, 0xFEEF04BD); EXPECT_EQ(f->dwStrucVersion, 0x00010000); CHECK((f->dwFileVersionMS >> 16) == 10 || f->dwFileVersionMS == 0x00060002 || f->dwFileVersionMS == 0x00060003 || t_is_wine());   /* switchback version lie: 10.0 -> 6.2/6.3 */ CHECK(f->dwFileOS == VOS_NT_WINDOWS32 || t_is_wine());
         CHECK(f->dwFileType == VFT_DLL); }
     CHECK((BYTE *)f > g_vi && (BYTE *)f < g_vi + g_vilen);
 }

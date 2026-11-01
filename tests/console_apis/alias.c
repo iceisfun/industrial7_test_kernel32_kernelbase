@@ -1,8 +1,8 @@
 /* console_apis: aliases, command history, input exe name, control handlers and control events */
 #include "ch.h"
 
-#define FAILS(call, err)  do { SetLastError(0xBAD); BOOL r_ = (call); CEQ(r_, 0); CERR(err); } while (0)
-#define FAILRET0(call, err)  do { SetLastError(0xBAD); DWORD r_ = (DWORD)(call); CEQ(r_, 0); CERR(err); } while (0)
+#define FAILS(call, err)  do { SetLastError(0xBAD); BOOL r_ = (call); DWORD le_ = GetLastError(); CEQ(r_, 0); CERRV(le_, err); } while (0)
+#define FAILRET0(call, err)  do { SetLastError(0xBAD); DWORD r_ = (DWORD)(call); DWORD le_ = GetLastError(); CEQ(r_, 0); CERRV(le_, err); } while (0)
 
 UDECL(UINT, GetConsoleInputExeNameW, (DWORD, LPWSTR));
 UDECL(UINT, GetConsoleInputExeNameA, (DWORD, LPSTR));
@@ -13,6 +13,22 @@ UDECL(BOOL, SetConsoleInputExeNameA, (LPCSTR));
 #define EXEA "k32t_alias.exe"
 #define EXE2 L"other_tool.exe"
 
+/* P1: Win10 conhost keys each command history to the exe name the process connected with (CommandHistory::s_Allocate
+   at connect, found again by process handle in COOKED_READ_DATA); SetConsoleInputExeName only changes the name used
+   for alias lookup. History queries must therefore use the real image name, and the history is shared by every
+   process with that name on the console, so tests start from an expunged history. UNVERIFIED-until-rerun */
+static WCHAR *realexe(void) {
+    static WCHAR n[MAX_PATH];
+    if (!n[0]) { WCHAR p[MAX_PATH]; GetModuleFileNameW(NULL, p, MAX_PATH); WCHAR *sl = wcsrchr(p, L'\\'); lstrcpyW(n, sl ? sl + 1 : p); }
+    return n;
+}
+static char *realexea(void) {
+    static char n[MAX_PATH];
+    if (!n[0]) WideCharToMultiByte(CP_ACP, 0, realexe(), -1, n, sizeof n, NULL, NULL);
+    return n;
+}
+#define REALW realexe()
+#define REALA realexea()
 static void setexe(void) {
     SetConsoleInputExeNameW_pfn f = UN(SetConsoleInputExeNameW);
     if (f) f(EXE);
@@ -36,11 +52,14 @@ CT(con_exename_initial_state) {
     SetLastError(0xBAD);
     UINT r = g(256, b);
     cnote("initial exe name: ret=%u \"%ls\"", r, b);
+    /* P1 EXPECT-FIX: Win10 kernelbase initializes the input exe name to the process image name (baseline
+       "console_apis.exe"), it is not empty; with a zero-size buffer the call returns length+1 and sets
+       ERROR_BUFFER_OVERFLOW (kernelbase GetConsoleInputExeNameW). */
     CEQ(r, 1);
-    CEQ(b[0], 0);
+    CC(!lstrcmpiW(b, realexe()));
     SetLastError(0xBAD);
     r = g(0, b);
-    CEQ(r, 1); CERR(ERROR_BUFFER_OVERFLOW);
+    { DWORD e_ = GetLastError(); CEQ(r, lstrlenW(realexe()) + 1); CERRV(e_, ERROR_BUFFER_OVERFLOW); }
 }
 
 CT(con_exename_set_get_w) {
@@ -98,8 +117,9 @@ CT(con_exename_set_get_a) {
     CEQ(gw(100, w), 1); CWSTR(w, L"bar.exe");
     SetLastError(0xBAD);
     UINT r = g(3, b);
-    cnote("GetConsoleInputExeNameA(3) -> %u err=%lu", r, GetLastError());
-    CEQ(r, 2); CERR(ERROR_BUFFER_OVERFLOW);
+    DWORD e_ = GetLastError();   /* P1 GUARD: capture before cnote, whose printf clobbers the last error */
+    cnote("GetConsoleInputExeNameA(3) -> %u err=%lu", r, e_);
+    CEQ(r, 2); CERRV(e_, ERROR_BUFFER_OVERFLOW);
     static char l[400]; memset(l, 'x', 256); l[256] = 0;
     FAILS(s(l), ERROR_INVALID_PARAMETER);
     FAILS(s(""), ERROR_INVALID_PARAMETER);
@@ -228,16 +248,18 @@ CT(con_alias_get_small_buffer) {
     CC(AddConsoleAliasW(L"sm", L"12345", EXE));    /* needs 12 bytes */
     SetLastError(0xBAD);
     DWORD n = GetConsoleAliasW(L"sm", b, 4, EXE);
-    cnote("small buffer: ret=%lu err=%lu b0=0x%x", n, GetLastError(), b[0]);
-    CERR(ERROR_INSUFFICIENT_BUFFER);
+    DWORD e_ = GetLastError();   /* P1 GUARD: capture before cnote, whose printf clobbers the last error */
+    cnote("small buffer: ret=%lu err=%lu b0=0x%x", n, e_, b[0]);
+    CERRV(e_, ERROR_INSUFFICIENT_BUFFER);
     CEQ(b[8], 0x7777);
     n = GetConsoleAliasW(L"sm", b, 12, EXE);
     CEQ(n, 12);
     CWSTR(b, L"12345");
     SetLastError(0xBAD);
     n = GetConsoleAliasW(L"sm", b, 10, EXE);
-    cnote("11-bytes-short buffer: ret=%lu err=%lu", n, GetLastError());
-    CERR(ERROR_INSUFFICIENT_BUFFER);
+    e_ = GetLastError();
+    cnote("11-bytes-short buffer: ret=%lu err=%lu", n, e_);
+    CERRV(e_, ERROR_INSUFFICIENT_BUFFER);
     SetLastError(0xBAD);
     n = GetConsoleAliasW(L"sm", b, 0, EXE);
     cnote("zero-size buffer: ret=%lu err=%lu", n, GetLastError());
@@ -563,7 +585,9 @@ CT(con_alias_expansion_dollar_dollar) {
     WCHAR b[64] = { 0 }; DWORD n = 0;
     CC(readline(b, 64, &n, L"dl\r"));
     cnote("$$ expanded: \"%ls\"", b);
-    CWSTR(b, L"cost $5\r\n");
+    /* P1 EXPECT-FIX: Win10 conhost Alias::s_ReplaceMacros only knows $1-$9, $*, $L, $G, $B, $T; for any other
+       character after '$' it emits both characters unchanged, so "$$" stays "$$" (baseline "cost $$5"). */
+    CWSTR(b, L"cost $$5\r\n");
 }
 
 CT(con_alias_expansion_separator) {
@@ -583,16 +607,20 @@ CT(con_hist_records_cooked_lines) {
     CWINESKIP("alias, history and input exe-name APIs are not implemented in the emulator");
     CREQ(ReadConsoleW); CREQ(GetConsoleCommandHistoryW); CREQ(GetConsoleCommandHistoryLengthW);
     setexe(); cooked();
+    /* P1b: no pre-expunge. Win10 conhost ExpungeConsoleCommandHistory(W/A) on the history of a live process
+       assigns the history flags = CLE_RESET (mov dword [rbx+0x48],2 in ExpungeConsoleCommandHistoryWImpl), wiping
+       CLE_ALLOCATED, and the next cooked read of that process fail-fasts in CommandHistory::s_Find. The child owns a
+       brand new console, so its history already starts empty. UNVERIFIED-until-rerun */
     WCHAR b[64]; DWORD n;
     CC(readline(b, 64, &n, L"one\r"));
     CC(readline(b, 64, &n, L"two2\r"));
     CC(readline(b, 64, &n, L"three\r"));
     DWORD need = (3 + 1 + 4 + 1 + 5 + 1) * 2;
     SetLastError(0xBAD);
-    DWORD len = GetConsoleCommandHistoryLengthW(EXE);
+    DWORD len = GetConsoleCommandHistoryLengthW(REALW);
     CEQ(len, need);
     WCHAR h[64]; for (int i = 0; i < 64; i++) h[i] = 0x7777;
-    DWORD r = GetConsoleCommandHistoryW(h, sizeof h, EXE);
+    DWORD r = GetConsoleCommandHistoryW(h, sizeof h, REALW);
     CEQ(r, need);
     CC(!lstrcmpW(h, L"one"));
     CC(!lstrcmpW(h + 4, L"two2"));
@@ -607,7 +635,7 @@ CT(con_hist_skips_empty_lines) {
     CC(readline(b, 64, &n, L"\r"));
     CC(readline(b, 64, &n, L"real\r"));
     CC(readline(b, 64, &n, L"\r"));
-    CEQ(GetConsoleCommandHistoryLengthW(EXE), 10);
+    CEQ(GetConsoleCommandHistoryLengthW(REALW), 10);
 }
 
 CT(con_hist_a_variant) {
@@ -617,9 +645,9 @@ CT(con_hist_a_variant) {
     WCHAR b[64]; DWORD n;
     CC(readline(b, 64, &n, L"ab\r"));
     CC(readline(b, 64, &n, L"cde\r"));
-    CEQ(GetConsoleCommandHistoryLengthA(EXEA), 3 + 4);
+    CEQ(GetConsoleCommandHistoryLengthA(REALA), 3 + 4);
     char h[32]; memset(h, 0x55, sizeof h);
-    CEQ(GetConsoleCommandHistoryA(h, sizeof h, EXEA), 7);
+    CEQ(GetConsoleCommandHistoryA(h, sizeof h, REALA), 7);
     CSTR(h, "ab"); CSTR(h + 3, "cde");
 }
 
@@ -629,12 +657,13 @@ CT(con_hist_expunge) {
     setexe(); cooked();
     WCHAR b[64]; DWORD n;
     CC(readline(b, 64, &n, L"keepme\r"));
-    CEQ(GetConsoleCommandHistoryLengthW(EXE), 14);
+    CEQ(GetConsoleCommandHistoryLengthW(REALW), 14);
     SetLastError(0xBAD);
-    ExpungeConsoleCommandHistoryW(EXE);
-    CEQ(GetConsoleCommandHistoryLengthW(EXE), 0);
-    CC(readline(b, 64, &n, L"again\r"));
-    CEQ(GetConsoleCommandHistoryLengthW(EXE), 12);
+    ExpungeConsoleCommandHistoryW(REALW);
+    CEQ(GetConsoleCommandHistoryLengthW(REALW), 0);
+    /* P1b: nothing may read a line after this point: the expunge leaves the process history unallocated and the
+       next cooked read kills conhost (see con_hist_records_cooked_lines). Re-recording after an expunge is
+       therefore not testable on Win10 and the former "again" check was dropped. UNVERIFIED-until-rerun */
 }
 
 CT(con_hist_expunge_a) {
@@ -643,9 +672,9 @@ CT(con_hist_expunge_a) {
     setexe(); cooked();
     WCHAR b[64]; DWORD n;
     CC(readline(b, 64, &n, L"hist\r"));
-    CEQ(GetConsoleCommandHistoryLengthA(EXEA), 5);
-    ExpungeConsoleCommandHistoryA(EXEA);
-    CEQ(GetConsoleCommandHistoryLengthA(EXEA), 0);
+    CEQ(GetConsoleCommandHistoryLengthA(REALA), 5);
+    ExpungeConsoleCommandHistoryA(REALA);
+    CEQ(GetConsoleCommandHistoryLengthA(REALA), 0);
 }
 
 CT(con_hist_set_number_of_commands) {
@@ -655,17 +684,20 @@ CT(con_hist_set_number_of_commands) {
     WCHAR b[64]; DWORD n;
     CC(readline(b, 64, &n, L"first\r"));
     SetLastError(0xBAD);
-    CCF(SetConsoleNumberOfCommandsW(2, EXE), "err=%lu", GetLastError());
+    CCF(SetConsoleNumberOfCommandsW(2, REALW), "err=%lu", GetLastError());
     CC(readline(b, 64, &n, L"second\r"));
     CC(readline(b, 64, &n, L"third\r"));
-    DWORD len = GetConsoleCommandHistoryLengthW(EXE);
+    DWORD len = GetConsoleCommandHistoryLengthW(REALW);
     cnote("history length after limiting to 2: %lu", len);
-    WCHAR h[64];
-    DWORD r = GetConsoleCommandHistoryW(h, sizeof h, EXE);
+    WCHAR h[64]; for (int i = 0; i < 64; i++) h[i] = 0;
+    DWORD r = GetConsoleCommandHistoryW(h, sizeof h, REALW);
+    /* P1c UNRESOLVED: baseline len=0x26 (first+second+third all kept) although the limit is 2. NOTE prints the entries. */
+    { WCHAR *p_ = h; int k_ = 0; while (*p_ && k_ < 6) { cnote("history entry %d: %ls", k_, p_); p_ += lstrlenW(p_) + 1; k_++; } }
     CEQ(r, len);
     CEQ(len, (6 + 1 + 5 + 1) * 2);
     CC(!lstrcmpW(h, L"second"));
     CC(!lstrcmpW(h + 7, L"third"));
+    SetConsoleNumberOfCommandsW(50, REALW);   /* P1: the limit lives in the shared per-exe history, restore it */
 }
 
 CT(con_hist_set_number_a) {
@@ -733,8 +765,14 @@ CT(con_hist_per_exe_name) {
     SetConsoleInputExeNameW_pfn s = UN(SetConsoleInputExeNameW);
     s(EXE2);
     CC(readline(b, 64, &n, L"under-b\r"));
-    CEQ(GetConsoleCommandHistoryLengthW(EXE), 16);
-    CEQ(GetConsoleCommandHistoryLengthW(EXE2), 16);
+    /* P1 EXPECT-FIX: both lines go to the single history of this process (keyed by its real image name), whatever
+       SetConsoleInputExeName says: "under-a"+"under-b" = 16 bytes there, nothing under the invented names. */
+    /* P1c EXPECT-FIX: the length counts every command with its terminating NUL, in bytes: (7+1)*2 per line, two
+       lines = 32 (same convention as con_hist_expunge: "keepme" = (6+1)*2 = 14, passed in the same baseline run).
+       UNVERIFIED-until-rerun */
+    CEQ(GetConsoleCommandHistoryLengthW(REALW), 32);
+    CEQ(GetConsoleCommandHistoryLengthW(EXE2), 0);
+    CEQ(GetConsoleCommandHistoryLengthW(EXE), 0);
 }
 
 CT(con_hist_no_dup_flag) {
@@ -747,7 +785,8 @@ CT(con_hist_no_dup_flag) {
     CC(readline(b, 64, &n, L"dup\r"));
     CC(readline(b, 64, &n, L"dup\r"));
     CC(readline(b, 64, &n, L"dup\r"));
-    CEQ(GetConsoleCommandHistoryLengthW(EXE), 8);
+    CEQ(GetConsoleCommandHistoryLengthW(REALW), 8);
+    hi.dwFlags = 0; SetConsoleHistoryInfo(&hi);   /* P1: the no-dup flag is console-wide, restore it */
 }
 
 /* ---------------- control handlers ---------------- */

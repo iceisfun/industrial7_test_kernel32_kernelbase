@@ -367,6 +367,8 @@ static BOOL g19_hasdt(struct g19_dt *d, const WCHAR *w) {
     for (int i = 0; i < d->count && i < 16; i++) if (!lstrcmpW(d->all[i], w)) return TRUE;
     return FALSE;
 }
+static CALID g19_cals[32]; static int g19_ncals;
+static BOOL CALLBACK g19_calid(LPWSTR s, CALID id) { (void)s; if (g19_ncals < 32) g19_cals[g19_ncals++] = id; return TRUE; }
 TEST(gap19_enumdatefmtex_short_enus) {
     REQUIRE(UN(EnumDateFormatsExW));
     struct g19_dt d;
@@ -375,7 +377,20 @@ TEST(gap19_enumdatefmtex_short_enus) {
     CHECK(d.count >= 1);
     CHECK(g19_hasdt(&d, L"M/d/yyyy"));
     if (!g19_hasdt(&d, L"M/d/yy")) t_note("M/d/yy not in en-US short list");
-    for (int i = 0; i < d.count && i < 16; i++) EXPECT_EQ(d.ids[i], CAL_GREGORIAN);
+    /* the enumeration also lists the formats of the locale's other calendars with their own ids
+     * (Internal_EnumDateFormats/EnumDateTime): every id must be one of en-US's own calendars
+     * (as EnumCalendarInfoExW(ENUM_ALL_CALENDARS) reports them), and Gregorian must be present */
+    g19_ncals = 0;
+    CHECK(EnumCalendarInfoExW(g19_calid, 0x0409, ENUM_ALL_CALENDARS, CAL_ICALINTVALUE));
+    CHECK(g19_ncals >= 1);
+    int hasgreg = 0;
+    for (int i = 0; i < d.count && i < 16; i++) {
+        int known = 0;
+        for (int j = 0; j < g19_ncals; j++) if (g19_cals[j] == d.ids[i]) known = 1;
+        CHECKF(known, "entry %d calendar id %lu is not an en-US calendar", i, (unsigned long)d.ids[i]);
+        if (d.ids[i] == CAL_GREGORIAN) hasgreg = 1;
+    }
+    CHECK(hasgreg);
 }
 TEST(gap19_enumdatefmtex_long_enus) {
     REQUIRE(UN(EnumDateFormatsExW));

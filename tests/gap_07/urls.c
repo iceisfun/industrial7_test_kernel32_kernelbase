@@ -169,11 +169,11 @@ TEST(gap7_parseurlA_does_not_modify_input) {
     REQUIRE(U(ParseURLA));
     char url[] = "https://example.com/path";
     char copy[sizeof url]; memcpy(copy, url, sizeof url);
-    PARSEDURLA pu; pu.cbSize = sizeof pu;
+    PARSEDURLA pu; memset(&pu, 0, sizeof pu); pu.cbSize = sizeof pu;
     CHECK(U(ParseURLA)(url, &pu) == S_OK);
     CHECK(!memcmp(url, copy, sizeof url));
     /* repeat: identical results */
-    PARSEDURLA p2; p2.cbSize = sizeof p2;
+    PARSEDURLA p2; memset(&p2, 0, sizeof p2); p2.cbSize = sizeof p2;
     CHECK(U(ParseURLA)(url, &p2) == S_OK);
     CHECK(!memcmp(&pu, &p2, sizeof pu));
 }

@@ -181,7 +181,7 @@ TEST(jobcreate_named_case_insensitive) {
     HANDLE a = U(CreateJobObjectA)(NULL, nm); CHECK(a);
     SetLastError(0);
     HANDLE b = U(CreateJobObjectA)(NULL, up); CHECK(b);
-    EXPECT_ERR(ERROR_ALREADY_EXISTS);
+    EXPECT_ERR(0);   /* job names are case-sensitive: a different-case name is a distinct, new object (no OBJ_CASE_INSENSITIVE) */
     if (a) CloseHandle(a); if (b) CloseHandle(b);
 }
 TEST(jobcreate_named_third_open_keeps_exists) {
@@ -430,7 +430,9 @@ TEST(jobopen_case_insensitive) {
     char nm[128], up[128]; jc_name(nm, sizeof nm, "ocase");
     strcpy(up, nm); for (char *p = up; *p; p++) if (*p >= 'a' && *p <= 'z') *p -= 32;
     HANDLE c = U(CreateJobObjectA)(NULL, nm); CHECK(c);
-    HANDLE o = U(OpenJobObjectA)(JOB_OBJECT_QUERY, FALSE, up); CHECK(o);
+    SetLastError(0);
+    HANDLE o = U(OpenJobObjectA)(JOB_OBJECT_QUERY, FALSE, up); CHECK(!o);   /* open is case-sensitive (no OBJ_CASE_INSENSITIVE) */
+    EXPECT_ERR(ERROR_FILE_NOT_FOUND);
     if (o) CloseHandle(o); if (c) CloseHandle(c);
 }
 TEST(jobopen_after_all_handles_closed) {

@@ -382,9 +382,11 @@ TEST(timeconv_ft_to_dos_range) {
     WORD fd, ft_;
     FILETIME f = tc_ft(tc_mkft(1980, 1, 1, 0, 0, 0, 0)); SET_ERR(0);
     CHECK(U(FileTimeToDosDateTime)(&f, &fd, &ft_)); EXPECT_EQ(fd, 0x21); EXPECT_EQ(ft_, 0);
-    /* kernel32!FileTimeToDosDateTime adds 19999999 ticks first, so 1979-12-31 23:59:58 rounds up to 1980-01-01 00:00:00 */
-    f = tc_ft(tc_mkft(1979, 12, 31, 23, 59, 58, 0)); SET_ERR(0);
+    /* kernel32!FileTimeToDosDateTime adds 19999999 ticks (just under 2s) first, so 1979-12-31 23:59:59 becomes 1980-01-01 00:00:01.9999999 (dos 0x21,0) while 23:59:58 only reaches 23:59:59.9999999 (still 1979, fails) */
+    f = tc_ft(tc_mkft(1979, 12, 31, 23, 59, 59, 0)); SET_ERR(0);
     CHECK(U(FileTimeToDosDateTime)(&f, &fd, &ft_)); EXPECT_EQ(fd, 0x21); EXPECT_EQ(ft_, 0);
+    f = tc_ft(tc_mkft(1979, 12, 31, 23, 59, 58, 0)); SET_ERR(0);
+    CHECK(!U(FileTimeToDosDateTime)(&f, &fd, &ft_));
     f = tc_ft(tc_mkft(1979, 12, 31, 23, 59, 57, 0)); SET_ERR(0);
     CHECK(!U(FileTimeToDosDateTime)(&f, &fd, &ft_)); t_note("out-of-range dos err %lu", GetLastError());
     f = tc_ft(tc_mkft(2107, 12, 31, 23, 59, 58, 0)); CHECK(U(FileTimeToDosDateTime)(&f, &fd, &ft_)); EXPECT_EQ(fd, 0xFF9F); EXPECT_EQ(ft_, 0xBF7D);

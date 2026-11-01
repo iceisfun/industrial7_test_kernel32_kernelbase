@@ -332,7 +332,8 @@ TEST(gap0_ac_system_security_needs_privilege) {
     PSDECL(); DWORD granted = 0xdead; BOOL st = 0x55;
     SET_ERR(0);
     BOOL r = AC_CALL(&c.sd, tok, ACCESS_SYSTEM_SECURITY, &g_gm, granted, st);
-    CHECK(!r);
+    CHECK(r);      /* Win10 AccessCheck succeeds; the privilege failure is reported via AccessStatus + last error */
+    CHECK(!st);
     EXPECT_ERR(ERROR_PRIVILEGE_NOT_HELD);
     CloseHandle(tok);
 }
@@ -633,7 +634,7 @@ TEST(gap0_audit_accesscheck_alarm_requires_privilege) {
     SET_ERR(0);
     BOOL r = U(AccessCheckAndAuditAlarmW)(sub, NULL, typ, name, &c.sd, 1, &g_gm, FALSE, &granted, &st, &gen);
     CHECK(!r);
-    EXPECT_ERR(ERROR_PRIVILEGE_NOT_HELD);
+    EXPECT_ERR(ERROR_NO_IMPERSONATION_TOKEN);   /* Win10: thread not impersonating -> bail before the SeAuditPrivilege check */
     EXPECT_EQ(gen, 0);                 /* always written by the user-mode wrapper */
 }
 
@@ -646,13 +647,13 @@ TEST(gap0_audit_bytype_alarm_requires_privilege) {
     SET_ERR(0);
     BOOL r = U(AccessCheckByTypeAndAuditAlarmW)(L"gap0", NULL, L"Thing", L"Obj", &c.sd, NULL, 1, AuditEventObjectAccess, 0, NULL, 0, &g_gm, FALSE, &granted, &st, &gen);
     CHECK(!r);
-    EXPECT_ERR(ERROR_PRIVILEGE_NOT_HELD);
+    EXPECT_ERR(ERROR_NO_IMPERSONATION_TOKEN);   /* Win10: thread not impersonating -> bail before the SeAuditPrivilege check */
     EXPECT_EQ(gen, 0);
     OBJECT_TYPE_LIST one[1] = {{0,0,&g_root}};
     gen = 0x77; SET_ERR(0);
     r = U(AccessCheckByTypeAndAuditAlarmW)(L"gap0", NULL, L"Thing", L"Obj", &c.sd, NULL, 1, AuditEventDirectoryServiceAccess, 0, one, 1, &g_gm, TRUE, &granted, &st, &gen);
     CHECK(!r);
-    EXPECT_ERR(ERROR_PRIVILEGE_NOT_HELD);
+    EXPECT_ERR(ERROR_NO_IMPERSONATION_TOKEN);   /* Win10: thread not impersonating -> bail before the SeAuditPrivilege check */
     EXPECT_EQ(gen, 0);
 }
 
@@ -666,7 +667,7 @@ TEST(gap0_audit_resultlist_alarm_requires_privilege) {
     SET_ERR(0);
     BOOL r = U(AccessCheckByTypeResultListAndAuditAlarmW)(L"gap0", NULL, L"Thing", L"Obj", &c.sd, NULL, 1, AuditEventObjectAccess, 0, one, 1, &g_gm, FALSE, gl, sl, &gen);
     CHECK(!r);
-    EXPECT_ERR(ERROR_PRIVILEGE_NOT_HELD);
+    EXPECT_ERR(ERROR_NO_IMPERSONATION_TOKEN);   /* Win10: thread not impersonating -> bail before the SeAuditPrivilege check */
     EXPECT_EQ(gen, 0);
 }
 

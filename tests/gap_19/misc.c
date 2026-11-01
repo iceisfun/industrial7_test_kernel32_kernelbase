@@ -18,10 +18,10 @@ UDECL(PVOID, MapViewOfFile3FromApp, (HANDLE, HANDLE, PVOID, ULONG64, SIZE_T, ULO
 
 /* ---------------- private namespaces ---------------- */
 static HANDLE g19_bd(const WCHAR *name) { return CreateBoundaryDescriptorW(name, 0); }
-static BOOL g19_addworld(HANDLE bd) {
+static BOOL g19_addworld(HANDLE *bd) {
     BYTE sid[SECURITY_MAX_SID_SIZE]; DWORD n = sizeof sid;
     if (!CreateWellKnownSid(WinWorldSid, NULL, sid, &n)) return FALSE;
-    return AddSIDToBoundaryDescriptor(&bd, sid);
+    return AddSIDToBoundaryDescriptor(bd, sid);
 }
 static void g19_nsname(WCHAR *o, const WCHAR *tag) { wsprintfW(o, L"%s%lu", tag, (unsigned long)GetCurrentProcessId()); }
 
@@ -30,7 +30,7 @@ TEST(gap19_opennamespace_not_existing) {
     WCHAR bn[64], al[64]; g19_nsname(bn, L"k32t_g19_bd_"); g19_nsname(al, L"k32t_g19_al_");
     HANDLE bd = g19_bd(bn);
     if (!bd) { t_skip("no boundary descriptor"); return; }
-    g19_addworld(bd);
+    g19_addworld(&bd);
     SET_ERR(0);
     HANDLE h = UN(OpenPrivateNamespaceW)(bd, al);
     DWORD e = GetLastError();
@@ -46,7 +46,7 @@ TEST(gap19_opennamespace_create_then_open) {
     g19_nsname(bn, L"k32t_g19_bd2_"); g19_nsname(al, L"k32t_g19_al2_"); g19_nsname(al2, L"k32t_g19_alo2_");
     HANDLE bd = g19_bd(bn);
     if (!bd) { t_skip("no boundary descriptor"); return; }
-    if (!g19_addworld(bd)) { DeleteBoundaryDescriptor(bd); t_skip("no world sid"); return; }
+    if (!g19_addworld(&bd)) { DeleteBoundaryDescriptor(bd); t_skip("no world sid"); return; }
     HANDLE ns = CreatePrivateNamespaceW(NULL, bd, al);
     if (!ns) { t_note("cannot create namespace, err %lu", (unsigned long)GetLastError()); DeleteBoundaryDescriptor(bd); t_skip("create denied"); return; }
     SET_ERR(0);
@@ -68,7 +68,7 @@ TEST(gap19_opennamespace_wrong_boundary) {
     g19_nsname(bn, L"k32t_g19_bd3_"); g19_nsname(bn2, L"k32t_g19_bd3x_"); g19_nsname(al, L"k32t_g19_al3_"); g19_nsname(al2, L"k32t_g19_alo3_");
     HANDLE bd = g19_bd(bn), bd2 = g19_bd(bn2);
     if (!bd || !bd2) { t_skip("no boundary descriptor"); return; }
-    g19_addworld(bd); g19_addworld(bd2);
+    g19_addworld(&bd); g19_addworld(&bd2);
     HANDLE ns = CreatePrivateNamespaceW(NULL, bd, al);
     if (!ns) { DeleteBoundaryDescriptor(bd); DeleteBoundaryDescriptor(bd2); t_skip("create denied"); return; }
     SET_ERR(0);
@@ -84,7 +84,7 @@ TEST(gap19_opennamespace_null_alias) {
     WCHAR bn[64]; g19_nsname(bn, L"k32t_g19_bd4_");
     HANDLE bd = g19_bd(bn);
     if (!bd) { t_skip("no boundary descriptor"); return; }
-    g19_addworld(bd);
+    g19_addworld(&bd);
     SET_ERR(0);
     HANDLE h = UN(OpenPrivateNamespaceW)(bd, NULL);
     t_note("NULL alias -> %p err %lu", h, (unsigned long)GetLastError());
@@ -109,7 +109,7 @@ TEST(gap19_opennamespace_repeat_open_then_close) {
     WCHAR bn[64], al[64]; g19_nsname(bn, L"k32t_g19_bd6_"); g19_nsname(al, L"k32t_g19_al6_");
     HANDLE bd = g19_bd(bn);
     if (!bd) { t_skip("no boundary descriptor"); return; }
-    g19_addworld(bd);
+    g19_addworld(&bd);
     HANDLE ns = CreatePrivateNamespaceW(NULL, bd, al);
     if (!ns) { DeleteBoundaryDescriptor(bd); t_skip("create denied"); return; }
     for (int i = 0; i < 5; i++) {
@@ -117,7 +117,8 @@ TEST(gap19_opennamespace_repeat_open_then_close) {
         HANDLE o = UN(OpenPrivateNamespaceW)(bd, a2);
         CHECK(o != NULL);
         if (o) {
-            EXPECT_EQ(ClosePrivateNamespace(o, 0), TRUE);
+            BOOLEAN cr = ClosePrivateNamespace(o, 0);   /* EXPECT_EQ evaluates its args twice: do not put the call inside */
+            EXPECT_EQ(cr, TRUE);
         }
     }
     ClosePrivateNamespace(ns, PRIVATE_NAMESPACE_FLAG_DESTROY);
@@ -129,7 +130,7 @@ TEST(gap19_opennamespace_object_in_namespace_visible_via_open) {
     g19_nsname(bn, L"k32t_g19_bd7_"); g19_nsname(al, L"k32t_g19_al7_"); g19_nsname(al2, L"k32t_g19_alo7_");
     HANDLE bd = g19_bd(bn);
     if (!bd) { t_skip("no boundary descriptor"); return; }
-    g19_addworld(bd);
+    g19_addworld(&bd);
     HANDLE ns = CreatePrivateNamespaceW(NULL, bd, al);
     if (!ns) { DeleteBoundaryDescriptor(bd); t_skip("create denied"); return; }
     WCHAR full[160]; wsprintfW(full, L"%s\\evt", al);
@@ -204,7 +205,7 @@ TEST(gap19_addintlabel_with_sid_and_open) {
     WCHAR bn[64], al[64]; g19_nsname(bn, L"k32t_g19_ilo_"); g19_nsname(al, L"k32t_g19_ilal_");
     HANDLE bd = g19_bd(bn);
     if (!bd) { t_skip("no boundary descriptor"); return; }
-    g19_addworld(bd);
+    g19_addworld(&bd);
     PSID s = g19_label(SECURITY_MANDATORY_MEDIUM_RID);
     BOOL ok = UN(AddIntegrityLabelToBoundaryDescriptor)(&bd, s);
     EXPECT_EQ(ok, TRUE);
@@ -407,7 +408,7 @@ TEST(gap19_pathmatchspec_table) {
         { L"a.txt", L"*.doc;*.txt", TRUE }, { L"a.txt", L"*.doc;*.xls", FALSE },
         { L"a.txt", L"*.doc; *.txt", TRUE },   /* whitespace after ';' skipped */
         { L"file.tar.gz", L"*.gz", TRUE }, { L"file.tar.gz", L"*.tar", FALSE },
-        { L"x", L"x", TRUE }, { L"x", L"y", FALSE }, { L"x", L"??", FALSE }, { L"xy", L"??", TRUE },
+        { L"x", L"x", TRUE }, { L"x", L"y", FALSE }, { L"x", L"??", TRUE }  /* trailing lone ? at end of file name matches (kernelbase PathMatchSingleSpec tail rule) */, { L"xy", L"??", TRUE },
         { L"abc", L"a*c", TRUE }, { L"abc", L"a*d", FALSE }, { L"abc", L"*b*", TRUE },
         { L"C:\\dir\\a.txt", L"*.txt", TRUE }, { L"a.txt", L"A.TXT", TRUE },
     };
@@ -847,7 +848,8 @@ TEST(gap19_mapview3app_basic_rw) {
         EXPECT_EQ(mbi.Protect, PAGE_READWRITE);
         EXPECT_EQ(mbi.RegionSize, 0x10000);
         ((volatile char *)v)[0] = 1; ((volatile char *)v)[0xffff] = 2;
-        EXPECT_EQ(UnmapViewOfFile(v), TRUE);
+        BOOL um = UnmapViewOfFile(v);   /* EXPECT_EQ evaluates its args twice: do not put the call inside */
+        EXPECT_EQ(um, TRUE);
     }
     CloseHandle(m);
 }

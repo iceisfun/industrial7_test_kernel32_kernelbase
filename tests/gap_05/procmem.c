@@ -502,6 +502,10 @@ TEST(gap5_mapped_bad_process) {
     CloseHandle(e);
     SET_ERR(0); EXPECT_EQ(MAPW(e, base, w, MAX_PATH), 0); EXPECT_ERR(ERROR_INVALID_HANDLE);
     HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, GetCurrentProcessId());
+    /* MmQueryVirtualMemory (Win10 22H2) needs only PROCESS_QUERY_LIMITED_INFORMATION for the section-name class,
+     * although the documentation still lists PROCESS_QUERY_INFORMATION | PROCESS_VM_READ. */
+    if (h) { SET_ERR(0); CHECK(MAPW(h, base, w, MAX_PATH) > 0); CloseHandle(h); }
+    h = OpenProcess(SYNCHRONIZE, FALSE, GetCurrentProcessId());
     if (h) { SET_ERR(0); EXPECT_EQ(MAPW(h, base, w, MAX_PATH), 0); EXPECT_ERR(ERROR_ACCESS_DENIED); CloseHandle(h); }
     h = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, GetCurrentProcessId());
     if (h) { CHECK(MAPW(h, base, w, MAX_PATH) > 0); CloseHandle(h); }

@@ -249,14 +249,24 @@ TEST(fcopy_dest_open_denied) {
     SetLastError(0); EXPECT_EQ(cpA(s, d, FALSE), FALSE); EXPECT_ERR(ERROR_SHARING_VIOLATION);
     CloseHandle(h); fa_rm(s); fa_rm(d);
 }
+/* P1: NULL names are not valid input (SAL _In_) and Win10 faults inside CopyFileExW; run each in a child process so a fault is reported, not fatal */
+CHILD(cpnull) {
+    int which = argc > 1 ? atoi(argv[1]) : 0;
+    WCHAR ws[MAX_PATH * 2]; if (argc > 2) fa_widen(ws, argv[2]); else ws[0] = 0;
+    if (!U(CopyFileW)) return 3;
+    BOOL r = which == 0 ? U(CopyFileW)(ws, NULL, FALSE) : U(CopyFileW)(NULL, ws, FALSE);
+    return r ? 1 : 0;
+}
 TEST(fcopy_null_and_empty_names) {
     REQUIRE(U(CopyFileW)); REQUIRE(U(CopyFileA));
     char s[MAX_PATH * 2]; fa_mkfile_s("cp_nl.txt", "x"); pp(s, "cp_nl.txt");
     WCHAR ws[MAX_PATH * 2]; fa_widen(ws, s);
-    SetLastError(0); EXPECT_EQ(U(CopyFileW)(ws, NULL, FALSE), FALSE);
-    t_note("CopyFileW(src, NULL) err=%lu", GetLastError());
-    SetLastError(0); EXPECT_EQ(U(CopyFileW)(NULL, ws, FALSE), FALSE);
-    t_note("CopyFileW(NULL, dst) err=%lu", GetLastError());
+    for (int i = 0; i < 2; i++) {
+        char ex[MAX_PATH * 2 + 8]; snprintf(ex, sizeof ex, "%d \"%s\"", i, s);
+        DWORD rc = t_run_child("cpnull", ex, 15000);
+        t_note("CopyFileW(%s NULL) child exit=0x%lx", i ? "NULL," : "src,", rc);
+        CHECKF(rc == 0 || rc == 0xC0000005, "child exit 0x%lx (want FALSE or access violation)", rc);
+    }
     SetLastError(0); EXPECT_EQ(U(CopyFileW)(ws, L"", FALSE), FALSE);
     t_note("CopyFileW(src, \"\") err=%lu", GetLastError());
     SetLastError(0); EXPECT_EQ(U(CopyFileA)("", "x", FALSE), FALSE);

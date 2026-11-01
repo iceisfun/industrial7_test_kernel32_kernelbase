@@ -164,12 +164,19 @@ TEST(th_snap_closed_handle) {
 
 TEST(th_snap_wrong_entry_type_empty) {
     NEED_SNAP(); REQUIRE(U(Thread32First)); REQUIRE(U(Module32FirstW)); REQUIRE(U(Heap32ListFirst));
-    /* a process-only snapshot has no thread/module/heap data */
-    HANDLE s = snap(TH32CS_SNAPPROCESS, 0);
+    /* Win10 (ThpAllocateSnapshotSection): the process and thread counts in the snapshot header are
+     * both set whenever either TH32CS_SNAPPROCESS or TH32CS_SNAPTHREAD is requested, but only the
+     * requested section is filled, so Process32First on a thread-only snapshot and Thread32First on a
+     * process-only snapshot return TRUE with unspecified content. Only snapshots with neither flag
+     * (module/heap only) reliably report ERROR_NO_MORE_FILES for process/thread enumeration. */
+    HANDLE s = snap(TH32CS_SNAPMODULE, 0);
     if (s == INVALID_HANDLE_VALUE) { CHECK(0); return; }
     THREADENTRY32 t; t.dwSize = sizeof t; SET_ERR(0);
     CHECK(!U(Thread32First)(s, &t));
     t_note("wrong-type snapshot err=%lu", GetLastError());
+    CloseHandle(s);
+    s = snap(TH32CS_SNAPPROCESS, 0);
+    if (s == INVALID_HANDLE_VALUE) { CHECK(0); return; }
     MODULEENTRY32W m; m.dwSize = sizeof m; SET_ERR(0);
     CHECK(!U(Module32FirstW)(s, &m));
     t_note("wrong-type snapshot err=%lu", GetLastError());
@@ -177,8 +184,8 @@ TEST(th_snap_wrong_entry_type_empty) {
     CHECK(!U(Heap32ListFirst)(s, &h));
     t_note("wrong-type snapshot err=%lu", GetLastError());
     CloseHandle(s);
-    /* a thread-only snapshot has no processes */
-    s = snap(TH32CS_SNAPTHREAD, 0);
+    /* a heap-list-only snapshot has no processes */
+    s = snap(TH32CS_SNAPHEAPLIST, 0);
     if (s == INVALID_HANDLE_VALUE) { CHECK(0); return; }
     PROCESSENTRY32W p; p.dwSize = sizeof p; SET_ERR(0);
     CHECK(!U(Process32FirstW)(s, &p));
@@ -191,7 +198,7 @@ TEST(th_snap_wrong_entry_type_empty) {
 
 TEST(th_snap_empty_entry_zeroed) {
     NEED_SNAP();
-    HANDLE s = snap(TH32CS_SNAPTHREAD, 0);
+    HANDLE s = snap(TH32CS_SNAPHEAPLIST, 0);   /* no process data: a thread-only snapshot still reports a process count on Win10 */
     if (s == INVALID_HANDLE_VALUE) { CHECK(0); return; }
     PROCESSENTRY32W p; memset(&p, 0xCC, sizeof p); p.dwSize = sizeof p;
     CHECK(!U(Process32FirstW)(s, &p));
@@ -358,14 +365,23 @@ TEST(th_proc_a_bad_dwsize) {
     HANDLE s = snap(TH32CS_SNAPPROCESS, 0);
     if (s == INVALID_HANDLE_VALUE) { CHECK(0); return; }
     PROCESSENTRY32 a;
-    DWORD bad[] = { 0, sizeof a - 1, sizeof a + 1, PSZ_PROC_W };
-    for (int i = 0; i < 4; i++) {
+    /* Win10 kernel32!Process32First only rejects dwSize < 0x130 (it fills a private 0x238 W entry and converts),
+     * so sizeof a + 1 and PSZ_PROC_W are accepted; only values below the A-entry size must fail. */
+    DWORD bad[] = { 0, sizeof a - 1 };
+    DWORD big[] = { sizeof a + 1, PSZ_PROC_W };
+    for (int i = 0; i < 2; i++) {
         a.dwSize = bad[i]; SET_ERR(0);
         CHECKF(!UN(Process32First)(s, &a), "dwSize 0x%lx", bad[i]);
         t_note("bad dwSize err=%lu", GetLastError());
         a.dwSize = bad[i]; SET_ERR(0);
         CHECKF(!UN(Process32Next)(s, &a), "next dwSize 0x%lx", bad[i]);
         t_note("bad dwSize err=%lu", GetLastError());
+    }
+    for (int i = 0; i < 2; i++) {
+        a.dwSize = big[i];
+        CHECKF(UN(Process32First)(s, &a), "oversized dwSize 0x%lx", big[i]);
+        a.dwSize = big[i];
+        CHECKF(UN(Process32Next)(s, &a), "oversized next dwSize 0x%lx", big[i]);
     }
     PROCESSENTRY32W w; w.dwSize = sizeof(PROCESSENTRY32); SET_ERR(0);
     CHECK(!U(Process32FirstW)(s, &w));
@@ -375,7 +391,7 @@ TEST(th_proc_a_bad_dwsize) {
 
 TEST(th_proc_a_empty_and_end) {
     NEED_SNAP(); REQUIRE(UN(Process32First)); REQUIRE(UN(Process32Next));
-    HANDLE s = snap(TH32CS_SNAPTHREAD, 0);
+    HANDLE s = snap(TH32CS_SNAPHEAPLIST, 0);   /* process count is zero only without PROCESS/THREAD flags */
     if (s == INVALID_HANDLE_VALUE) { CHECK(0); return; }
     PROCESSENTRY32 a; a.dwSize = sizeof a; SET_ERR(0);
     CHECK(!UN(Process32First)(s, &a));
@@ -499,15 +515,17 @@ TEST(th_thread_basic) {
     THREADENTRY32 t; t.dwSize = sizeof t; SET_ERR(0);
     CHECK(U(Thread32First)(s, &t));
     EXPECT_EQ(t.dwSize, PSZ_THREAD);
-    int n = 0, bad = 0;
+    int n = 0, bad = 0, idle = 0;
     do {
         n++;
-        if (!t.th32ThreadID) bad++;
-        if (t.tpBasePri < 0 || t.tpBasePri > 31) { bad++; }
+        if (!t.th32OwnerProcessID) { idle++; }  /* System Idle Process threads: tid 0 by design, one per logical CPU */
+        else if (!t.th32ThreadID) { bad++; t_note("bad thread entry: tid=0 owner=%lu basepri=%ld", t.th32OwnerProcessID, (long)t.tpBasePri); }
+        if (t.tpBasePri < 0 || t.tpBasePri > 31) { bad++; t_note("bad thread entry: tid=%lu owner=%lu basepri=%ld", t.th32ThreadID, t.th32OwnerProcessID, (long)t.tpBasePri); }
         t.dwSize = sizeof t;
     } while (U(Thread32Next)(s, &t) && n < 100000);
     EXPECT_ERR(ERROR_NO_MORE_FILES);
     CHECK(n > 10);
+    t_note("idle-process thread entries (owner 0): %d", idle);
     CHECKF(bad == 0, "%d bad thread entries", bad);
     CloseHandle(s);
 }

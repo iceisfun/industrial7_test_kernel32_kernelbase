@@ -253,14 +253,17 @@ TEST(gap14_tracemessageva_stub) {
     REQUIRE(UN(TraceMessageVa));
     GUID g; memset(&g, 0, sizeof g);
     SET_ERR(0);
-    ULONG r = UN(TraceMessageVa)(0, 0, &g, 1, NULL);
+    /* ntdll!EtwTraceMessageVa walks the arg list ({ptr,len} pairs ended by a NULL ptr) unconditionally: pass an empty list */
+    ULONG64 empty_args[2] = { 0, 0 };
+    ULONG r = UN(TraceMessageVa)(0, 0, &g, 1, (char *)empty_args);
     CHECK(r != ERROR_SUCCESS);
     if (r == ERROR_PROC_NOT_FOUND) EXPECT_ERR(ERROR_PROC_NOT_FOUND);
     else t_note("TraceMessageVa returned %lu", r);
 }
 TEST(gap14_tracemessageva_null_all) {
     REQUIRE(UN(TraceMessageVa));
-    ULONG r = UN(TraceMessageVa)(0, 0, NULL, 0, NULL);
+    ULONG64 empty_args[2] = { 0, 0 };
+    ULONG r = UN(TraceMessageVa)(0, 0, NULL, 0, (char *)empty_args);
     CHECK(r != ERROR_SUCCESS);
 }
 TEST(gap14_trace_repeat_stable) {

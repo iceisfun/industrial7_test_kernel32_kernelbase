@@ -119,7 +119,7 @@ TEST(gap11_shreg_open_path_length_a) {
     h = NULL; LONG r = OPENA(p, KEY_READ, NULL, &h, FALSE);
     t_note("A path of 255 chars -> %ld", (long)r);
     NE(r, ERROR_INSUFFICIENT_BUFFER); NE(r, ERROR_BUFFER_OVERFLOW); NE(r, 0);
-    p[256] = 0;
+    p[255] = 'a'; p[256] = 0;           /* 256 chars + NUL = 257 > 256 WCHARs */
     h = NULL; r = OPENA(p, KEY_READ, NULL, &h, FALSE);
     EQ(r, ERROR_INSUFFICIENT_BUFFER);   /* MultiByteToWideChar into 256 WCHARs */
     EQ(h, NULL);
@@ -376,7 +376,9 @@ TEST(gap11_shreg_query_size_only) {
     HUSKEY h = open_w("a", KEY_READ); NE(h, NULL); if (!h) return;
     DWORD cb = 0, type = 0;
     EQ(QW(h, L"s", &type, NULL, &cb, FALSE, NULL, 0), 0);
-    EQ(type, REG_SZ); EQ(cb, 26);
+    /* size-only query of a REG_SZ: KERNELBASE RegGetValueW adds one WCHAR (2 bytes) to the size
+     * RegQueryValueExW reports when pvData is NULL (12 chars + NUL = 26 bytes -> 28). */
+    EQ(type, REG_SZ); EQ(cb, 28);
     cb = 0;
     EQ(QA(h, "s", &type, NULL, &cb, FALSE, NULL, 0), 0);
     t_note("SHRegQueryUSValueA size-only for 12-char REG_SZ -> cb=%lu", cb);   /* ANSI size estimate not verified */

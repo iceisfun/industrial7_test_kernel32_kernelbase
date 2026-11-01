@@ -1,7 +1,7 @@
 /* console_apis: remaining exports, SGR baseline stability, boundary coordinates */
 #include "ch.h"
 
-#define FAILS(call, err)  do { SetLastError(0xBAD); BOOL r_ = (call); CEQ(r_, 0); CERR(err); } while (0)
+#define FAILS(call, err)  do { SetLastError(0xBAD); BOOL r_ = (call); DWORD le_ = GetLastError(); CEQ(r_, 0); CERRV(le_, err); } while (0)
 
 CT(con_x_misc_exports_present) {
     CC(t_proc_k32("CtrlRoutine") != NULL);

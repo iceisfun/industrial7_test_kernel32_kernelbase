@@ -10,8 +10,9 @@ TEST(tp_rv_env_version2_reads_priority) {
     e.CallbackPriority = TP_CALLBACK_PRIORITY_INVALID;
     SET_ERR(0);
     PTP_WORK w = U(CreateThreadpoolWork)(rv_work, NULL, &e);
+    DWORD err = GetLastError();      /* before t_is_wine(): its failing GetProcAddress overwrites the error (127) */
     if (t_is_wine() && w) t_note("wine accepts invalid priority in a V2 environment");
-    else { CHECK(w == NULL); EXPECT_ERR(ERROR_INVALID_PARAMETER); }
+    else { CHECK(w == NULL); CHECKF(err == ERROR_INVALID_PARAMETER, "GetLastError got %lu want 87", err); }
     if (w) U(CloseThreadpoolWork)(w);
 }
 TEST(tp_rv_env_version0_ignores_priority) {

@@ -52,7 +52,8 @@ TEST(gap3_eventregister_with_callback) {
     ULONG r = U(EventRegister)(&G3_PROV, g3_enable_cb, (PVOID)0x1234, &h);
     EXPECT_EQ(r, ERROR_SUCCESS);
     CHECK(h != 0);
-    EXPECT_EQ(U(EventUnregister)(h), ERROR_SUCCESS);
+    ULONG ur = U(EventUnregister)(h);   /* EXPECT_EQ evaluates its arguments twice: call once */
+    EXPECT_EQ(ur, ERROR_SUCCESS);
 }
 TEST(gap3_eventregister_callback_without_context) {
     if (t_is_wine()) { t_skip("wine: ETW stubbed"); return; }
@@ -68,8 +69,9 @@ TEST(gap3_eventregister_same_guid_twice_distinct_handles) {
     REGHANDLE a = g3_reg(&G3_PROV), b = g3_reg(&G3_PROV);
     CHECK(a != 0 && b != 0);
     CHECK(a != b);
-    if (a) EXPECT_EQ(U(EventUnregister)(a), ERROR_SUCCESS);
-    if (b) EXPECT_EQ(U(EventUnregister)(b), ERROR_SUCCESS);
+    /* EXPECT_EQ evaluates its arguments twice: call EventUnregister once per handle */
+    if (a) { ULONG ua = U(EventUnregister)(a); EXPECT_EQ(ua, ERROR_SUCCESS); }
+    if (b) { ULONG ub = U(EventUnregister)(b); EXPECT_EQ(ub, ERROR_SUCCESS); }
 }
 TEST(gap3_eventregister_two_guids) {
     if (t_is_wine()) { t_skip("wine: ETW stubbed"); return; }
@@ -411,10 +413,12 @@ TEST(gap3_eventactivityid_get_set_swaps) {
     U(EventActivityIdControl)(EVENT_ACTIVITY_CTRL_GET_ID, &orig);
     U(EventActivityIdControl)(EVENT_ACTIVITY_CTRL_SET_ID, &a);
     g = b;
-    EXPECT_EQ(U(EventActivityIdControl)(EVENT_ACTIVITY_CTRL_GET_SET_ID, &g), ERROR_SUCCESS);
+    ULONG sr = U(EventActivityIdControl)(EVENT_ACTIVITY_CTRL_GET_SET_ID, &g);   /* EXPECT_EQ would evaluate the call twice */
+    EXPECT_EQ(sr, ERROR_SUCCESS);
     CHECK(!memcmp(&g, &a, sizeof g));            /* returns previous */
     GUID cur;
     U(EventActivityIdControl)(EVENT_ACTIVITY_CTRL_GET_ID, &cur);
+    t_note("GET_SET_ID: g.Data1=%lx (a=1 b=4) cur.Data1=%lx", g.Data1, cur.Data1);
     CHECK(!memcmp(&cur, &b, sizeof cur));        /* installed new */
     U(EventActivityIdControl)(EVENT_ACTIVITY_CTRL_SET_ID, &orig);
 }

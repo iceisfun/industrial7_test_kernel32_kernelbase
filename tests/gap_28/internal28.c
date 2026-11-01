@@ -90,6 +90,15 @@ TEST(gap28_exports_not_decorated) {
   CHECK(t_proc("UpdateCalendarDayOfWeek@8") == NULL);
   CHECK(t_proc("__initterm") == NULL);
 }
+/* __C_specific_handler, __chkstk and __misaligned_access are export forwarders
+ * ("NTDLL.<name>") in both kernel32 and kernelbase on Win10, so GetProcAddress
+ * resolves them into ntdll's image. */
+static int gap28_is_ntdll_fwd(const char *n) {
+  return !strcmp(n, "__C_specific_handler") || !strcmp(n, "__chkstk") || !strcmp(n, "__misaligned_access");
+}
+static int gap28_in_image(FARPROC p, HMODULE h, size_t span) {
+  return (char *)p > (char *)h && (char *)p < (char *)h + span;
+}
 TEST(gap28_exports_inside_module_image) {
   if (t_is_wine()) { t_skip("wine builtin layout"); return; }
   HMODULE hk = t_kernelbase(), h32 = t_kernel32();
@@ -97,14 +106,22 @@ TEST(gap28_exports_inside_module_image) {
     if (!ex[i].kb) continue;
     FARPROC p = t_proc_kb(ex[i].n);
     if (!p) continue;
-    CHECKF((char *)p > (char *)hk && (char *)p < (char *)hk + 0x1000000, "%s outside kernelbase image", ex[i].n);
+    if (gap28_is_ntdll_fwd(ex[i].n)) {
+      CHECKF(p == t_proc_nt(ex[i].n), "%s (forwarder) does not resolve to the ntdll export", ex[i].n);
+      continue;
+    }
+    CHECKF(gap28_in_image(p, hk, 0x1000000), "%s outside kernelbase image", ex[i].n);
   }
   for (size_t i = 0; i < NEX; i++) {
     if (!ex[i].k32) continue;
     FARPROC p = t_proc_k32(ex[i].n);
     if (!p) continue;
-    int in32 = (char *)p > (char *)h32 && (char *)p < (char *)h32 + 0x400000;
-    int inkb = (char *)p > (char *)hk && (char *)p < (char *)hk + 0x1000000;
+    if (gap28_is_ntdll_fwd(ex[i].n)) {
+      CHECKF(p == t_proc_nt(ex[i].n), "%s (forwarder) does not resolve to the ntdll export", ex[i].n);
+      continue;
+    }
+    int in32 = gap28_in_image(p, h32, 0x400000);
+    int inkb = gap28_in_image(p, hk, 0x1000000);
     CHECKF(in32 || inkb, "%s in neither image", ex[i].n);
   }
 }
@@ -126,9 +143,10 @@ TEST(gap28_updatecal_unknown_calid) {
     UINT buf[16] = { ids[i], 1, 2020, 1, 1 };
     SET_ERR(0);
     int r = UN(UpdateCalendarDayOfWeek)(buf);
+    DWORD e = GetLastError();   /* capture first: t_is_wine() does a failing GetProcAddress (sets 127) */
     if (t_is_wine()) { t_note("calid 0x%x -> %d", ids[i], r); continue; }
     EXPECT_EQ(r, 0);
-    EXPECT_ERR(ERROR_INVALID_PARAMETER);
+    CHECKF(e == ERROR_INVALID_PARAMETER, "calid 0x%x GetLastError got %lu want 87", ids[i], e);
   }
 }
 TEST(gap28_updatecal_gregorian_observed) {
@@ -274,14 +292,16 @@ TEST(gap28_initterm_e_first_fails) {
   initterm_e_t f = (initterm_e_t)t_proc_kb("_initterm_e"); REQUIRE(f);
   void *tab[2] = { (void *)fe_fail, (void *)fe_ok };
   g_calls = 0;
-  EXPECT_EQ(f(tab, tab + 2), 77);
+  int r = f(tab, tab + 2);   /* EXPECT_EQ evaluates its operands twice: call exactly once */
+  EXPECT_EQ(r, 77);
   EXPECT_EQ(g_calls, 1);
 }
 TEST(gap28_initterm_e_null_then_fail) {
   initterm_e_t f = (initterm_e_t)t_proc_kb("_initterm_e"); REQUIRE(f);
   void *tab[3] = { NULL, (void *)fe_fail, (void *)fe_ok };
   g_calls = 0;
-  EXPECT_EQ(f(tab, tab + 3), 77);
+  int r = f(tab, tab + 3);   /* EXPECT_EQ evaluates its operands twice: call exactly once */
+  EXPECT_EQ(r, 77);
   EXPECT_EQ(g_calls, 1);
 }
 

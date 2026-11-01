@@ -245,8 +245,12 @@ TEST(timer_set_cancel_wrong_type) {
     HANDLE m = CreateMutexA(NULL, FALSE, NULL), s = CreateSemaphoreA(NULL, 0, 1, NULL);
     HANDLE o[] = { m, s, GetCurrentProcess(), GetCurrentThread() };
     for (int i = 0; i < 4; i++) {
-        SET_ERR(0); EXPECT_EQ(U(SetWaitableTimer)(o[i], &d, 0, NULL, NULL, FALSE), FALSE); EXPECT_ERR(ERROR_INVALID_HANDLE);
-        SET_ERR(0); EXPECT_EQ(U(CancelWaitableTimer)(o[i]), FALSE); EXPECT_ERR(ERROR_INVALID_HANDLE);
+        /* Win10: the kernel resolves the handle with TIMER_MODIFY_STATE (0x2) and no type, then checks
+         * the type. A mutex has no 0x2 right (MUTEX_ALL_ACCESS), so the access check fails first:
+         * ERROR_ACCESS_DENIED; all others fail the type check: ERROR_INVALID_HANDLE. */
+        DWORD want = (i == 0) ? ERROR_ACCESS_DENIED : ERROR_INVALID_HANDLE;
+        SET_ERR(0); EXPECT_EQ(U(SetWaitableTimer)(o[i], &d, 0, NULL, NULL, FALSE), FALSE); CHECKF(GetLastError() == want, "obj %d err %lu want %lu", i, GetLastError(), want);
+        SET_ERR(0); EXPECT_EQ(U(CancelWaitableTimer)(o[i]), FALSE); CHECKF(GetLastError() == want, "obj %d err %lu want %lu", i, GetLastError(), want);
     }
     CloseHandle(m); CloseHandle(s);
 }
@@ -346,7 +350,10 @@ TEST(timer_closing_handle_cancels_timer_and_apc) {
     U(SetWaitableTimer)(h, &d, 0, apc_cb, NULL, FALSE);
     CloseHandle(h);
     SleepEx(400, TRUE);
-    EXPECT_EQ(g_apc_count, 0);
+    /* Win10 (ExpSetTimerObject): while a completion routine is associated the kernel keeps the
+     * reference taken in ExpSetTimer, so CloseHandle does not delete/cancel the timer; the APC is
+     * still delivered (baseline: 1). */
+    EXPECT_EQ(g_apc_count, 1);
 }
 static DWORD WINAPI tm_apc_thread(LPVOID p) {
     HANDLE h = (HANDLE)p;

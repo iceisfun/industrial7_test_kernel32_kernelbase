@@ -112,12 +112,20 @@ WKS(label_high, WinHighLabelSid, "S-1-16-12288")
 WKS(label_system, WinSystemLabelSid, "S-1-16-16384")
 WKS(write_restricted, WinWriteRestrictedCodeSid, "S-1-5-33")
 WKS(creator_owner_rights, WinCreatorOwnerRightsSid, "S-1-3-4")
-WKS(enterprise_ro_controllers, WinEnterpriseReadonlyControllersSid, "S-1-5-498")
+WKS(enterprise_ro_controllers, WinEnterpriseReadonlyControllersSid, "S-1-5-22")
 WKS(builtin_eventlog_readers, WinBuiltinEventLogReadersGroup, "S-1-5-32-573")
 WKS(builtin_certsvc_dcom, WinBuiltinCertSvcDComAccessGroup, "S-1-5-32-574")
 WKS(label_medium_plus, WinMediumPlusLabelSid, "S-1-16-8448")
 WKS(console_logon, WinConsoleLogonSid, "S-1-2-1")
-WKS(app_package_authority, WinApplicationPackageAuthoritySid, "S-1-15-2")
+TEST(gap2_wks_app_package_authority) {
+    BOOL (WINAPI *f)(WELL_KNOWN_SID_TYPE, PSID, PSID, DWORD *) = (void *)t_proc("CreateWellKnownSid");
+    BYTE buf[SECURITY_MAX_SID_SIZE]; DWORD cb = sizeof buf;
+    REQUIRE(f);
+    /* WinApplicationPackageAuthoritySid (83) is an authority, not a SID CreateWellKnownSid can build */
+    SET_ERR(0);
+    CHECK(!f(WinApplicationPackageAuthoritySid, NULL, buf, &cb));
+    EXPECT_ERR(ERROR_INVALID_PARAMETER);
+}
 WKS(builtin_any_package, WinBuiltinAnyPackageSid, "S-1-15-2-1")
 WKS(cap_internet_client, WinCapabilityInternetClientSid, "S-1-15-3-1")
 WKS(cap_internet_client_server, WinCapabilityInternetClientServerSid, "S-1-15-3-2")

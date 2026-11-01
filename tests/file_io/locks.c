@@ -121,7 +121,8 @@ TEST(fio_lock_exclusive_vs_shared_ordering) {
     HANDLE h1 = open_rw(p, 0), h2 = open_rw(p, 0); OK_H(h1); OK_H(h2);
     CHECK(lockex(h1, FI | EX, 0, 10));
     EXPECT_FAIL_B(lockex(h2, FI, 0, 10), ERROR_LOCK_VIOLATION);        /* shared vs exclusive */
-    EXPECT_FAIL_B(lockex(h1, FI, 5, 10), ERROR_LOCK_VIOLATION);        /* own exclusive blocks own shared */
+    /* a lock held by the same owner (file object, pid, key) never conflicts: own shared request is granted */
+    CHECK(lockex(h1, FI, 5, 10)); CHECK(unlockex(h1, 5, 10));
     CHECK(unlockex(h1, 0, 10));
     CHECK(lockex(h1, FI, 0, 10));
     EXPECT_FAIL_B(lockex(h1, FI | EX, 0, 10), ERROR_LOCK_VIOLATION);   /* no upgrade */
@@ -209,11 +210,19 @@ TEST(fio_lock_range_overflow) {
     TP(p, "lk_ovf.bin"); mkfile_pat(p, 10);
     HANDLE h = open_rw(p, 0); OK_H(h);
     SET_ERR(0);
-    BOOL ok = U(LockFile)(h, 1, 0, 0xFFFFFFFF, 0xFFFFFFFF);          /* offset + length wraps */
+    /* FsRtlPrivateLock rejects a range only when last byte (offset+len-1) wraps: offset 1, len 2^64-1 ends
+       exactly at 2^64-1 and is accepted; offset 2 with the same length wraps */
+    BOOL ok = U(LockFile)(h, 1, 0, 0xFFFFFFFF, 0xFFFFFFFF);
+    t_note("LockFile(offset=1,len=2^64-1) ok=%d gle=%lu", ok, GetLastError());
+    CHECK(ok);
+    if (ok) U(UnlockFile)(h, 1, 0, 0xFFFFFFFF, 0xFFFFFFFF);
+    SET_ERR(0);
+    ok = U(LockFile)(h, 2, 0, 0xFFFFFFFF, 0xFFFFFFFF);
     DWORD e = GetLastError();
     CHECK(!ok);
-    t_note("LockFile(offset=1,len=2^64-1) gle=%lu", e);
+    t_note("LockFile(offset=2,len=2^64-1) gle=%lu", e);
     CHECK(e == ERROR_INVALID_LOCK_RANGE || e == ERROR_INVALID_PARAMETER || e == ERROR_LOCK_VIOLATION);
+    if (ok) U(UnlockFile)(h, 2, 0, 0xFFFFFFFF, 0xFFFFFFFF);
     SET_ERR(0);
     ok = U(LockFile)(h, 0xFFFFFFFF, 0xFFFFFFFF, 2, 0);
     t_note("LockFile(offset=2^64-1,len=2) ok=%d gle=%lu", ok, GetLastError());

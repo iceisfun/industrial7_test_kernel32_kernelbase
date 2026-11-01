@@ -70,9 +70,10 @@ static inline DWORD g2_granted(HANDLE h)
 {
     typedef LONG (NTAPI *pfn)(HANDLE, int, void *, ULONG, ULONG *);
     pfn q = (pfn)t_proc_nt("NtQueryObject");
-    ULONG buf[32]; ULONG ret = 0;
+    ULONG buf[14]; ULONG ret = 0;
     memset(buf, 0, sizeof buf);
-    if (!q || q(h, 0, buf, sizeof buf, &ret) < 0) return 0xFFFFFFFF;
+    /* ObjectBasicInformation: the kernel requires Length == sizeof(OBJECT_BASIC_INFORMATION) == 0x38 exactly */
+    if (!q || q(h, 0, buf, 0x38, &ret) < 0) return 0xFFFFFFFF;
     return buf[1];   /* Attributes, GrantedAccess */
 }
 

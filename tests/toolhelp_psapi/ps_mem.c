@@ -486,6 +486,17 @@ TEST(ps_qws_small_buffer) {
     CHECK(!U(K32QueryWorkingSet)(GetCurrentProcess(), b, 8));
     EXPECT_ERR(ERROR_BAD_LENGTH);
 }
+/* Win10 ntoskrnl!MmQueryVirtualMemory (classes 1 and 4): an untrusted caller needs PROCESS_QUERY_INFORMATION (0x400),
+ * a trusted one (MiIsUserQueryVmCallerTrusted: admin token or SeProfileSingleProcessPrivilege) only
+ * PROCESS_QUERY_LIMITED_INFORMATION (0x1000). Approximate "trusted" by an elevated token. */
+static int caller_trusted_for_qvm(void) {
+    HANDLE tok; TOKEN_ELEVATION el; DWORD n = 0; int r = 0;
+    if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &tok)) {
+        if (GetTokenInformation(tok, TokenElevation, &el, sizeof el, &n)) r = el.TokenIsElevated != 0;
+        CloseHandle(tok);
+    }
+    return r;
+}
 TEST(ps_qws_invalid_handle) {
     REQUIRE(U(K32QueryWorkingSet)); REQUIRE(U(K32QueryWorkingSetEx));
     ULONG_PTR b[16]; thp_wsex x = { 0 };
@@ -498,7 +509,8 @@ TEST(ps_qws_invalid_handle) {
     HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, GetCurrentProcessId());
     SET_ERR(0);
     CHECK(!U(K32QueryWorkingSet)(h, b, sizeof b));
-    EXPECT_ERR(ERROR_ACCESS_DENIED);
+    if (caller_trusted_for_qvm()) EXPECT_ERR(ERROR_BAD_LENGTH);   /* access passes, 128 bytes is too small for the list */
+    else EXPECT_ERR(ERROR_ACCESS_DENIED);
     CloseHandle(h);
 }
 static int g_wsex_data = 5;
@@ -584,8 +596,11 @@ TEST(ps_qwsex_child) {
     t_note("child kernel32 header page attrs=0x%llx", (unsigned long long)x.VirtualAttributes);
     HANDLE lim = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pi.dwProcessId);
     SET_ERR(0);
-    CHECK(!U(K32QueryWorkingSetEx)(lim, &x, sizeof x));
-    EXPECT_ERR(ERROR_ACCESS_DENIED);
+    if (caller_trusted_for_qvm()) CHECKF(U(K32QueryWorkingSetEx)(lim, &x, sizeof x), "trusted caller, limited handle: err=%lu", GetLastError());
+    else {
+        CHECK(!U(K32QueryWorkingSetEx)(lim, &x, sizeof x));
+        EXPECT_ERR(ERROR_ACCESS_DENIED);
+    }
     CloseHandle(lim);
     thp_reap(&pi);
 }

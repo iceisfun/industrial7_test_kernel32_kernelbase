@@ -541,7 +541,9 @@ TEST(regkb_val_a_name_too_long_rejected) {
     REQUIRE(U(RegSetValueExA));
     HKEY h = FRESH(); REQUIRE(h);
     static char nm[40000]; memset(nm, 'x', 39999); nm[39999] = 0; DWORD v = 1;
-    EQ(U(RegSetValueExA)(h, nm, 0, REG_DWORD, (BYTE *)&v, 4), ERROR_INVALID_PARAMETER);
+    /* p1: the ANSI name is widened with RtlCreateUnicodeStringFromAsciiz, which fails (STATUS_NO_MEMORY)
+     * once the UNICODE_STRING would exceed 0xFFFE bytes; RegSetValueExA maps that to ERROR_NOT_ENOUGH_MEMORY. */
+    EQ(U(RegSetValueExA)(h, nm, 0, REG_DWORD, (BYTE *)&v, 4), ERROR_NOT_ENOUGH_MEMORY);
     RegCloseKey(h);
 }
 
@@ -643,7 +645,12 @@ TEST(regkb_val_setkeyvalue_invalid_handle_and_access) {
     DWORD v = 1;
     CHECK(U(RegSetKeyValueW)(NULL, L"k", L"v", REG_DWORD, &v, 4) != 0);
     HKEY h = FRESH(); REQUIRE(h); HKEY ro; RegOpenKeyExW(h, NULL, 0, KEY_READ, &ro);
-    EQ(U(RegSetKeyValueW)(ro, L"k", L"v", REG_DWORD, &v, 4), ERROR_ACCESS_DENIED);
+    /* p1: creating a subkey is checked against the parent's security descriptor, not the handle's
+     * granted rights, so a subkey path would succeed; a NULL subkey writes the value on ro itself. */
+    EQ(U(RegSetKeyValueW)(ro, NULL, L"v", REG_DWORD, &v, 4), ERROR_ACCESS_DENIED);
+    /* the original subkey form: observed 0 on Windows 10 (create checked against the parent SD, value set on the new handle) */
+    EQ(U(RegSetKeyValueW)(ro, L"k", L"v", REG_DWORD, &v, 4), 0);
+    RegDeleteKeyW(h, L"k");
     RegCloseKey(ro); RegCloseKey(h);
 }
 TEST(regkb_val_setkeyvalue_reserved_name_too_long) {

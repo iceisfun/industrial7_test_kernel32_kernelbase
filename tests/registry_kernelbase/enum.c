@@ -362,7 +362,9 @@ TEST(regkb_queryinfo_class_size_only_and_small_buffer) {
     EQ(n, 7);
     WCHAR out[16]; n = 3;
     EQ(U(RegQueryInfoKeyW)(k, out, &n, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL), ERROR_MORE_DATA);
-    n = 7; EQ(U(RegQueryInfoKeyW)(k, out, &n, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL), ERROR_MORE_DATA);
+    /* p1: when the class itself fits but its terminator does not (ClassLength + 2 > 2 * n), kernelbase
+     * returns ERROR_INSUFFICIENT_BUFFER (STATUS_BUFFER_TOO_SMALL); ERROR_MORE_DATA is for a buffer too small for the class. */
+    n = 7; EQ(U(RegQueryInfoKeyW)(k, out, &n, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL), ERROR_INSUFFICIENT_BUFFER);
     n = 8; EQ(U(RegQueryInfoKeyW)(k, out, &n, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL), 0); EQ(n, 7);
     RegCloseKey(k);
     /* parent's max class length is that of its subkeys */

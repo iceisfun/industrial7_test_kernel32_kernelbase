@@ -234,7 +234,8 @@ TEST(gap17_timeBeginPeriod_affects_sleep_granularity) {
     DWORD s = t();
     for (int i = 0; i < 20; i++) Sleep(1);
     DWORD d = t() - s;
-    EXPECT_EQ(e(1), 0);
+    UINT er = e(1);   /* EXPECT_EQ evaluates its operands more than once; call exactly once */
+    EXPECT_EQ(er, 0);
     CHECKF(d < 600, "20x Sleep(1) took %lu ms", d);
 }
 TEST(gap17_timeBeginPeriod_no_lasterror) {

@@ -178,7 +178,7 @@ TEST(gap16_vqex_remote_process) {
 TEST(gap16_vqex_access_rights) {
     NEED_Q; PROCESS_INFORMATION pi; HANDLE h = spawn_sleeper(&pi); REQUIRE(h);
     MEMORY_BASIC_INFORMATION m; HANDLE lim = dup_access(h, PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE); REQUIRE(lim);
-    SET_ERR(0); CHECK(UK(VirtualQueryEx)(lim, t_ntdll(), &m, sizeof m) == 0); EXPECT_ERR(ERROR_ACCESS_DENIED);
+    CHECK(UK(VirtualQueryEx)(lim, t_ntdll(), &m, sizeof m) == sizeof m);   /* Win10: MemoryBasicInformation needs only PROCESS_QUERY_LIMITED_INFORMATION */
     HANDLE rd = dup_access(h, PROCESS_VM_READ); REQUIRE(rd);
     SET_ERR(0); CHECK(UK(VirtualQueryEx)(rd, t_ntdll(), &m, sizeof m) == 0); EXPECT_ERR(ERROR_ACCESS_DENIED);
     HANDLE qi = dup_access(h, PROCESS_QUERY_INFORMATION); REQUIRE(qi);

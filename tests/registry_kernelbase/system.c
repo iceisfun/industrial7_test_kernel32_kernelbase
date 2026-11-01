@@ -211,11 +211,28 @@ TEST(regkb_pre_dyn_data_not_supported) {
     DWORD cb = 0;
     s = U(RegQueryValueExW)(dyn, L"x", NULL, NULL, NULL, &cb); CHECK(s != 0);
 }
+/* p1: on Windows 10 these handle values crashed (access violation) in-process; run each in a child.
+ * 0x80000007 is HKEY_CURRENT_USER_LOCAL_SETTINGS; 0x80000008/9 are unassigned. Exit 0: error status,
+ * 1: unexpected success, 77: access violation (recorded as a NOTE). */
+static LONG CALLBACK pre_av_veh(PEXCEPTION_POINTERS p) {
+    if (p->ExceptionRecord->ExceptionCode == EXCEPTION_ACCESS_VIOLATION) ExitProcess(77);
+    return EXCEPTION_CONTINUE_SEARCH;
+}
+CHILD(regkb_pre_unassigned_child) {
+    if (argc < 2) return 20;
+    AddVectoredExceptionHandler(1, pre_av_veh);
+    ULONG_PTR v = (ULONG_PTR)strtoul(argv[1], NULL, 16);
+    HKEY k = NULL; LSTATUS s = RegOpenKeyExW((HKEY)(LONG_PTR)(LONG)v, L"x", 0, KEY_READ, &k);
+    if (s == 0 && k) RegCloseKey(k);
+    return s != 0 ? 0 : 1;
+}
 TEST(regkb_pre_unassigned_predefined_values) {
     REQUIRE(U(RegOpenKeyExW));
-    for (ULONG_PTR v = 0x80000007; v <= 0x80000009; v++) {
-        HKEY k = NULL; LSTATUS s = U(RegOpenKeyExW)((HKEY)(LONG_PTR)(LONG)v, L"x", 0, KEY_READ, &k);
-        CHECKF(s != 0, "0x%llx", (unsigned long long)v);
+    static const char *vals[] = { "80000007", "80000008", "80000009" };
+    for (int i = 0; i < 3; i++) {
+        DWORD code = t_run_child("regkb_pre_unassigned_child", vals[i], 30000);
+        if (code == 77) t_note("RegOpenKeyExW(0x%s) raised an access violation", vals[i]);
+        CHECKF(code == 0 || code == 77, "0x%s exit %lu", vals[i], (unsigned long)code);
     }
 }
 TEST(regkb_pre_hklm_system_select_current) {
@@ -492,7 +509,8 @@ CHILD(regkb_restart) {
     if (hr != S_OK || lstrcmpW(out, L"/k32t restart args") || fl != 0) { printf("get hr=%08lx fl=%lu\n", hr, fl); return 23; }
     if (sz != 19) { printf("size %lu\n", sz); return 24; }
     sz = 0; hr = get(GetCurrentProcess(), NULL, &sz, &fl);
-    if (hr != HRESULT_FROM_WIN32(ERROR_INSUFFICIENT_BUFFER) || sz != 19) { printf("size query hr=%08lx sz=%lu\n", hr, sz); return 25; }
+    /* p1: with a NULL buffer GetApplicationRestartSettings stores the required size and returns S_OK */
+    if (hr != S_OK || sz != 19) { printf("size query hr=%08lx sz=%lu\n", hr, sz); return 25; }
     sz = 5; hr = get(GetCurrentProcess(), out, &sz, &fl);
     if (hr != HRESULT_FROM_WIN32(ERROR_INSUFFICIENT_BUFFER)) { printf("small hr=%08lx\n", hr); return 26; }
     hr = reg(L"/second", RESTART_NO_CRASH | RESTART_NO_HANG);
@@ -522,8 +540,9 @@ CHILD(regkb_restart_errors) {
     rk_fill_w(big, 1023, L'x');
     hr = reg(big, 0);
     if (hr != S_OK) { printf("1023 chars hr=%08lx\n", hr); return 22; }
+    /* p1: WerpRegisterRestart does not validate dwFlags; an undefined bit is stored as given */
     hr = reg(L"ok", 0x10);
-    if (hr != E_INVALIDARG) { printf("bad flags hr=%08lx\n", hr); return 23; }
+    if (hr != S_OK) { printf("undefined flag bit hr=%08lx\n", hr); return 23; }
     hr = reg(NULL, 0);
     printf("NULL cmdline hr=%08lx\n", hr);
     WCHAR out[8]; DWORD sz = 8, fl;
@@ -555,14 +574,18 @@ CHILD(regkb_recovery) {
     printf("default ping interval = %lu (hr %08lx)\n", ping, hr);
     hr = reg(NULL, NULL, 5000, 0);
     if (hr != E_INVALIDARG) { printf("NULL callback hr=%08lx\n", hr); return 25; }
+    /* p1: dwFlags is not validated by RegisterApplicationRecoveryCallback / WerpRegisterRecovery */
     hr = reg((LPVOID)rec_cb, NULL, 5000, 1);
-    if (hr != E_INVALIDARG) { printf("flags=1 hr=%08lx\n", hr); return 26; }
+    if (hr != S_OK) { printf("flags=1 hr=%08lx\n", hr); return 26; }
     hr = reg((LPVOID)rec_cb, NULL, 5 * 60 * 1000 + 1, 0);
     printf("ping > 5 minutes hr=%08lx\n", hr);
+    if (hr != E_INVALIDARG) return 29;   /* p1: kernel32 rejects dwPingInterval > 300000 */
     hr = unreg();
     if (hr != S_OK) { printf("unregister hr=%08lx\n", hr); return 27; }
     hr = get(GetCurrentProcess(), &cb, &par, &ping, &fl);
-    if (hr != HRESULT_FROM_WIN32(ERROR_NOT_FOUND)) { printf("get after unregister hr=%08lx\n", hr); return 28; }
+    /* p1b: Unregister is WerpRegisterRecovery(0,0,0,0), which stores RtlEncodeSystemPointer(NULL) (non-zero),
+       so WerpGetRecoveryRoutine's "callback slot == 0 -> not found" test passes and Get returns S_OK with a NULL callback */
+    if (hr != S_OK || cb != NULL) { printf("get after unregister hr=%08lx cb=%p\n", hr, cb); return 28; }
     return 0;
 }
 TEST(regkb_recovery_callback_register_get_unregister_in_child) {

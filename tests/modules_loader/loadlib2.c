@@ -29,15 +29,26 @@ TEST(ld2_dllmain_false_datafile_ok) {
     CHECK(h != NULL);
     ml_unload(h);
 }
+/* The loader reports an unresolved import by name through LdrpReportError, which raises STATUS_ENTRYPOINT_NOT_FOUND
+ * (0xC0000139) internally before LoadLibrary returns NULL.  The harness exception handler would flag that first-chance
+ * exception, so the load runs in a child process. */
+CHILD(ld2_missing_import_child) {
+    HMODULE h; DWORD e;
+    SetLastError(0);
+    h = LoadLibraryExA(argv[1], NULL, LOAD_WITH_ALTERED_SEARCH_PATH);
+    e = GetLastError();
+    if (h != NULL) return 1;
+    if (e != ERROR_PROC_NOT_FOUND) return 0x1000 + (e & 0xFFF);
+    if (GetModuleHandleA("k32m_badimp.dll") != NULL) return 3;
+    if (GetModuleHandleA("k32m_dep.dll") != NULL) return 4;      /* dependency released after the failure */
+    return 0;
+}
 TEST(ld2_missing_import_function) {
     REQUIRE(U(LoadLibraryExA));
-    const char *d = ml_dir("ld2_badimp"); char pb[MAX_PATH];
+    const char *d = ml_dir("ld2_badimp"); char pb[MAX_PATH], args[MAX_PATH + 8];
     CHECK(ml_put(ML_BADIMP, d, "k32m_badimp.dll", pb)); CHECK(ml_put(ML_DEP, d, "k32m_dep.dll", NULL));
-    SET_ERR(0);
-    CHECK(U(LoadLibraryExA)(pb, NULL, LOAD_WITH_ALTERED_SEARCH_PATH) == NULL);
-    EXPECT_ERR(ERROR_PROC_NOT_FOUND);
-    CHECK(GetModuleHandleA("k32m_badimp.dll") == NULL);
-    CHECK(GetModuleHandleA("k32m_dep.dll") == NULL);      /* dependency released after the failure */
+    snprintf(args, sizeof args, "\"%s\"", pb);
+    EXPECT_EQ(ml_run_exe(t_self_path(), "ld2_missing_import_child", args, NULL, 25000, 0), 0);
 }
 TEST(ld2_missing_import_dll_vs_function) {
     REQUIRE(U(LoadLibraryExA));

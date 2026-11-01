@@ -350,7 +350,9 @@ TEST(locenum_langgroup_locales_a_matches_w) {
 TEST(locenum_langgroup_locales_early_stop) {
     REQUIRE(U(EnumLanguageGroupLocalesW));
     e_reset(1); U(EnumLanguageGroupLocalesW)(cb_glw, 1, 0, 0);
-    CHECK(g_n == 1); CHECK(g_calls_after_stop == 0);
+    /* P1: Win10 (Internal_EnumLanguageGroupLocales) breaks only the per-key loop on FALSE and then
+     * still runs the alternate-sorts key pass, so one further callback can arrive. */
+    CHECKF(g_n >= 1 && g_n <= 2, "g_n=%d", g_n); CHECKF(g_calls_after_stop <= 1, "after_stop=%d", g_calls_after_stop);
 }
 TEST(locenum_langgroup_locales_invalid) {
     REQUIRE(U(EnumLanguageGroupLocalesW));
@@ -566,7 +568,7 @@ TEST(locenum_geonames_early_stop_and_errors) {
     SET_ERR(0); CHECK(!UN(EnumSystemGeoNames)(GEOCLASS_NATION, NULL, 0)); EXPECT_ERR(ERROR_INVALID_PARAMETER);
     e_reset(0); SET_ERR(0);
     BOOL r = UN(EnumSystemGeoNames)(99, cb_geoname, 0);
-    CHECK(!r); EXPECT_ERR(ERROR_INVALID_PARAMETER);
+    CHECK(!r); EXPECT_ERR(ERROR_INVALID_FLAGS);   /* P1: Win10 rejects an unknown geo class with 1004 */
 }
 TEST(locenum_geonames_match_geoids) {
     REQUIRE(UN(EnumSystemGeoNames)); REQUIRE(U(EnumSystemGeoID));

@@ -193,9 +193,12 @@ TEST(gap19_regsetkeyvalue_readonly_handle) {
     if (ro) {
         EXPECT_EQ(UN(RegSetKeyValueA)(ro, NULL, "v", REG_SZ, "a", 2), ERROR_ACCESS_DENIED);
         LSTATUS r = UN(RegSetKeyValueA)(ro, "newsub", "v", REG_SZ, "a", 2);
-        EXPECT_EQ(r, ERROR_ACCESS_DENIED);
+        /* creating a subkey is checked against the parent's security descriptor (CmpCheckCreateAccess,
+         * KEY_CREATE_SUB_KEY), not the handle's granted access: our own key allows it */
+        EXPECT_EQ(r, ERROR_SUCCESS);
         HKEY s = NULL;
-        EXPECT_NE(RegOpenKeyExA(k, "newsub", 0, KEY_READ, &s), 0);
+        EXPECT_EQ(RegOpenKeyExA(k, "newsub", 0, KEY_READ, &s), 0);
+        if (s) RegCloseKey(s);
         RegCloseKey(ro);
     }
     g19_delroot(k);

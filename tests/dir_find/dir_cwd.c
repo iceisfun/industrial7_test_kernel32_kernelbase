@@ -215,7 +215,8 @@ CWD_CHILD_TEST(set_null_w) {
     DH_CHILD_CHECK(U(SetCurrentDirectoryA)(d));
     SetLastError(0);
     DH_CHILD_CHECK(!U(SetCurrentDirectoryW)(NULL));
-    if (!t_is_wine()) DH_CHILD_CHECK(GetLastError() == ERROR_INVALID_PARAMETER);
+    { DWORD le = GetLastError(); printf("SetCurrentDirectoryW(NULL) err=%lu\n", le);
+      if (!t_is_wine()) DH_CHILD_CHECK(le == ERROR_INVALID_PARAMETER); }
     DH_CHILD_CHECK(cwd_is(d));
     return 0;
 }
@@ -247,14 +248,13 @@ CWD_CHILD_TEST(set_updates_env_drive_var) {
     char var[4] = { '=', 0, ':', 0 }, b[MAX_PATH * 2], p[MAX_PATH];
     var[1] = d[0];
     cat(p, sizeof p, d, "ev"); DH_CHILD_CHECK(CreateDirectoryA(p, NULL));
+    /* Win10 SetCurrentDirectoryW -> RtlSetCurrentDirectory_U never writes the =X: variable (the shell does); only the cwd changes.
+       P1 audit: the exact consequence is that =X: is left as it was before the call (present or absent). */
+    char before[MAX_PATH * 2]; DWORD nb = GetEnvironmentVariableA(var, before, sizeof before);
     DH_CHILD_CHECK(U(SetCurrentDirectoryA)(p));
-    if (t_is_wine()) return 0;     /* emulator does not maintain =X: */
+    DH_CHILD_CHECK(cwd_is(p));
     DWORD n = GetEnvironmentVariableA(var, b, sizeof b);
-    DH_CHILD_CHECK(n > 0 && n < sizeof b);
-    DH_CHILD_CHECK(!lstrcmpiA(b, p));
-    DH_CHILD_CHECK(U(SetCurrentDirectoryA)(d));
-    n = GetEnvironmentVariableA(var, b, sizeof b);
-    DH_CHILD_CHECK(!lstrcmpiA(b, d));
+    DH_CHILD_CHECK(n == nb && (n == 0 || !lstrcmpA(b, before)));
     return 0;
 }
 CWD_CHILD_TEST(drive_relative_current_drive) {
@@ -278,8 +278,14 @@ CWD_CHILD_TEST(drive_relative_other_drive_env) {
     DH_CHILD_CHECK(SetEnvironmentVariableA(var, val));
     char rel[16]; snprintf(rel, sizeof rel, "%c:foo", 'A' + c);
     DWORD n = U(GetFullPathNameA)(rel, sizeof b, b, NULL);
-    char want[80]; snprintf(want, sizeof want, "%c:\\k32t\\base\\foo", 'A' + c);
+    /* P1 audit: the drive letter is unmapped, so ntdll RtlGetFullPathName_Ustr -> RtlpCheckRelativeDrive cannot
+       NtOpenFile the directory named by =X: and RtlpResetDriveEnvironment rewrites =X: to "X:\\" before it is
+       read: the path resolves against the drive root and the variable is reset (deterministic for an unmapped drive). */
+    char want[80]; snprintf(want, sizeof want, "%c:\\foo", 'A' + c);
     DH_CHILD_CHECK(n && !lstrcmpiA(b, want));
+    char ev_[64]; DWORD en_ = GetEnvironmentVariableA(var, ev_, sizeof ev_);
+    char root_[8]; snprintf(root_, sizeof root_, "%c:\\", 'A' + c);
+    DH_CHILD_CHECK(en_ == 3 && !lstrcmpiA(ev_, root_));
     /* without the variable it resolves against the drive root */
     DH_CHILD_CHECK(SetEnvironmentVariableA(var, NULL));
     n = U(GetFullPathNameA)(rel, sizeof b, b, NULL);

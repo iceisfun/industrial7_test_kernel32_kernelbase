@@ -233,7 +233,8 @@ TEST(rtlctx_lookup_function_entry_null_pc) {
     DWORD64 base = 0xDEAD;
     PRUNTIME_FUNCTION rf = UN(RtlLookupFunctionEntry)(0, &base, NULL);
     CHECK(rf == NULL);
-    EXPECT_EQ(base, 0);
+    /* no image and no dynamic table covers this PC: Win10 returns NULL without writing ImageBase */
+    EXPECT_EQ(base, 0xDEAD);
 }
 
 TEST(rtlctx_lookup_function_entry_stack_address) {
@@ -241,7 +242,8 @@ TEST(rtlctx_lookup_function_entry_stack_address) {
     char local[8]; DWORD64 base = 0xDEAD;
     PRUNTIME_FUNCTION rf = UN(RtlLookupFunctionEntry)((DWORD64)(ULONG_PTR)local, &base, NULL);
     CHECK(rf == NULL);
-    EXPECT_EQ(base, 0);
+    /* no image and no dynamic table covers this PC: Win10 returns NULL without writing ImageBase */
+    EXPECT_EQ(base, 0xDEAD);
 }
 
 TEST(rtlctx_lookup_function_entry_kernelbase_code) {

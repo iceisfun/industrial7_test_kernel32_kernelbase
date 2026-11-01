@@ -465,8 +465,9 @@ SCOPED(name_empty_string) {
     CHECK(GetLastError() != 0);
     SET_ERR(0);
     EXPECT_EQ(ap_find_a(g, ""), 0);
-    CHECK(GetLastError() != 0);
-    if (g && !t_is_wine()) EXPECT_ERR(ERROR_INVALID_NAME);   /* explicit 123 in the Windows code path */
+    DWORD find_err = GetLastError();   /* capture before t_is_wine(): its GetProcAddress miss sets 127 */
+    CHECK(find_err != 0);
+    if (g && !t_is_wine()) EXPECT_EQ(find_err, ERROR_INVALID_NAME);   /* explicit 123 in the Windows code path */
     SET_ERR(0);
     EXPECT_EQ(ap_find_w(g, &e), 0);
     CHECK(GetLastError() != 0);

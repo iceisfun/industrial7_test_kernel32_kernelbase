@@ -612,17 +612,27 @@ TEST(gap1_checktokencapability_with_impersonation_token) {
     if (r && r2) CHECK(h == h2);
     CloseHandle(t);
 }
-TEST(gap1_checktokencapability_closed_handle) {
-    REQUIRE(U(CheckTokenCapability));
+/* P1: ntdll!RtlCheckTokenCapability ignores the NtQueryInformationToken status on a closed handle and then uses an
+ * uninitialised pointer (access violation on Win10), so the call runs in a child process. Child exit: 0 = call
+ * failed cleanly with *has == FALSE, 1 = unexpected success, 2 = *has modified. */
+CHILD(gap1_ctc_closed) {
+    (void)argc; (void)argv;
     HANDLE t = g1_imp_token(TOKEN_ALL_ACCESS);
-    if (!t) { t_skip("no token"); return; }
+    if (!t) return 3;
     CloseHandle(t);
     G1SID s; g1_mksid(&s, 2, 15); s.sub[0] = 3; s.sub[1] = 1;
     BOOL h = 0x77;
-    SET_ERR(0);
-    CHECK(!U(CheckTokenCapability)(t, &s, &h));
-    t_note("closed handle -> err %lu", GetLastError());
-    EXPECT_EQ(h, FALSE);
+    BOOL r = U(CheckTokenCapability)(t, &s, &h);
+    if (r) return 1;
+    return h == FALSE ? 0 : 2;
+}
+TEST(gap1_checktokencapability_closed_handle) {
+    REQUIRE(U(CheckTokenCapability));
+    DWORD code = t_run_child("gap1_ctc_closed", "", 30000);
+    t_note("closed handle child exit 0x%08lx", code);
+    if (code == 3) { t_skip("no token"); return; }
+    /* clean failure, or the Win10 access violation */
+    CHECKF(code == 0 || code == 0xC0000005, "child exit 0x%08lx", code);
 }
 TEST(gap1_checktokencapability_unheld_derived_capability) {
     REQUIRE(U(CheckTokenCapability));
@@ -676,8 +686,11 @@ TEST(gap1_converttoautoinherit_no_parent_roundtrip) {
     SECURITY_DESCRIPTOR_CONTROL c; DWORD rev;
     GetSecurityDescriptorControl(nsd, &c, &rev);
     t_note("result control=0x%04x", c);
+    /* P1: DestroyPrivateObjectSecurity frees *nsd (RtlDeleteSecurityObject) but does not NULL it: the caller's
+     * pointer is left unchanged. UNVERIFIED-until-rerun. */
+    PSECURITY_DESCRIPTOR before = nsd;
     CHECK(U(DestroyPrivateObjectSecurity)(&nsd));
-    CHECK(nsd == NULL);
+    CHECK(nsd == before);
 }
 TEST(gap1_converttoautoinherit_directory_flag) {
     REQUIRE(U(ConvertToAutoInheritPrivateObjectSecurity));

@@ -160,12 +160,12 @@ TEST(profile_file_over_64k_lookup) {
     if (t_is_wine()) { t_skip("wine profile cache faults on large inputs"); return; }
     REQUIRE(U(GetPrivateProfileStringA));
     char path[MAX_PATH]; np(path, "large4.ini");
-    size_t cap = 200000; char *c = malloc(cap); size_t o = 0;
+    size_t cap = 400000; char *c = malloc(cap); size_t o = 0;   /* 5000 filler lines are ~235 KB: 200000 overflowed the heap (0xc0000374 on Windows) */
     o += sprintf(c + o, "[a]\r\nfirst=1\r\n");
     for (int i = 0; i < 5000; i++) o += sprintf(c + o, "; filler comment line number %d with some text\r\n", i);
     o += sprintf(c + o, "[b]\r\nsecond=2\r\n");
     ap_put(path, c, o); free(c);
-    CHECK(o > 65536);
+    CHECK(o > 65536 && o < cap);
     EXPECT_STR(ap_val("a", "first", path), "1");
     EXPECT_STR(ap_val("b", "second", path), "2");
     ap_rm(path);
@@ -316,10 +316,10 @@ TEST(profile_winini_section_nonexistent) {
     char sec[64], b[64]; WCHAR ws[64], wb[64]; nosuch(sec, sizeof sec); ap_widen(ws, sec);
     memset(b, 'z', sizeof b);
     EXPECT_EQ(U(GetProfileSectionA)(sec, b, sizeof b), 0);
-    CHECK(b[0] == 0 && b[1] == 0);
+    CHECK(b[0] == 0);   /* only the first NUL is written when nothing is found (Win10 GetPrivateProfileSectionA) */
     for (int i = 0; i < 64; i++) wb[i] = L'z';
     EXPECT_EQ(U(GetProfileSectionW)(ws, wb, 64), 0);
-    CHECK(wb[0] == 0 && wb[1] == 0);
+    CHECK(wb[0] == 0);
 }
 
 TEST(profile_winini_section_invalid_params) {

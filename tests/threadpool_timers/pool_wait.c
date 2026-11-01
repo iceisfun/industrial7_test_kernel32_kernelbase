@@ -231,6 +231,17 @@ TEST(tp_wait_on_thread_handle) {
     WaitForSingleObject(th, 5000); CloseHandle(th); CloseHandle(go); tp_ctx_free(&c);
 }
 static HANDLE g_abandon_mutex;
+static volatile LONG g_veh_hits, g_veh_armed; static volatile ULONG_PTR g_veh_status;
+/* The harness VEH longjmps out of the test on any 0xCxxxxxxx exception, so code after the raising call
+   never runs: the status has to be printed here, before the harness handler sees the exception. */
+static LONG CALLBACK wt_veh(PEXCEPTION_POINTERS ep) {
+    if (g_veh_armed && ep->ExceptionRecord->ExceptionCode == 0xc000070a && ep->ExceptionRecord->NumberParameters > 0) {
+        g_veh_armed = 0;
+        g_veh_status = ep->ExceptionRecord->ExceptionInformation[0]; InterlockedIncrement(&g_veh_hits);
+        t_note("SetThreadpoolWait on abandoned mutex raised 0xc000070a, NTSTATUS %08lx", (unsigned long)g_veh_status);
+    }
+    return EXCEPTION_CONTINUE_SEARCH;
+}
 static DWORD WINAPI wt_abandoner(LPVOID p) { g_abandon_mutex = CreateMutexA(NULL, TRUE, NULL); return 0; }
 TEST(tp_wait_abandoned_mutex_result) {
     NEED_WAIT();
@@ -238,7 +249,12 @@ TEST(tp_wait_abandoned_mutex_result) {
     HANDLE th = CreateThread(NULL, 0, wt_abandoner, NULL, 0, NULL);
     WaitForSingleObject(th, 5000); CloseHandle(th);   /* the owner exited holding the mutex */
     PTP_WAIT w = U(CreateThreadpoolWait)(tp_wait_cbcount, &c, NULL);
+    /* diagnostic only: record the NTSTATUS carried by the handle exception, if any (p1b) */
+    g_veh_armed = 1;
+    PVOID veh = AddVectoredExceptionHandler(1, wt_veh);
     U(SetThreadpoolWait)(w, g_abandon_mutex, NULL);
+    g_veh_armed = 0;   /* not reached if the exception fires (harness longjmp); the handler disarms itself then */
+    if (veh) RemoveVectoredExceptionHandler(veh);
     CHECK(tp_signaled(c.ev, TP_WAIT_MS));
     if (t_is_wine() && c.res == WAIT_OBJECT_0) t_note("wine reports WAIT_OBJECT_0 for an abandoned mutex");
     else EXPECT_EQ(c.res, WAIT_ABANDONED_0);

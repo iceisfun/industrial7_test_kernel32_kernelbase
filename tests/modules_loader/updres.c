@@ -468,6 +468,7 @@ TEST(upd_test_exe_copy_without_rsrc_section) {
     REQUIRE(U(BeginUpdateResourceA)); REQUIRE(U(UpdateResourceA)); REQUIRE(U(EndUpdateResourceA));
     const char *d = ml_dir("upd_exe"); char p[MAX_PATH];
     if (!ml_copy_self(d, "self_copy.exe", p)) { t_skip("copy failed"); return; }
+    SetFileAttributesA(p, FILE_ATTRIBUTE_NORMAL);   /* CopyFile keeps the source attributes; a read-only copy gives ERROR_WRITE_PROTECT */
     HANDLE h = U(BeginUpdateResourceA)(p, FALSE);
     CHECKF(h != NULL, "err %lu", GetLastError());
     if (!h) return;

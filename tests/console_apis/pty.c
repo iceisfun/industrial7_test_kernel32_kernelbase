@@ -38,7 +38,7 @@ static void prun_forward(const char *res, DWORD code, int timedout, const char *
     g_cpass += npass;
 }
 
-#define FAILS(call, err)  do { SetLastError(0xBAD); BOOL r_ = (call); CEQ(r_, 0); CERR(err); } while (0)
+#define FAILS(call, err)  do { SetLastError(0xBAD); BOOL r_ = (call); DWORD le_ = GetLastError(); CEQ(r_, 0); CERRV(le_, err); } while (0)
 
 /* The test process only creates pipes and a pseudo console; it never attaches to any console. */
 typedef struct {
@@ -547,8 +547,12 @@ CT(con_pty_resize_invalid_size) {
     for (size_t k = 0; k < sizeof bad / sizeof bad[0]; k++) {
         HRESULT hr = ResizePseudoConsole(p.pc, bad[k]);
         t_note("ResizePseudoConsole(%d,%d) -> 0x%08lx", bad[k].X, bad[k].Y, hr);
-        CHECKF(FAILED(hr), "size %d,%d", bad[k].X, bad[k].Y);
+        /* P1 EXPECT-FIX: Win10 kernelbase ResizePseudoConsole only rejects a NULL handle (E_INVALIDARG) and
+           otherwise writes a 6-byte resize message to the pty signal pipe; no size validation is done by the
+           caller, so every size returns S_OK (observed 0). UNVERIFIED-until-rerun */
+        CHECKF(hr == S_OK, "size %d,%d", bad[k].X, bad[k].Y);
     }
+    EXPECT_EQ(ResizePseudoConsole(NULL, co(80, 25)), E_INVALIDARG);
     EXPECT_EQ(ResizePseudoConsole(p.pc, co(100, 30)), S_OK);
     EXPECT_EQ(ResizePseudoConsole(p.pc, co(100, 30)), S_OK);
     pty_close(&p);
@@ -756,7 +760,12 @@ CG(redir_probe) {
         CC(WriteFile(h[1], "to-pipe", 7, &n, NULL)); CEQ(n, 7);
         SetLastError(0xBAD);
         BOOL r = WriteConsoleW(h[1], L"x", 1, &n, NULL);
-        CEQ(r, 0); CERR(ERROR_INVALID_HANDLE);
+        /* P1 EXPECT-FIX: Win10 kernelbase WriteConsoleW issues the ConDrv ioctl directly on the handle; a pipe
+           answers ERROR_INVALID_FUNCTION (observed 1), not ERROR_INVALID_HANDLE. UNVERIFIED-until-rerun */
+        /* P1b: kernelbase maps STATUS_INVALID_PARAMETER from the ioctl to ERROR_INVALID_HANDLE (WriteConsoleW decomp:
+           status 0xC000000D -> 0xC0000008); the baseline shows a disk file answers that way (6) while a pipe answers
+           ERROR_INVALID_FUNCTION (1). UNVERIFIED-until-rerun */
+        { DWORD e_ = GetLastError(); CEQ(r, 0); CERRV(e_, GetFileType(h[1]) == FILE_TYPE_DISK ? ERROR_INVALID_HANDLE : ERROR_INVALID_FUNCTION); }
         SetLastError(0xBAD);
         r = SetConsoleMode(h[1], 3);
         CEQ(r, 0); CERR(ERROR_INVALID_HANDLE);
@@ -771,7 +780,8 @@ CG(redir_probe) {
         CC(!memcmp(b, "inpipe", 6));
         WCHAR w[4]; SetLastError(0xBAD);
         BOOL r = ReadConsoleW(h[0], w, 4, &n, NULL);
-        CEQ(r, 0); CERR(ERROR_INVALID_HANDLE);
+        /* P1 EXPECT-FIX: same as WriteConsoleW above: pipe -> ERROR_INVALID_FUNCTION on Win10. */
+        { DWORD e_ = GetLastError(); CEQ(r, 0); CERRV(e_, GetFileType(h[0]) == FILE_TYPE_DISK ? ERROR_INVALID_PARAMETER : ERROR_INVALID_FUNCTION); }
         INPUT_RECORD ir; SetLastError(0xBAD);
         r = PeekConsoleInputW(h[0], &ir, 1, &n);
         CEQ(r, 0); CERR(ERROR_INVALID_HANDLE);

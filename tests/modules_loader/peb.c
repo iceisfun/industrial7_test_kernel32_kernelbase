@@ -266,7 +266,9 @@ static void check_system_image(HMODULE m, const char *label, WORD subsystem, con
         CHECKF(ed->NumberOfFunctions >= ed->NumberOfNames, "%s", label);
     }
     /* directories that must exist */
-    CHECKF(nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress != 0, "%s", label);
+    /* ntdll is the root of the dependency graph and has no import directory on Windows 10 */
+    if (strcmp(label, "ntdll"))
+        CHECKF(nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress != 0, "%s", label);
     CHECKF(nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXCEPTION].VirtualAddress != 0, "%s", label);
     CHECKF(nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].VirtualAddress != 0, "%s", label);
     CHECKF(nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_RESOURCE].VirtualAddress != 0, "%s", label);

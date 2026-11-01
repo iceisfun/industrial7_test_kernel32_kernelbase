@@ -178,10 +178,10 @@ TEST(gap22_curpkg_info3_validation) {
     REQUIRE(f);
     if (t_is_wine()) { t_skip("package graph not implemented"); return; }
     UINT len = 0, cnt = 0;
-    EXPECT_EQ(f(1, 1, NULL, NULL, NULL), 0x80070057);
-    EXPECT_EQ(f(1, 1, NULL, NULL, &cnt), 0x80070057);
+    EXPECT_EQ((UINT)f(1, 1, NULL, NULL, NULL), 0x80070057);   /* HRESULT; compare low 32 bits (LONG would sign-extend) */
+    EXPECT_EQ((UINT)f(1, 1, NULL, NULL, &cnt), 0x80070057);   /* HRESULT; compare low 32 bits (LONG would sign-extend) */
     len = 16;   /* non-zero length requires a buffer */
-    EXPECT_EQ(f(1, 1, &len, NULL, &cnt), 0x80070057);
+    EXPECT_EQ((UINT)f(1, 1, &len, NULL, &cnt), 0x80070057);   /* HRESULT; compare low 32 bits (LONG would sign-extend) */
     EXPECT_EQ(len, 16);
     len = 0;
     LONG r = f(1, 1, &len, NULL, &cnt);
@@ -318,12 +318,12 @@ TEST(gap22_pkg_info3_validation) {
     unsigned char buf[16]; UINT len = 16, cnt = 0;
     for (int type = 0; type <= 5; type++) {
         len = 16;
-        CHECKF(f(NULL, 0, type, &len, buf, &cnt) == ERROR_INVALID_PARAMETER, "null ctx type %d", type);
-        CHECKF(f(dummy, 0, type, NULL, buf, &cnt) == ERROR_INVALID_PARAMETER, "null len type %d", type);
+        CHECKF(f(NULL, 0, type, &len, buf, &cnt) == (LONG)0x80070057, "null ctx type %d", type);
+        CHECKF(f(dummy, 0, type, NULL, buf, &cnt) == (LONG)0x80070057, "null len type %d", type);
         len = 16;
-        CHECKF(f(dummy, 0, type, &len, NULL, &cnt) == ERROR_INVALID_PARAMETER, "null buf type %d", type);
+        CHECKF(f(dummy, 0, type, &len, NULL, &cnt) == (LONG)0x80070057, "null buf type %d", type);
         len = 16;
-        CHECKF(f(dummy, 0, type, &len, buf, NULL) == ERROR_INVALID_PARAMETER, "null count type %d", type);
+        CHECKF(f(dummy, 0, type, &len, buf, NULL) == (LONG)0x80070057, "null count type %d", type);
     }
 }
 
@@ -348,8 +348,9 @@ TEST(gap22_pkg_status_unknown_package) {
     UINT st = 0x5555;
     LONG r = f(L"k32t.nonexistent_1.0.0.0_x64__0000000000000", &st);
     t_note("GetPackageStatus(unknown) -> %ld", (long)r);
-    CHECK(r != 0);
-    EXPECT_EQ(st, 0x5555);
+    /* Win10 kernelbase: registry key not found (0x490) is mapped to success with status 0 */
+    CHECK(r == 0);
+    EXPECT_EQ(st, 0);
     r = f(L"a", &st);   /* too short / malformed full name */
     CHECK(r != 0);
 }
@@ -388,8 +389,9 @@ TEST(gap22_pkg_status_effective_unknown) {
     if (t_is_wine()) { t_skip("not implemented"); return; }
     UINT st = 0x7777;
     LONG r = f(NULL, L"k32t.nonexistent_1.0.0.0_x64__0000000000000", &st);
-    CHECK(r != 0);   /* package-level status lookup fails first */
-    EXPECT_EQ(st, 0x7777);
+    /* Win10: GetPackageStatus(unknown)=0/status 0, then ForUserSid also succeeds; out = OR of both = 0 */
+    CHECK(r == 0);
+    EXPECT_EQ(st, 0);
 }
 TEST(gap22_pkg_install_time_validation) {
     typedef LONG (WINAPI *fn_t)(const WCHAR *, FILETIME *);
@@ -424,7 +426,7 @@ TEST(gap22_pkg_family_from_progid_validation) {
     REQUIRE(f);
     if (t_is_wine()) { t_skip("not implemented"); return; }
     WCHAR buf[64]; UINT len = 64;
-    EXPECT_EQ(f(NULL, &len, buf), 0x80070057);
+    EXPECT_EQ(f(NULL, &len, buf), 0x80004003);   /* E_POINTER on NULL progid (Win10 kernelbase) */
     EXPECT_EQ(f(L"", &len, buf), 0x80070057);
     EXPECT_EQ(f(L"k32t.progid", NULL, buf), 0x80070057);
     len = 0;
@@ -524,13 +526,19 @@ TEST(gap22_dateformat_a_worker_matches_api) {
     }
 }
 TEST(gap22_dateformat_w_worker) {
-    typedef int (WINAPI *fn_t)(const WCHAR *, DWORD, const SYSTEMTIME *, const WCHAR *, WCHAR *, int, UINT);
+    /* first parameter is the locale hash node (as GetDateFormatEx passes), not a name string */
+    typedef int (WINAPI *fn_t)(void *, DWORD, const SYSTEMTIME *, const WCHAR *, WCHAR *, int, UINT);
+    typedef void *(WINAPI *node_t)(const WCHAR *, SHORT);
     fn_t f = (fn_t)t_proc_k32("GetDateFormatWWorker");
-    REQUIRE(f); REQUIRE(U(GetDateFormatEx));
+    node_t getnode = (node_t)kb_or_k32("GetNamedLocaleHashNode");
+    REQUIRE(f); REQUIRE(getnode); REQUIRE(U(GetDateFormatEx));
     if (t_is_wine()) { t_skip("worker not implemented"); return; }
     SYSTEMTIME st = { 2021, 3, 4, 4, 0, 0, 0, 0 };
     WCHAR a[64] = {0}, b[64] = {0};
-    int ra = f(L"en-US", 0, &st, L"yyyy-MM-dd", a, 64, 0);
+    void *node = getnode(L"en-US", 0);
+    CHECK(node != NULL);   /* en-US always has a locale node on Win10: a NULL here is a failure, not a skip */
+    if (!node) return;
+    int ra = f(node, 0, &st, L"yyyy-MM-dd", a, 64, 0);
     int rb = U(GetDateFormatEx)(L"en-US", 0, &st, L"yyyy-MM-dd", b, 64, NULL);
     t_note("GetDateFormatWWorker ret %d, GetDateFormatEx ret %d", ra, rb);
     CHECK(ra == rb);

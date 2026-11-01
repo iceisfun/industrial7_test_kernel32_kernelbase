@@ -18,18 +18,26 @@ TEST(global_lock_null_pointer) {
     CHECK(U(GlobalLock)(NULL) == NULL);
     EXPECT_ERR(HLG_INVALID_HANDLE);
 }
+/* P1 GUARD: kernel32!GlobalLock probes with IsBadReadPtr, which takes (and handles) a first-chance
+   access violation internally. The harness VEH would count that as a test crash, so probe in a child. */
+CHILD(global_lock_unreadable) {
+    void *bad[] = { (void *)0x10, (void *)0x1000, (void *)0x20000 };
+    for (int i = 0; i < 3; i++) {
+        SetLastError(HLG_ERR_SENTINEL);
+        void *r = U(GlobalLock)(bad[i]);
+        DWORD e = GetLastError();
+        if (IsBadReadPtr(bad[i], 1)) {
+            if (r != NULL) return 10 + i;
+            if (e != HLG_INVALID_HANDLE) return 20 + i;
+        }
+    }
+    return 0;
+}
 TEST(global_lock_unreadable_pointer) {
     REQUIRE(U(GlobalLock));
     if (t_is_wine()) { t_skip("emulator dereferences the pointer"); return; }
-    void *bad[] = { (void *)0x10, (void *)0x1000, (void *)0x20000 };
-    for (int i = 0; i < 3; i++) {
-        HLG_POISON();
-        void *r = U(GlobalLock)(bad[i]);
-        t_note("GlobalLock(%p) -> %p err %lu", bad[i], r, GetLastError());
-        if (!IsBadReadPtr(bad[i], 1)) continue;
-        CHECK(r == NULL);
-        EXPECT_ERR(HLG_INVALID_HANDLE);
-    }
+    DWORD rc = t_run_child("global_lock_unreadable", "", 20000);
+    CHECKF(rc == 0, "child rc %lu (10+i: non-NULL result, 20+i: wrong last error)", rc);
 }
 TEST(global_lock_kernel_address) {
     REQUIRE(U(GlobalLock));

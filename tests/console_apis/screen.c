@@ -1,7 +1,7 @@
 /* console_apis: screen buffers, cell read/write/fill, cursor, attributes, scrolling, window/buffer size, fonts */
 #include "ch.h"
 
-#define FAILS(call, err)  do { SetLastError(0xBAD); BOOL r_ = (call); CEQ(r_, 0); CERR(err); } while (0)
+#define FAILS(call, err)  do { SetLastError(0xBAD); BOOL r_ = (call); DWORD le_ = GetLastError(); CEQ(r_, 0); CERRV(le_, err); } while (0)
 
 #define BUF() HANDLE b = mkbuf_std(); if (!b) return
 
@@ -30,13 +30,17 @@ CT(con_csb_access_variants) {
     for (size_t i = 0; i < sizeof acc / sizeof acc[0]; i++) {
         SetLastError(0xBAD);
         HANDLE h = CreateConsoleScreenBuffer(acc[i], FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, CONSOLE_TEXTMODE_BUFFER, NULL);
-        cnote("CreateConsoleScreenBuffer access=0x%lx -> %p err=%lu", acc[i], h, GetLastError());
-        if (i == 0 || i == 1 || i == 4) CCF(h != INVALID_HANDLE_VALUE, "access 0x%lx", acc[i]);
+        DWORD e_ = GetLastError();
+        cnote("CreateConsoleScreenBuffer access=0x%lx -> %p err=%lu", acc[i], h, e_);
+        if (i == 0 || i == 1) CCF(h != INVALID_HANDLE_VALUE, "access 0x%lx", acc[i]);
+        /* P1 TOLERANCE: GENERIC_ALL is passed unmapped to NtCreateFile on \Device\ConDrv\ScreenBuffer and Win10
+           answered ERROR_ACCESS_DENIED; only GENERIC_READ/GENERIC_WRITE are documented. Accept success or access denied. */
+        if (i == 4 && h == INVALID_HANDLE_VALUE) CERRV(e_, ERROR_ACCESS_DENIED);
         if (h != INVALID_HANDLE_VALUE) {
             DWORD n = 0;
             BOOL w = WriteConsoleW(h, L"x", 1, &n, NULL);
             cnote("  write via access 0x%lx -> %d err=%lu", acc[i], w, GetLastError());
-            if (i == 0 || i == 1 || i == 4) CC(w);
+            if (i == 0 || i == 1 || (i == 4 && h != INVALID_HANDLE_VALUE)) CC(w);
             CloseHandle(h);
         }
     }
@@ -60,7 +64,10 @@ CT(con_csb_invalid_flags) {
         HANDLE h = CreateConsoleScreenBuffer(GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, fl[i], NULL);
         DWORD e = GetLastError();
         cnote("CreateConsoleScreenBuffer flags=0x%lx -> %p err=%lu", fl[i], h, e);
-        CCF(h == INVALID_HANDLE_VALUE, "flags 0x%lx should fail", fl[i]);
+        /* P1 EXPECT-FIX: Win10 conhost (ConsoleCreateScreenBuffer) rejects only flags & ~1; flags 0 is accepted
+           as a text-mode buffer (observed: valid handle). */
+        if (fl[i] == 0) CCF(h != INVALID_HANDLE_VALUE, "flags 0x%lx accepted", fl[i]);
+        else CCF(h == INVALID_HANDLE_VALUE, "flags 0x%lx should fail", fl[i]);
         if (h != INVALID_HANDLE_VALUE) CloseHandle(h);
     }
 }
@@ -300,7 +307,12 @@ CT(con_sbiex_color_table_per_buffer) {
     CC(SetConsoleScreenBufferInfoEx(a, &x));
     memset(&y, 0, sizeof y); y.cbSize = sizeof y;
     CC(GetConsoleScreenBufferInfoEx(c, &y));
-    CEQ(y.ColorTable[2], before);
+    /* P1 EXPECT-FIX: Win10 conhost keeps ONE console-wide color table (SetConsoleScreenBufferInfoExImpl copies
+       the 16 entries into the global settings), so a change through one buffer is visible through every buffer.
+       Restore it afterwards because it is console-wide. UNVERIFIED-until-rerun */
+    CEQ(y.ColorTable[2], RGB(9, 8, 7));
+    x.ColorTable[2] = before;
+    CC(SetConsoleScreenBufferInfoEx(a, &x));
     CloseHandle(a); CloseHandle(c);
 }
 
@@ -323,6 +335,7 @@ CT(con_sbiex_set_cursor_and_size) {
     HANDLE b = mkbuf_std(); if (!b) return;
     CONSOLE_SCREEN_BUFFER_INFOEX x; memset(&x, 0, sizeof x); x.cbSize = sizeof x;
     CC(GetConsoleScreenBufferInfoEx(b, &x));
+    COORD cur0 = x.dwCursorPosition;
     x.dwCursorPosition = co(7, 3);
     x.dwSize.Y = 40;
     SetLastError(0xBAD);
@@ -331,7 +344,10 @@ CT(con_sbiex_set_cursor_and_size) {
     CC(ok);
     CONSOLE_SCREEN_BUFFER_INFO i;
     CC(GetConsoleScreenBufferInfo(b, &i));
-    CC(coeq(i.dwCursorPosition, 7, 3));
+    /* P1 EXPECT-FIX: Win10 SetConsoleScreenBufferInfoExImpl never reads dwCursorPosition (it applies size,
+       attributes, window, max size and color table only), so the cursor is not moved.
+       Audit: exact form, the cursor stays where it was before the call (growing the height keeps it). */
+    CC(coeq(i.dwCursorPosition, cur0.X, cur0.Y));
     CEQ(i.dwSize.Y, 40);
     CloseHandle(b);
 }
@@ -443,7 +459,8 @@ CT(con_sbs_cursor_stays_in_bounds_when_grown) {
     BUF();
     CC(SetConsoleCursorPosition(b, co(79, 24)));
     CC(SetConsoleScreenBufferSize(b, co(90, 30)));
-    CC(coeq(curpos(b), 79, 24));
+    { COORD c_ = curpos(b); cnote("cursor after growing 80x25 -> 90x30: %d,%d", c_.X, c_.Y); }
+    CC(coeq(curpos(b), 79, 24));   /* P1b UNRESOLVED: baseline cursor is (78,24) after growing, i.e. moved left by one; no decompilation read explains it */
     CloseHandle(b);
 }
 
@@ -480,8 +497,16 @@ CT(con_swi_invalid_rects) {
     for (size_t k = 0; k < sizeof bad / sizeof bad[0]; k++) {
         SetLastError(0xBAD);
         BOOL r = SetConsoleWindowInfo(b, TRUE, &bad[k]);
+        DWORD e_ = GetLastError();
+        if (k >= 7) {
+            /* P1 EXPECT-FIX (audit: was a tolerance): Win10 SetConsoleWindowInfoImpl validates only right>=left,
+               bottom>=top and the window SIZE against the maximum (16-bit arithmetic: 0x7FFF-0+1 wraps negative) and
+               never the position, so rects 7 and 8 are accepted (baseline: both succeeded). */
+            CCF(r, "rect %zu err=%lu", k, e_);
+            continue;
+        }
         CCF(r == FALSE, "rect %zu", k);
-        CERR(ERROR_INVALID_PARAMETER);
+        CERRV(e_, ERROR_INVALID_PARAMETER);
     }
     CloseHandle(b);
 }
@@ -506,10 +531,14 @@ CT(con_swi_relative) {
     CC(GetConsoleScreenBufferInfo(b, &i1));
     CC(i1.srWindow.Left == i0.srWindow.Left && i1.srWindow.Top == i0.srWindow.Top);
     /* relative move off the buffer fails */
+    /* P1 EXPECT-FIX (audit: was a tolerance): Win10 does not validate the window position (see
+       con_swi_invalid_rects); the size is unchanged, so both relative moves succeed (baseline: both returned TRUE). */
     d = sr(-1, 0, -1, 0);
-    FAILS(SetConsoleWindowInfo(b, FALSE, &d), ERROR_INVALID_PARAMETER);
+    SetLastError(0xBAD);
+    CCF(SetConsoleWindowInfo(b, FALSE, &d), "err=%lu", GetLastError());
     d = sr(200, 0, 200, 0);
-    FAILS(SetConsoleWindowInfo(b, FALSE, &d), ERROR_INVALID_PARAMETER);
+    SetLastError(0xBAD);
+    CCF(SetConsoleWindowInfo(b, FALSE, &d), "err=%lu", GetLastError());
     CloseHandle(b);
 }
 
@@ -526,7 +555,10 @@ CT(con_swi_scroll_viewport) {
     r = sr(0, 75, 79, 99);
     CC(SetConsoleWindowInfo(b, TRUE, &r));
     r = sr(0, 76, 79, 100);
-    FAILS(SetConsoleWindowInfo(b, TRUE, &r), ERROR_INVALID_PARAMETER);
+    /* P1 EXPECT-FIX (audit: was a tolerance): position beyond the buffer is not validated by Win10 and the
+       size 80x25 fits, so the call succeeds (baseline: TRUE). */
+    SetLastError(0xBAD);
+    CCF(SetConsoleWindowInfo(b, TRUE, &r), "err=%lu", GetLastError());
     r = sr(0, 0, 79, 24);
     CC(SetConsoleWindowInfo(b, TRUE, &r));
     CloseHandle(b);
@@ -1067,8 +1099,9 @@ CT(con_wcoc_zero_length_and_range) {
     for (size_t k = 0; k < sizeof bad / sizeof bad[0]; k++) {
         n = 0xFFFF; SetLastError(0xBAD);
         BOOL r = WriteConsoleOutputCharacterW(b, L"xyz", 3, bad[k], &n);
-        cnote("wcoc origin %d,%d -> %d err=%lu n=%lu", bad[k].X, bad[k].Y, r, GetLastError(), n);
-        if (!r) CERR(ERROR_INVALID_PARAMETER); else CCF(n == 0, "n=%lu", n);
+        DWORD e_ = GetLastError();   /* P1 GUARD: capture before cnote, whose printf clobbers the last error */
+        cnote("wcoc origin %d,%d -> %d err=%lu n=%lu", bad[k].X, bad[k].Y, r, e_, n);
+        if (!r) CERRV(e_, ERROR_INVALID_PARAMETER); else CCF(n == 0, "n=%lu", n);
     }
     CEQ(cellch(b, 0, 0), ' ');
     CloseHandle(b);
@@ -1146,8 +1179,9 @@ CT(con_wcoa_zero_and_invalid) {
     for (size_t k = 0; k < sizeof bad / sizeof bad[0]; k++) {
         n = 0xFFFF; SetLastError(0xBAD);
         BOOL r = WriteConsoleOutputAttribute(b, a, 2, bad[k], &n);
-        cnote("wcoa origin %d,%d -> %d err=%lu n=%lu", bad[k].X, bad[k].Y, r, GetLastError(), n);
-        if (!r) CERR(ERROR_INVALID_PARAMETER); else CCF(n == 0, "n=%lu", n);
+        DWORD e_ = GetLastError();   /* P1 GUARD: capture before cnote, whose printf clobbers the last error */
+        cnote("wcoa origin %d,%d -> %d err=%lu n=%lu", bad[k].X, bad[k].Y, r, e_, n);
+        if (!r) CERRV(e_, ERROR_INVALID_PARAMETER); else CCF(n == 0, "n=%lu", n);
     }
     HANDLE hb[4]; inhandle_bad_list(hb);
     for (int k = 0; k < 4; k++) FAILS(WriteConsoleOutputAttribute(hb[k], a, 2, co(0, 0), &n), ERROR_INVALID_HANDLE);
@@ -1371,9 +1405,16 @@ CT(con_wco_invalid_handles) {
     HANDLE bad[4]; inhandle_bad_list(bad);
     for (int k = 0; k < 4; k++) {
         SMALL_RECT r = sr(0, 0, 1, 1);
-        FAILS(WriteConsoleOutputW(bad[k], buf, co(2, 2), co(0, 0), &r), ERROR_INVALID_HANDLE);
-        FAILS(WriteConsoleOutputA(bad[k], buf, co(2, 2), co(0, 0), &r), ERROR_INVALID_HANDLE);
-        FAILS(ReadConsoleOutputW(bad[k], buf, co(2, 2), co(0, 0), &r), ERROR_INVALID_HANDLE);
+        /* P1b EXPECT-FIX: lpWriteRegion is in/out (WriteConsoleOutput documentation); kernelbase
+           WriteConsoleOutputInternal stores the server's reply rectangle back into it even when the call failed, so
+           a failed call leaves an unspecified rectangle (baseline: 87 on the next call for handles 0 and 0x44, whose
+           failure comes from the server). Reinitialise the rectangle before every call. UNVERIFIED-until-rerun */
+        { r = sr(0, 0, 1, 1); SetLastError(0xBAD); BOOL w_ = WriteConsoleOutputA(bad[k], buf, co(2, 2), co(0, 0), &r); DWORD e_ = GetLastError();
+          cnote("WriteConsoleOutputA bad[%d]=%p -> %d err=%lu", k, bad[k], w_, e_); }
+        r = sr(0, 0, 1, 1); FAILS(WriteConsoleOutputW(bad[k], buf, co(2, 2), co(0, 0), &r), ERROR_INVALID_HANDLE);
+        r = sr(0, 0, 1, 1); FAILS(WriteConsoleOutputA(bad[k], buf, co(2, 2), co(0, 0), &r), ERROR_INVALID_HANDLE);
+        r = sr(0, 0, 1, 1); FAILS(ReadConsoleOutputW(bad[k], buf, co(2, 2), co(0, 0), &r), ERROR_INVALID_HANDLE);
+        r = sr(0, 0, 1, 1);
         FAILS(ReadConsoleOutputA(bad[k], buf, co(2, 2), co(0, 0), &r), ERROR_INVALID_HANDLE);
     }
 }
@@ -1592,8 +1633,10 @@ CT(con_scroll_clip_removes_dest_only) {
     SMALL_RECT clip = sr(0, 2, 79, 3);       /* clip excludes the source rows */
     CHAR_INFO fill = ci(L'#', 7);
     CC(ScrollConsoleScreenBufferW(b, &src, &clip, co(0, 2), &fill));
-    CC(rowis(b, 2, 0, L"row00-abcd"));
-    CC(rowis(b, 3, 0, L"row01-abcd"));
+    /* P1 EXPECT-FIX: Win10 ScrollRegion intersects the source with the clip rectangle first and returns when the
+       intersection is empty, so nothing is copied to the destination rows. UNVERIFIED-until-rerun */
+    CC(rowis(b, 2, 0, L"row02-abcd"));
+    CC(rowis(b, 3, 0, L"row03-abcd"));
     CC(rowis(b, 0, 0, L"row00-abcd"));       /* source left as is: outside the clip */
     CC(rowis(b, 1, 0, L"row01-abcd"));
     CloseHandle(b);

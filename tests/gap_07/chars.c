@@ -202,11 +202,15 @@ TEST(gap7_ischar_repeat_stable) {
 
 TEST(gap7_ischar_does_not_set_error) {
     REQUIRE(U(IsCharAlphaW)); REQUIRE(UN(IsCharSpaceW));
+    /* resolve first: t_proc probes kernel32 before kernelbase and the failed
+     * GetProcAddress sets ERROR_PROC_NOT_FOUND (127) */
+    BOOL (*pSpace)(WCHAR) = (BOOL (*)(WCHAR))UN(IsCharSpaceW);
+    BOOL (*pAlpha)(WCHAR) = (BOOL (*)(WCHAR))U(IsCharAlphaW);
     SET_ERR(0x1234);
-    UN(IsCharSpaceW)(L' ');
+    pSpace(L' ');
     EXPECT_ERR(0x1234);   /* table lookup only */
     SET_ERR(0x1234);
-    U(IsCharAlphaW)(L'a');
+    pAlpha(L'a');
     DWORD e = GetLastError();
     if (e != 0x1234) t_note("IsCharAlphaW altered last error to %lu", e);
 }

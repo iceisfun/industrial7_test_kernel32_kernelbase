@@ -46,6 +46,9 @@ TEST(regkb_notify_filter_excludes_other_changes) {
     sc_subc(h, L"now_a_name");
     CHECK(signaled(ev, 5000));
     ResetEvent(ev);
+    /* p1: the notify block of a key handle keeps the filter/subtree of its first registration (CmpNotifyChangeKey),
+     * so a different filter needs a fresh handle. */
+    RegCloseKey(w); w = open_notify(h);
     EQ(U(RegNotifyChangeKeyValue)(w, FALSE, REG_NOTIFY_CHANGE_LAST_SET, ev, TRUE), 0);
     sc_subc(h, L"another_name");                /* subkey creation is not a value change */
     CHECK(!signaled(ev, 300));
@@ -82,9 +85,14 @@ TEST(regkb_notify_watch_subtree) {
     EQ(U(RegNotifyChangeKeyValue)(w, FALSE, REG_NOTIFY_CHANGE_LAST_SET, ev, TRUE), 0);
     sc_dw(deep, L"x", 1);
     CHECK(!signaled(ev, 300));                  /* not watching the subtree */
-    EQ(U(RegNotifyChangeKeyValue)(w, TRUE, REG_NOTIFY_CHANGE_LAST_SET, ev, TRUE), 0);
+    /* p1: the subtree flag is fixed by the first registration on a handle; use a fresh handle and event
+     * (closing the first handle completes its pending request and signals ev). */
+    RegCloseKey(w); w = open_notify(h);
+    HANDLE ev2 = CreateEventW(NULL, TRUE, FALSE, NULL);
+    EQ(U(RegNotifyChangeKeyValue)(w, TRUE, REG_NOTIFY_CHANGE_LAST_SET, ev2, TRUE), 0);
     sc_dw(deep, L"y", 2);
-    CHECK(signaled(ev, 5000));
+    CHECK(signaled(ev2, 5000));
+    CloseHandle(ev2);
     CloseHandle(ev); RegCloseKey(deep); RegCloseKey(w); RegCloseKey(h);
 }
 TEST(regkb_notify_security_change) {

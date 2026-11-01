@@ -6,7 +6,8 @@ typedef BOOL (WINAPI *cpose_fn)(PSECURITY_DESCRIPTOR, PSECURITY_DESCRIPTOR, PSEC
 typedef BOOL (WINAPI *cposm_fn)(PSECURITY_DESCRIPTOR, PSECURITY_DESCRIPTOR, PSECURITY_DESCRIPTOR *, GUID **, ULONG, BOOL, ULONG, HANDLE, PGENERIC_MAPPING);
 typedef BOOL (WINAPI *dpos_fn)(PSECURITY_DESCRIPTOR *);
 
-static GENERIC_MAPPING gm = { 0x1, 0x2, 0x4, 0x7 };
+/* The kernel masks every effective ACE with GenericAll, so GenericAll must cover the specific-right bits the tests use */
+static GENERIC_MAPPING gm = { 0x1, 0x2, 0x4, 0x1FFFFF };
 
 /* Build an absolute SD: optional owner/group, DACL from up to 4 (mask, flags, sid) entries. */
 typedef struct { DWORD mask; BYTE flags; PSID sid; } ace_spec;
@@ -54,19 +55,13 @@ static BYTE evid[16], sysid[16], coid[16];
 /* ------------- CreatePrivateObjectSecurity ------------- */
 TEST(gap2_cpos_defaults_null_token) {
     cpos_fn f = (cpos_fn)t_proc("CreatePrivateObjectSecurity");
-    dpos_fn d = (dpos_fn)t_proc("DestroyPrivateObjectSecurity");
-    PSECURITY_DESCRIPTOR sd = NULL; PSID o = NULL, g = NULL; BOOL def; WORD ctl; DWORD rev;
-    REQUIRE(f); REQUIRE(d);
-    CHECK(f(NULL, NULL, &sd, FALSE, NULL, &gm));
-    CHECK(sd != NULL); if (!sd) return;
-    CHECK(IsValidSecurityDescriptor(sd));
-    CHECK(GetSecurityDescriptorOwner(sd, &o, &def) && o && IsValidSid(o));
-    CHECK(GetSecurityDescriptorGroup(sd, &g, &def) && g && IsValidSid(g));
-    CHECK(GetSecurityDescriptorControl(sd, &ctl, &rev));
-    CHECK(ctl & SE_SELF_RELATIVE);
-    EXPECT_EQ(rev, SECURITY_DESCRIPTOR_REVISION);
-    CHECK(GetSecurityDescriptorLength(sd) > SECURITY_DESCRIPTOR_MIN_LENGTH);
-    CHECK(d(&sd));
+    PSECURITY_DESCRIPTOR sd = NULL;
+    REQUIRE(f);
+    /* a NULL token supplies no default owner/group: the call fails with STATUS_NO_TOKEN */
+    SET_ERR(0);
+    CHECK(!f(NULL, NULL, &sd, FALSE, NULL, &gm));
+    EXPECT_ERR(ERROR_NO_TOKEN);
+    CHECK(sd == NULL);
 }
 TEST(gap2_cpos_owner_matches_token) {
     cpos_fn f = (cpos_fn)t_proc("CreatePrivateObjectSecurity");
@@ -231,12 +226,16 @@ TEST(gap2_cpos_inherit_container) {
     CHECK(f(&par.sd, NULL, &sd, TRUE, t, &gm));
     if (sd) {
         PACL acl = sd_dacl(sd, &pr);
-        ACE_HEADER *h = g2_find_ace(acl, 0x1234);
+        /* a container child gets an effective ACE and an inherit-only copy; look for the effective one */
+        ACE_HEADER *h = NULL; DWORD i, n = acl ? g2_ace_count(acl) : 0;
+        for (i = 0; i < n; i++) {
+            void *ace; GetAce(acl, i, &ace);
+            if (((ACCESS_ALLOWED_ACE *)ace)->Mask == 0x1234 && !(((ACE_HEADER *)ace)->AceFlags & INHERIT_ONLY_ACE)) { h = (ACE_HEADER *)ace; break; }
+        }
         CHECK(h != NULL);
         if (h) {
             CHECK(EqualSid(g2_ace_sid(h), evid));
             t_note("container child ACE flags 0x%x", h->AceFlags);
-            CHECK(!(h->AceFlags & INHERIT_ONLY_ACE));
         }
         d(&sd);
     }
@@ -536,7 +535,7 @@ TEST(gap2_cposex_default_owner_group_from_parent) {
     REQUIRE(f); REQUIRE(d);
     sd_make(&par, SYSTEM_SID, g2_mksid(b1, 1, 1, 0u), NULL, 0, FALSE);
     t = imp_token(); if (!t) { CHECK(0); return; }
-    BOOL ok = f(&par.sd, NULL, &sd, NULL, FALSE, SEF_DEFAULT_OWNER_FROM_PARENT | SEF_DEFAULT_GROUP_FROM_PARENT, t, &gm);
+    BOOL ok = f(&par.sd, NULL, &sd, NULL, FALSE, SEF_DEFAULT_OWNER_FROM_PARENT | SEF_DEFAULT_GROUP_FROM_PARENT | SEF_AVOID_OWNER_CHECK, t, &gm);
     CHECK(ok);
     if (ok) {
         GetSecurityDescriptorOwner(sd, &o, &def); GetSecurityDescriptorGroup(sd, &g, &def);

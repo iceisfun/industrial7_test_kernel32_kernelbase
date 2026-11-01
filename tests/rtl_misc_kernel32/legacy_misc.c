@@ -568,8 +568,9 @@ TEST(wow64_suspendthread_on_native_helper_thread) {
     SET_ERR(0);
     DWORD r = UN(Wow64SuspendThread)(th);
     t_note("Wow64SuspendThread native thread ret=0x%lx err=%lu", r, GetLastError());
-    CHECK(r == 0xFFFFFFFFu);
-    if (r != 0xFFFFFFFFu) ResumeThread(th);   /* undo in case it did suspend */
+    /* same-process thread: RtlWow64SuspendThread falls through to NtSuspendThread -> previous count 0 */
+    CHECK(r == 0);
+    if (r != 0xFFFFFFFFu) ResumeThread(th);   /* undo the suspend */
     SetEvent(ev);
     WaitForSingleObject(th, 5000);
     CloseHandle(th); CloseHandle(ev);
@@ -581,7 +582,8 @@ TEST(wow64_getthreadselectorentry_native_fails) {
     SET_ERR(0);
     BOOL r = UN(Wow64GetThreadSelectorEntry)(GetCurrentThread(), 0x23, &e);
     t_note("Wow64GetThreadSelectorEntry ret=%d err=%lu", r, GetLastError());
-    CHECK(r == FALSE);
+    /* 0x23 is the WOW64 user code selector; RtlWow64GetThreadSelectorEntry synthesizes it without a WOW64 check */
+    CHECK(r == TRUE);
 }
 
 /* ---- SetEnvironmentStringsA (process-global: done in children) ---- */

@@ -300,6 +300,14 @@ TEST(gap7_loadstringA_truncation_note) {
     }
 }
 
+static LONG WINAPI g7_lsnull_filter(PEXCEPTION_POINTERS ep) { (void)ep; ExitProcess(0xE0000001); return EXCEPTION_EXECUTE_HANDLER; }
+CHILD(g7_loadstringA_nullbuf) {
+    SetErrorMode(SEM_NOGPFAULTERRORBOX); SetUnhandledExceptionFilter(g7_lsnull_filter);
+    HMODULE m = load_res(0); if (!m) return 0;
+    LoadStringA(m, 0, NULL, 16);
+    return 0;
+}
+
 TEST(gap7_loadstringA_missing_and_null) {
     REQUIRE(U(LoadStringA)); NEED_MOD(m);
     char buf[16]; memset(buf, 0x77, sizeof buf);
@@ -309,9 +317,10 @@ TEST(gap7_loadstringA_missing_and_null) {
     CHECK(U(LoadStringA)(m, 2, buf, 16) == 0);
     CHECK(buf[0] == 0);
     if (!t_is_wine()) {
-        SET_ERR(0);
-        CHECK(U(LoadStringA)(m, 0, NULL, 16) == 0);
-        t_note("LoadStringA NULL buf: err %lu", GetLastError());
+        /* NULL buffer with nonzero cch faults on Windows 10 (the A path writes the buffer): probe in a child */
+        DWORD rc = t_run_child("g7_loadstringA_nullbuf", NULL, 15000);
+        CHECK(rc != 0xDEAD0000 && rc != 0xDEAD0001);
+        t_note("LoadStringA NULL buf child exit 0x%08lx (0xE0000001 = faulted)", rc);
     }
 }
 

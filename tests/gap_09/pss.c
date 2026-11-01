@@ -110,17 +110,71 @@ TEST(gap9_pss_capture_invalid_process) {
     CHECK(s == NULL);
 }
 
+/* P1c: the PSS_CAPTURE_HANDLES paths faulted inside ntdll (PsspHandleDumper copy source) on real Windows 10 and the area harness aborts on any first-chance
+   0xC000xxxx. Each handle-capturing scenario now runs in its own child process (own handle table, no vectored handler), the parent only requires exit code 0. */
+CHILD(g9_pss_handles_child) {
+    const char *mode = argc > 1 ? argv[1] : "";
+    HANDLE s = NULL; DWORD r;
+    if (!UN(PssCaptureSnapshot) || !UN(PssFreeSnapshot)) return 90;
+    if (!strcmp(mode, "combos")) {
+        DWORD combos[] = { CAP_NONE, CAP_VA_CLONE, CAP_HANDLES, CAP_THREADS, CAP_VA_SPACE, CAP_VA_CLONE | CAP_HANDLES,
+            CAP_VA_CLONE | CAP_THREADS, CAP_VA_CLONE | CAP_VA_SPACE, CAP_VA_CLONE | CAP_HANDLES | CAP_HANDLE_NAME | CAP_HANDLE_BASIC | CAP_THREADS | CAP_VA_SPACE,
+            CAP_VA_CLONE | CAP_PERF };
+        for (int i = 0; i < 10; i++) {
+            s = NULL;
+            r = UN(PssCaptureSnapshot)(SELF, combos[i], 0, &s);
+            if (r || !s) return 10 + i;
+            if (UN(PssFreeSnapshot)(SELF, s)) return 30 + i;
+        }
+        return 0;
+    }
+    if (!strcmp(mode, "walk")) {
+        HANDLE ev = CreateEventA(NULL, TRUE, FALSE, NULL);
+        r = UN(PssCaptureSnapshot)(SELF, CAP_VA_CLONE | CAP_HANDLES, 0, &s);
+        if (r || !s) return 11;
+        DWORD hc = 0; UN(PssQuerySnapshot)(s, Q_HANDLE, &hc, 4);
+        HANDLE m = NULL; if (UN(PssWalkMarkerCreate)(NULL, &m)) return 12;
+        G9_PSS_HANDLE_ENTRY e; DWORD n = 0, found = 0;
+        while ((r = UN(PssWalkSnapshot)(s, W_HANDLES, m, &e, sizeof e)) == 0 && n < 20000) {
+            n++;
+            if (e.Handle == NULL) return 13;
+            if (e.Handle == ev) found++;
+        }
+        if (r != ERROR_NO_MORE_ITEMS) return 14;
+        if (n != hc) return 15;
+        if (found != 1) return 16;
+        UN(PssWalkMarkerFree)(m);
+        if (UN(PssFreeSnapshot)(SELF, s)) return 17;
+        CloseHandle(ev);
+        return 0;
+    }
+    if (!strcmp(mode, "badlen")) {
+        static BYTE buf[0x1000];
+        r = UN(PssCaptureSnapshot)(SELF, CAP_VA_CLONE | CAP_HANDLES | CAP_THREADS | CAP_VA_SPACE | CAP_PERF, 0, &s);
+        if (r || !s) return 11;
+        struct { DWORD cls, good; } t[] = { {Q_PROCESS, 0x2c0}, {Q_VA_CLONE, 8}, {Q_AUX, 4}, {Q_VA_SPACE, 4}, {Q_HANDLE, 4},
+                                            {Q_THREAD, 8}, {Q_HANDLE_TRACE, 0x10}, {Q_PERF, 0x60} };
+        for (int i = 0; i < 8; i++) {
+            DWORD good = t[i].good;
+            DWORD lens[] = { 0, 1, good - 1, good + 1, good * 2 };
+            for (int k = 0; k < 5; k++) {
+                r = UN(PssQuerySnapshot)(s, t[i].cls, buf, lens[k]);
+                if (r != ERROR_BAD_LENGTH) return 20 + i;
+            }
+        }
+        if (UN(PssFreeSnapshot)(SELF, s)) return 17;
+        return 0;
+    }
+    return 91;
+}
+static void g9_run_handles_child(const char *mode) {
+    DWORD code = t_run_child("g9_pss_handles_child", mode, 60000);
+    CHECKF(code == 0, "child '%s' exit code 0x%lx (0=ok, 0xC0000005=AV inside ntdll PSS handle capture, 0xDEAD0001=timeout)", mode, code);
+}
+
 TEST(gap9_pss_capture_flag_combinations) {
     NEED_PSS();
-    DWORD combos[] = { CAP_NONE, CAP_VA_CLONE, CAP_HANDLES, CAP_THREADS, CAP_VA_SPACE, CAP_VA_CLONE | CAP_HANDLES,
-        CAP_VA_CLONE | CAP_THREADS, CAP_VA_CLONE | CAP_VA_SPACE, CAP_VA_CLONE | CAP_HANDLES | CAP_HANDLE_NAME | CAP_HANDLE_BASIC | CAP_THREADS | CAP_VA_SPACE,
-        CAP_VA_CLONE | CAP_PERF };
-    for (int i = 0; i < 10; i++) {
-        HANDLE s = NULL;
-        DWORD r = UN(PssCaptureSnapshot)(SELF, combos[i], 0, &s);
-        CHECKF(r == 0, "flags 0x%lx -> %lu", combos[i], r);
-        if (!r) { CHECK(s != NULL); G9EQ(UN(PssFreeSnapshot)(SELF, s), 0); }
-    }
+    g9_run_handles_child("combos");
 }
 
 TEST(gap9_pss_query_process_information) {
@@ -148,19 +202,7 @@ TEST(gap9_pss_query_process_information) {
 
 TEST(gap9_pss_query_bad_length) {
     NEED_PSS();
-    HANDLE s = g9_cap(CAP_VA_CLONE | CAP_HANDLES | CAP_THREADS | CAP_VA_SPACE | CAP_PERF); if (!s) { t_skip("capture failed"); return; }
-    static BYTE buf[0x1000];
-    struct { DWORD cls, good; } t[] = { {Q_PROCESS, 0x2c0}, {Q_VA_CLONE, 8}, {Q_AUX, 4}, {Q_VA_SPACE, 4}, {Q_HANDLE, 4},
-                                        {Q_THREAD, 8}, {Q_HANDLE_TRACE, 0x10}, {Q_PERF, 0x60} };
-    for (int i = 0; i < 8; i++) {
-        DWORD good = t[i].good;
-        DWORD lens[] = { 0, 1, good - 1, good + 1, good * 2 };
-        for (int k = 0; k < 5; k++) {
-            DWORD r = UN(PssQuerySnapshot)(s, t[i].cls, buf, lens[k]);
-            CHECKF(r == ERROR_BAD_LENGTH, "class %lu len %lu -> %lu", t[i].cls, lens[k], r);
-        }
-    }
-    g9_free(s);
+    g9_run_handles_child("badlen");
 }
 
 TEST(gap9_pss_query_invalid_class) {
@@ -197,8 +239,9 @@ TEST(gap9_pss_query_thread_and_handle_counts) {
     CHECK(hc >= 3);
     G9EQ(UN(PssQuerySnapshot)(s, Q_VA_SPACE, &vc, 4), 0);
     CHECK(vc >= 10);
-    G9EQ(UN(PssQuerySnapshot)(s, Q_AUX, &aux, 4), 0);
-    G9EQ(aux, 0);
+    /* auxiliary pages were not requested at capture time: documented ERROR_NOT_FOUND ("not in the snapshot"), buffer untouched */
+    G9EQ(UN(PssQuerySnapshot)(s, Q_AUX, &aux, 4), ERROR_NOT_FOUND);
+    G9EQ(aux, 0xdead);
     g9_free(s); CloseHandle(ev);
 }
 
@@ -258,21 +301,7 @@ TEST(gap9_pss_walk_threads) {
 
 TEST(gap9_pss_walk_handles_contains_own_event) {
     NEED_PSS();
-    HANDLE ev = CreateEventA(NULL, TRUE, FALSE, NULL);
-    HANDLE s = g9_cap(CAP_VA_CLONE | CAP_HANDLES); if (!s) { CloseHandle(ev); t_skip("capture failed"); return; }
-    DWORD hc = 0; UN(PssQuerySnapshot)(s, Q_HANDLE, &hc, 4);
-    HANDLE m = NULL; G9EQ(UN(PssWalkMarkerCreate)(NULL, &m), 0);
-    G9_PSS_HANDLE_ENTRY e; DWORD n = 0, r, found = 0;
-    while ((r = UN(PssWalkSnapshot)(s, W_HANDLES, m, &e, sizeof e)) == 0 && n < 20000) {
-        n++;
-        CHECK(e.Handle != NULL);
-        if (e.Handle == ev) found++;
-    }
-    G9EQ(r, ERROR_NO_MORE_ITEMS);
-    G9EQ(n, hc);
-    G9EQ(found, 1);
-    UN(PssWalkMarkerFree)(m);
-    g9_free(s); CloseHandle(ev);
+    g9_run_handles_child("walk");
 }
 
 TEST(gap9_pss_walk_va_space) {
@@ -487,7 +516,8 @@ TEST(gap9_pss_capture_other_process) {
         while (UN(PssWalkSnapshot)(s, W_THREADS, m, &e, sizeof e) == 0 && n++ < 1000) if (e.ThreadId == pi.dwThreadId) found++;
         G9EQ(found, 1);
         UN(PssWalkMarkerFree)(m);
-        r = UN(PssFreeSnapshot)(hp, s);
+        /* the snapshot lives in the calling process (documented: the process that contains the snapshot), so free it with the caller's own handle */
+        r = UN(PssFreeSnapshot)(SELF, s);
         t_note("remote free -> %lu", r);
         G9EQ(r, 0);
     } else CHECK(0);

@@ -190,7 +190,7 @@ TEST(gap18_vallocex_absurd_sizes) {
         void *p = U(VirtualAllocEx)(me, NULL, huge[i], MEM_RESERVE, PAGE_READWRITE);
         CHECKF(p == NULL, "size 0x%llx succeeded", (unsigned long long)huge[i]);
         DWORD e = GetLastError();
-        CHECKF(e == ERROR_NOT_ENOUGH_MEMORY || e == ERROR_INVALID_PARAMETER || e == ERROR_COMMITMENT_LIMIT, "size 0x%llx err %lu", (unsigned long long)huge[i], e);
+        CHECKF(e == ERROR_NOT_ENOUGH_MEMORY || e == ERROR_INVALID_PARAMETER || e == ERROR_COMMITMENT_LIMIT || e == ERROR_INVALID_ADDRESS, "size 0x%llx err %lu", (unsigned long long)huge[i], e);
         if (p) U(VirtualFree)(p, 0, MEM_RELEASE);
     }
 }
