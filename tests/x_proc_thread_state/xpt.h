@@ -43,6 +43,13 @@ static ULONG xpt_access(HANDLE h) {
     if (!q || q(h, 0, &b, sizeof b, NULL) < 0) return 0xFFFFFFFFu;
     return b.GrantedAccess;
 }
+/* Number of open handles to the object behind h (same query), ~0 on failure. */
+static ULONG xpt_hcount(HANDLE h) {
+    xpt_NtQueryObject_pfn q = (xpt_NtQueryObject_pfn)t_proc_nt("NtQueryObject");
+    XPT_OBJ_BASIC b; memset(&b, 0, sizeof b);
+    if (!q || q(h, 0, &b, sizeof b, NULL) < 0) return 0xFFFFFFFFu;
+    return b.HandleCount;
+}
 
 /* HRESULT_FROM_NT(STATUS_ACCESS_DENIED), returned by Get/SetThreadDescription on a denied handle. */
 #define XPT_HR_DENIED ((HRESULT)0xD0000022L)

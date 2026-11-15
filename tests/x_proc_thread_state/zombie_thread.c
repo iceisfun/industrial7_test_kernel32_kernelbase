@@ -82,7 +82,8 @@ TEST(xpt_zt_ideal_processor_query) {
     DEAD(h, 1);
     PROCESSOR_NUMBER p; memset(&p, 0xCC, sizeof p);
     SUCCEEDS(U(GetThreadIdealProcessorEx)(h, &p));
-    EQ(p.Group, 0);
+    GROUP_AFFINITY me; memset(&me, 0, sizeof me); GetThreadGroupAffinity(GetCurrentThread(), &me);
+    EQ(p.Group, me.Group);   /* a new thread's ideal processor is in its own group */
     SYSTEM_INFO si; GetSystemInfo(&si);
     CHECKF(p.Number < si.dwNumberOfProcessors, "ideal %u of %lu", p.Number, si.dwNumberOfProcessors);
     CloseHandle(h);

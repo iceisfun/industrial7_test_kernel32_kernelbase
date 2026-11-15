@@ -183,8 +183,10 @@ TEST(xpt_dup_thread_close_source_reduced) {
     HANDLE src = dup_to(w.h, 0, DUPLICATE_SAME_ACCESS);
     HANDLE d = NULL;
     CHECK(src != NULL);
+    ULONG before = src ? xpt_hcount(src) : 0;
     if (src) SUCCEEDS(U(DuplicateHandle)(GetCurrentProcess(), src, GetCurrentProcess(), &d, SYNCHRONIZE, FALSE, DUPLICATE_CLOSE_SOURCE));
-    if (d) { EQ(xpt_access(d), SYNCHRONIZE); thread_row("dup close-source SYNC", d, w.h, T_SYNC); CloseHandle(d); }
+    /* the source was closed: one handle in, one handle out, the object's handle count is unchanged */
+    if (d) { EQ(xpt_hcount(d), before); EQ(xpt_access(d), SYNCHRONIZE); thread_row("dup close-source SYNC", d, w.h, T_SYNC); CloseHandle(d); }
     xpt_tw_stop(&w);
 }
 TEST(xpt_dup_process_reduced_query_limited) {
