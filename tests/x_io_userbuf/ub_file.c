@@ -187,7 +187,7 @@ TEST(xubuf_read_guard_nobuffering_consumed) {
     HANDLE h = ub_open(p, GENERIC_READ, FILE_FLAG_NO_BUFFERING);
     BYTE *b = ub_va(PG, PAGE_READWRITE | PAGE_GUARD);
     xres x = sread(h, b, 4096);
-    CHECK(!x.r); EXPECT_EQ(x.e, GLE_GUARD); EXPECT_EQ(x.pos, 0);
+    CHECK(!x.r); EXPECT_EQ(x.e, GLE_GUARD); EXPECT_EQ(x.n, 0); EXPECT_EQ(x.pos, 0);
     EXPECT_EQ(ub_prot(b), PAGE_READWRITE);
     x = sread(h, b, 4096);
     CHECK(x.r); EXPECT_EQ(x.n, 4096); CHECK(ub_chk(b, 0, 4096));

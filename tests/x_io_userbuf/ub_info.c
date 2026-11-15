@@ -170,7 +170,8 @@ static DWORD gfp(const char *path, WCHAR *buf, DWORD cch) {
     HANDLE h = ub_open(path, GENERIC_READ, 0); if (h == INVALID_HANDLE_VALUE) return R_SETUP;
     SetLastError(0xBEEF);
     DWORD n = U(GetFinalPathNameByHandleW)(h, buf, cch, 0);
-    return n ? R_OK(0) : R_ERR(GetLastError());
+    /* R_OK(1): the return value is a required size larger than the buffer */
+    return n ? R_OK(n > cch) : R_ERR(GetLastError());
 }
 CHILD(xubuf_c_finalpath_readonly) { ub_child_init(); return (int)gfp(argv[1], (WCHAR *)ro_page(), MAX_PATH); }
 CHILD(xubuf_c_finalpath_noaccess) { ub_child_init(); return (int)gfp(argv[1], (WCHAR *)na_page(), MAX_PATH); }
@@ -178,4 +179,4 @@ CHILD(xubuf_c_finalpath_small_noaccess) { ub_child_init(); return (int)gfp(argv[
 TEST(xubuf_finalpath_out_readonly_faults) { REQUIRE(U(GetFinalPathNameByHandleW)); EXPECT_EQ(run_on_file("xubuf_c_finalpath_readonly", 10), EXC_AV); }
 TEST(xubuf_finalpath_out_noaccess_faults) { REQUIRE(U(GetFinalPathNameByHandleW)); EXPECT_EQ(run_on_file("xubuf_c_finalpath_noaccess", 10), EXC_AV); }
 /* Too small: returns the required length, nothing written. */
-TEST(xubuf_finalpath_small_noaccess_returns_size) { REQUIRE(U(GetFinalPathNameByHandleW)); EXPECT_EQ(run_on_file("xubuf_c_finalpath_small_noaccess", 10), R_OK(0)); }
+TEST(xubuf_finalpath_small_noaccess_returns_size) { REQUIRE(U(GetFinalPathNameByHandleW)); EXPECT_EQ(run_on_file("xubuf_c_finalpath_small_noaccess", 10), R_OK(1)); }
