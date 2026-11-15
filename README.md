@@ -46,6 +46,11 @@ Each directory under `tests/` builds to `build/<area>.exe`. Test names are uniqu
 | time_clocks | file/system time conversion, tick/performance counters, time-zone conversion with fixed biases |
 | toolhelp_psapi | Toolhelp snapshots, K32/PSAPI process and module queries |
 | volume_drive | drives, volumes, volume paths, free space, mount-point error paths |
+| x_delete_rename | 120 tests: POSIX DeleteFile, FileDispositionInfo(Ex) and FileRenameInfo(Ex) flag matrix, MoveFileEx over open/read-only/directory targets, RemoveDirectory, hard links, ReplaceFileW |
+| x_io_cancel | 128 tests: CancelIo/CancelIoEx/CancelSynchronousIo on byte-range locks, pipe listens/reads/transactions, mailslot reads, directory watches; delivery of cancelled operations per completion mode |
+| x_io_userbuf | 109 tests: ReadFile/WriteFile, pipes, overlapped/IOCP, scatter/gather, GQCSEx, ReadDirectoryChangesW and DeviceIoControl with no-access, read-only, reserved and guard-page buffers; bad output pointers (children) |
+| x_proc_thread_state | 182 tests: thread/process API access-mask matrix, exited and terminated-while-suspended threads, exited own children, OpenThread/OpenProcess by id, generic and reduced-right duplicates |
+| x_reparse | 131 tests: FSCTL_SET/GET/DELETE_REPARSE_POINT on junctions, buffer sizing, attributes, enumeration, opens and paths through junctions, dangling links, loops and chain limit |
 | gap_00 .. gap_19 | remaining public surface (security descriptors/ACL/SID/token APIs, console setters and readers, Path*/Url*/Sh* shlwapi-style exports in kernelbase, StrTo*/Char*/lstr*, Wer*, Pss*, version info, PSAPI extras, VirtualAlloc2, SetXxx machine setters on safe paths, ...) |
 | gap_20 .. gap_29 | undocumented / internal exports: presence, module ownership, forwarders, and only the calls proven side-effect free |
 
