@@ -82,6 +82,9 @@ TEST(xdr_move_progress_replace_open_target) {
     BOOL r = U(MoveFileWithProgressW)(a, b, NULL, NULL, MOVEFILE_REPLACE_EXISTING);
     DWORD e = GetLastError();
     BOOL r2;
+    /* like MoveFileExW: no POSIX replace, so an open target blocks it even with share-delete */
+    CHECKF(!r && e == ERROR_ACCESS_DENIED, "progress r=%d GLE=%lu", r, e);
+    CHECK(xcontent(b, "DST-OLD"));
     XCLOSE(t);
     /* MoveFileExW must agree with MoveFileWithProgressW */
     two(a, b, "xdr_m8a.txt", "xdr_m8b.txt");

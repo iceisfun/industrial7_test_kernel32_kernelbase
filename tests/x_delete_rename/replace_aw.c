@@ -123,7 +123,7 @@ TEST(xdr_aw_delete_error_paths) {
     XFAIL(U(DeleteFileA)(a), ERROR_PATH_NOT_FOUND); XFAIL(U(DeleteFileW)(w), ERROR_PATH_NOT_FOUND);
     xrm(fw);
 }
-TEST(xdr_aw_delete_empty_and_root) {
+TEST(xdr_aw_delete_empty_and_dir_trailing_slash) {
     REQUIRE(U(DeleteFileW)); REQUIRE(U(DeleteFileA)); XDR_NEED_NTFS();
     SetLastError(0); BOOL ra = U(DeleteFileA)(""); DWORD ea = GetLastError();
     SetLastError(0); BOOL rw = U(DeleteFileW)(L""); DWORD ew = GetLastError();
