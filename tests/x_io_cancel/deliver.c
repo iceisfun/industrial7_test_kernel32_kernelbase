@@ -26,6 +26,10 @@ TEST(xcan_ev_signalled_on_cancel) {
     CloseHandle(ev); xclose(&s); xclose(&c);
 }
 
+/* Watchdog action: data from the client completes a read that the cancel failed to end, so an
+ * unbounded GetOverlappedResult(bWait=TRUE) in the test thread cannot hang the area. */
+static void dl_dog_write(void *c) { xwrite_all((HANDLE)c, "d", 1); }
+
 TEST(xcan_ev_gor_wait_true_returns_aborted) {
     REQUIRE(U(CancelIoEx)); REQUIRE(U(GetOverlappedResult));
     HANDLE s, c; CHECK(xpipe(&s, &c));
@@ -33,7 +37,9 @@ TEST(xcan_ev_gor_wait_true_returns_aborted) {
     CHECK(xread_pend(s, b, sizeof b, &ov));
     CHECK(U(CancelIoEx)(s, &ov));
     DWORD n = 55; SetLastError(0);
+    xdog *dog = xdog_start(dl_dog_write, c, 4000);
     CHECK(!U(GetOverlappedResult)(s, &ov, &n, TRUE)); EXPECT_ERR(ERROR_OPERATION_ABORTED); EXPECT_DW(n, 0);
+    CHECKF(!xdog_stop(dog), "GetOverlappedResult(TRUE) did not return after the cancel");
     /* asking again gives the same answer */
     n = 55; SetLastError(0);
     CHECK(!U(GetOverlappedResult)(s, &ov, &n, FALSE)); EXPECT_ERR(ERROR_OPERATION_ABORTED); EXPECT_DW(n, 0);
@@ -47,7 +53,9 @@ TEST(xcan_ev_gor_wait_true_no_event_waits_on_handle) {
     CHECK(xread_pend(s, b, sizeof b, &ov));
     CHECK(U(CancelIoEx)(s, &ov));
     DWORD n = 55; SetLastError(0);
+    xdog *dog = xdog_start(dl_dog_write, c, 4000);
     CHECK(!U(GetOverlappedResult)(s, &ov, &n, TRUE)); EXPECT_ERR(ERROR_OPERATION_ABORTED); EXPECT_DW(n, 0);
+    CHECKF(!xdog_stop(dog), "GetOverlappedResult(TRUE) did not return after the cancel");
     xclose(&s); xclose(&c);
 }
 

@@ -323,7 +323,7 @@ TEST(xcan_lock_sync_cancel_then_waiter_relocks) {
     f.wait = w->h;
     CHECK(xunlock(f.hold, LOFF, LLEN));
     /* the same synchronous handle can wait for and get the lock again */
-    xlock_hold(f.hold, LOFF, LLEN);
+    CHECK(xlock_hold(f.hold, LOFF, LLEN));
     w->state = XS_IDLE; t = xwork_start(w);
     CHECK(xstill_blocked(w, 100));
     CHECK(xunlock(f.hold, LOFF, LLEN));

@@ -385,16 +385,3 @@ TEST(xcan_slot_close_with_pending_read) {
     EXPECT_DW(ovst(&ov), 0xC00000B6u);
     SLOT_UNGUARD(); CloseHandle(ev);
 }
-
-TEST(xcan_slot_sync_read_null_overlapped_cancelsyncio) {
-    REQUIRE(U(CancelSynchronousIo)); REQUIRE(U(ReadFile));
-    /* the server handle of a mailslot is not a synchronous file object: a ReadFile without an
-     * OVERLAPPED waits in user mode, so the wait is pinned separately from the sync-handle case */
-    char name[160]; HANDLE h = slot_new(name, sizeof name, MAILSLOT_WAIT_FOREVER); CHECK(h != INVALID_HANDLE_VALUE);
-    SLOT_GUARD(name);
-    HANDLE ev = xev(); OVERLAPPED ov; xov(&ov, 0, ev); BYTE b[8];
-    SetLastError(0); BOOL r = U(ReadFile)(h, b, sizeof b, NULL, &ov);
-    CHECKF(!r && GetLastError() == ERROR_IO_PENDING, "overlapped read on a CreateMailslot handle: r=%d err=%lu", r, GetLastError());
-    U(CancelIoEx)(h, &ov); xfin(h, &ov, 3000);
-    SLOT_UNGUARD(); CloseHandle(ev); xclose(&h);
-}

@@ -43,8 +43,10 @@ TEST(xcan_sync_connect_cancelled_pipe_listens_again) {
     CHECK(xwork_join(t, w, 5000, unblock_connect));
     CHECKF(w->r || w->err == ERROR_PIPE_CONNECTED, "second listen r=%d err=%lu", w->r, w->err);
     DWORD n = 0; BYTE b[4];
-    CHECK(WriteFile(c, "ping", 4, &n, NULL));
-    CHECK(ReadFile(w->h, b, 4, &n, NULL) && n == 4 && !memcmp(b, "ping", 4));
+    BOOL wr = c != INVALID_HANDLE_VALUE && WriteFile(c, "ping", 4, &n, NULL) && n == 4;
+    CHECK(wr);
+    /* synchronous read in the test thread: only once the data is known to be there */
+    if (wr) CHECK(ReadFile(w->h, b, 4, &n, NULL) && n == 4 && !memcmp(b, "ping", 4));
     xclose(&c); xclose(&w->h); xwork_free(w);
 }
 
@@ -306,7 +308,12 @@ static BOOL op_transact(xwork *w) {
     w->n = 0xFFFF;
     return U(TransactNamedPipe)(w->h, (void *)"request", 7, w->buf, sizeof w->buf, &w->n, NULL);
 }
-static void unblock_transact(xwork *w) { BYTE b[64]; DWORD n; ReadFile(w->h2, b, sizeof b, &n, NULL); WriteFile(w->h2, "r", 1, &n, NULL); }
+static void unblock_transact(xwork *w) {
+    BYTE b[64]; DWORD n, avail = 0;
+    /* the server handle is synchronous: read the request only when it is there */
+    if (PeekNamedPipe(w->h2, NULL, 0, NULL, &avail, NULL) && avail) ReadFile(w->h2, b, sizeof b, &n, NULL);
+    WriteFile(w->h2, "r", 1, &n, NULL);
+}
 
 TEST(xcan_sync_transact_cancelled_request_delivered) {
     NEED_CSI(); REQUIRE(U(TransactNamedPipe));
