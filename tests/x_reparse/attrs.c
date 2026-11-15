@@ -48,10 +48,19 @@ TEST(xrp_attr_getfileattributesex) {
     EXPECT_EQ(d.dwFileAttributes, JATTR);
     EXPECT_EQ(d.nFileSizeHigh, 0);
     EXPECT_EQ(d.nFileSizeLow, 0);
-    /* times are the link's own, not the target's: the link was created after t */
+    /* times are the link's own, not the target's: give t fixed old times (2001-01-01) and
+     * check that the link does not report them */
+    FILETIME old; old.dwLowDateTime = 0xC89DC000u; old.dwHighDateTime = 0x01C07385u;
+    HANDLE ht = open_dir(P(L"t"), FILE_WRITE_ATTRIBUTES); OK_H(ht);
+    CHECK(SetFileTime(ht, &old, &old, &old));
+    CLOSE(ht);
     WIN32_FILE_ATTRIBUTE_DATA dt;
     CHECK(GetFileAttributesExW(P(L"t"), GetFileExInfoStandard, &dt));
-    CHECK(CompareFileTime(&d.ftCreationTime, &dt.ftCreationTime) >= 0);
+    EXPECT_EQ(CompareFileTime(&dt.ftCreationTime, &old), 0);
+    EXPECT_EQ(CompareFileTime(&dt.ftLastWriteTime, &old), 0);
+    CHECK(U(GetFileAttributesExW)(P(L"j"), GetFileExInfoStandard, &d));
+    CHECK(CompareFileTime(&d.ftCreationTime, &old) > 0);
+    CHECK(CompareFileTime(&d.ftLastWriteTime, &old) > 0);
     /* a file through the junction reports the target file's size */
     CHECK(U(GetFileAttributesExW)(P(L"j\\f.txt"), GetFileExInfoStandard, &d));
     EXPECT_EQ(d.nFileSizeLow, 11);

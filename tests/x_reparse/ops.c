@@ -190,6 +190,7 @@ TEST(xrp_copy_symlink_flag_on_junction) {
     DWORD e = GetLastError();
     DWORD a = GetFileAttributesW(P(L"cj"));
     CHECKF(!ok && e == ERROR_ACCESS_DENIED, "ok=%d gle=%lu attr=0x%lx", ok, e, a);
+    EXPECT_EQ(a, INVALID_FILE_ATTRIBUTES);          /* nothing is left behind at the destination */
     EXPECT_BODY(P(L"t\\f.txt"), "target body");
     xrp_end();
 }
